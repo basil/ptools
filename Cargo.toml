@@ -39,9 +39,9 @@ panic = "abort" # Save size. We don't need unwinding anyway.
 # if systems are typically configured to dump core on SIGABRT
 
 [dependencies]
-getopts = "0.2.15"
-nix = "0.12.0"
-libc = "0.2.48"
+getopts = "0.2"
+nix = "0.22"
+libc = "0.2"
 
 [package.metadata.deb]
 maintainer = "Delphix Engineering <eng@delphix.com>"
