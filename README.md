@@ -2,7 +2,7 @@
 
 This repository contains a collection of Linux utilities for inspecting the
 state of processes, modeled after the tools by the same name which exist on
-Solaris/Illumos.
+Solaris/illumos.
 
 ## Getting Started:
 
@@ -46,7 +46,7 @@ Currently, this repository provides the following commands
 * `penv` - shows the environment of the process
 * `ptree` - shows the process tree containing the process
 
-There are a number of other commands available on Solaris/Illumos which have not
+There are a number of other commands available on Solaris/illumos which have not
 been implemented here yet, perhaps most notably `pstack`. Also support for
 examining core dumps has not yet been implemented.
 

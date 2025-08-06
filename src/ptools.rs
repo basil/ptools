@@ -57,7 +57,7 @@ use std::process::exit;
 // - Read current environ in penv
 // - Test against 32-bit processes
 // - Test pfiles against processes with IPv6 sockets
-// - Illumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
+// - illumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
 //
 
 //
@@ -830,7 +830,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
 }
 
 /*
- * Some things about Illumos pfiles output seem less than ideal. For instance, would
+ * Some things about illumos pfiles output seem less than ideal. For instance, would
  * printing 'TCP' be preferrable to 'SOCK_STREAM'? Could we add somewhere in output the
  * psuedo file for the socket? That could be very useful for manually inspecting or
  * draining the output.

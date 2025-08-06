@@ -50,7 +50,7 @@ copyright = "2018, 2020 Delphix"
 
 extended-description = """\
 A collection of utilities for inspecting the state of processes, modeled \
-after the tools by the same name which exist on Solaris/Illumos."""
+after the tools by the same name which exist on Solaris/illumos."""
 
 separate-debug-symbols = true
 assets = [

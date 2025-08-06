@@ -27,4 +27,4 @@ Depends: ${shlibs:Depends}
 Description: Ptools
   A collection of utilities for inspecting the state of processes,
   modeled after the tools by the same name which exist on
-  Solaris/Illumos.
+  Solaris/illumos.
