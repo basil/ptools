@@ -658,6 +658,7 @@ fn address_family_str(addr_fam: AddressFamily) -> &'static str {
         AddressFamily::Nfc => "AF_NFC",
         AddressFamily::Vsock => "AF_VSOCK",
         AddressFamily::Unspec => "AF_UNSPEC",
+        _ => "AF_UNSPEC",
     }
 }
 
