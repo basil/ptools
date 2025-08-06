@@ -17,7 +17,7 @@
 Source: ptools
 Section: debug
 Priority: optional
-Maintainer: Delphix Engineering <eng@delphix.com>
+Maintainer: Basil Crow
 Build-Depends: debhelper (>= 10), devscripts
 Standards-Version: 4.1.2
 

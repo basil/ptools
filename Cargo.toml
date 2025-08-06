@@ -44,7 +44,7 @@ nix = "0.22"
 libc = "0.2"
 
 [package.metadata.deb]
-maintainer = "Delphix Engineering <eng@delphix.com>"
+maintainer = "Basil Crow"
 section = "debug"
 copyright = "2018, 2020 Delphix"
 

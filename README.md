@@ -8,7 +8,7 @@ Solaris/Illumos.
 
 To build `ptools`, run the following on an Ubuntu 18.04 VM:
 
-    $ git clone https://github.com/delphix/ptools.git
+    $ git clone https://github.com/basil/ptools.git
     $ cd ptools/
     $ curl https://sh.rustup.rs -sSf | bash -s -- -y
     $ cargo build
@@ -57,26 +57,9 @@ examining core dumps has not yet been implemented.
 3.  Add tests for your code.
 4.  Send a pull request.
 
-#### <a id="code-of-conduct"></a>Code of Conduct
-
-This project operates under the [Delphix Code of Conduct](https://delphix.github.io/code-of-conduct.html). By participating in this project you agree to abide by its terms.
-
-#### <a id="contributor-agreement"></a>Contributor Agreement
-
-All contributors are required to sign the Delphix Contributor agreement prior to contributing code to an open source repository. This process is handled automatically by [cla-assistant](https://cla-assistant.io/). Simply open a pull request and a bot will automatically check to see if you have signed the latest agreement. If not, you will be prompted to do so as part of the pull request process.
-
-
 ## Reporting Issues
 
-Issues should be reported in the GitHub repo's [issue tab](https://github.com/delphix/ptools/issues).
-
-## Statement of Support
-
-This software is provided as-is, without warranty of any kind or commercial
-support through Delphix. See the associated license for additional details.
-Questions, issues, feature requests, and contributions should be directed to the
-community as outlined in the
-[Delphix Community Guidelines](https://delphix.github.io/community-guidelines.html).
+Issues should be reported in the GitHub repo's [issue tab](https://github.com/basil/ptools/issues).
 
 ## License
 
