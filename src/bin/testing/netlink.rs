@@ -20,6 +20,7 @@ use nix::sys::socket::{
 use nix::unistd::getpid;
 
 use std::fs::File;
+use std::os::fd::AsRawFd;
 
 extern crate nix;
 
@@ -35,7 +36,7 @@ fn main() {
     let pid = getpid().as_raw() as u32;
     let netlink_addr = NetlinkAddr::new(pid, 0);
 
-    bind(fd, &netlink_addr).unwrap();
+    bind(fd.as_raw_fd(), &netlink_addr).unwrap();
 
     // Signal parent process (the test process) that this process is ready to be observed by the
     // ptool being tested.

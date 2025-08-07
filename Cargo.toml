@@ -40,7 +40,7 @@ panic = "abort" # Save size. We don't need unwinding anyway.
 
 [dependencies]
 getopts = "0.2"
-nix = "0.26"
+nix = { version = "0.27", features = ["event", "fs", "process", "socket"] }
 libc = "0.2"
 
 [package.metadata.deb]
