@@ -68,7 +68,6 @@ name = "ptools"
 version = "0.2.0"
 dependencies = [
  "getopts",
- "libc",
  "nix",
 ]
 
