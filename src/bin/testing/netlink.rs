@@ -14,28 +14,28 @@
 //   limitations under the License.
 //
 
-use nix::sys::socket::{AddressFamily, SockAddr, SockType, bind};
-use nix::errno::Errno;
+use nix::sys::socket::{
+    bind, socket, AddressFamily, NetlinkAddr, SockFlag, SockProtocol, SockType,
+};
+use nix::unistd::getpid;
 
 use std::fs::File;
-use std::os::raw::c_int;
 
 extern crate nix;
 
-const NETLINK_ROUTE: c_int = 0;
-
 fn main() {
-    // Use libc crate directly instead of nix because nix's 'socket' method doesn't have ability to
-    // specify netlink socket protocol.
-    let fd = unsafe {
-        libc::socket(AddressFamily::Netlink as c_int,
-        SockType::Datagram as c_int,
-        NETLINK_ROUTE)
-    };
+    let fd = socket(
+        AddressFamily::Netlink,
+        SockType::Datagram,
+        SockFlag::empty(),
+        Some(SockProtocol::NetlinkRoute),
+    )
+    .unwrap();
 
-    let fd = Errno::result(fd).unwrap();
+    let pid = getpid().as_raw() as u32;
+    let netlink_addr = NetlinkAddr::new(pid, 0);
 
-    bind(fd, &SockAddr::new_netlink(0, 0)).unwrap();
+    bind(fd, &netlink_addr).unwrap();
 
     // Signal parent process (the test process) that this process is ready to be observed by the
     // ptool being tested.
