@@ -1,67 +1,77 @@
 # ptools
 
 This repository contains a collection of Linux utilities for inspecting the
-state of processes, modeled after the tools by the same name which exist on
-Solaris/illumos.
+state of processes, inspired by the tools of the same name on Solaris/illumos.
 
-## Getting Started:
+## Getting Started
 
-To build `ptools`, run the following on an Ubuntu 18.04 VM:
+To build `ptools`, run the following commands on an Ubuntu 24.04 or newer
+system:
 
-    $ git clone https://github.com/basil/ptools.git
-    $ cd ptools/
-    $ curl https://sh.rustup.rs -sSf | bash -s -- -y
-    $ cargo build
+```shell
+$ git clone https://github.com/basil/ptools.git
+$ cd ptools/
+$ curl https://sh.rustup.rs -sSf | sh
+$ cargo build
+```
 
-The utilities can be run out of the `target/debug` directory, e.g.
+You can run the utilities from the `target/debug` directory, for example:
 
-    $ ./target/debug/ptree 1
+```shell
+$ ./target/debug/ptree 1
+```
 
-To install `ptools`, additionally run:
+To install `ptools` system-wide:
 
-    $ cargo install cargo-deb
-    $ cargo deb
-    $ sudo apt install ./target/debian/ptools_0.1.0_amd64.deb
+```shell
+$ cargo install cargo-deb
+$ cargo deb
+$ sudo apt install ./target/debian/ptools_0.1.0_amd64.deb
+```
 
 ## Why ptools?
 
 Linux already has a number of mechanisms which can be used to inspect the state
-of processes (the proc filesystem, `ps`, `lsof`, etc.). Why add a new set of
+of processes (the `/proc` filesystem, `ps`, `lsof`, etc.). Why add a new set of
 tools?
 
 The main advantage of ptools is consistency. The utilities provided by ptools
 are consistently named and have a consistent interface. Also, significantly,
 they can be run against core dumps where applicable, providing a uniform way to
 examine live processes and core dumps. This is very useful for those who rely
-heavily on core dumps to do postmortem debugging. The goal of this project is
-to make this same consistent debugging experience available on Linux.
+heavily on core dumps to do postmortem debugging. The goal of this project is to
+make this same consistent debugging experience available on Linux.
 
 ## Current State
 
-Currently, this repository provides the following commands
+The following utilities are currently available:
 
-* `pfiles` - shows the open files and sockets of the process, as well as their
-   corresponding file descriptors
-* `pargs` - shows the command line arguments passed to the process
-* `penv` - shows the environment of the process
-* `ptree` - shows the process tree containing the process
+| Command     | Description                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| `pfiles(1)` | Show the open files and sockets of the process, as well as their corresponding file descriptors |
+| `pargs(1)`  | Show the command line arguments passed to the process                                           |
+| `penv(1)`   | Show the environment of the process                                                             |
+| `ptree(1)`  | Show the process tree containing the process                                                    |
 
 There are a number of other commands available on Solaris/illumos which have not
-been implemented here yet, perhaps most notably `pstack`. Also support for
+been implemented here yet, perhaps most notably `pstack`. Also, support for
 examining core dumps has not yet been implemented.
 
-## Contribute
+## Contributing
 
-1.  Fork the project.
-2.  Make your bug fix or new feature.
-3.  Add tests for your code.
-4.  Send a pull request.
+We welcome contributions! To contribute:
+
+1. Fork the repository.
+2. Create your feature or bugfix branch and make changes.
+3. Add tests for your code.
+4. Open a pull request.
 
 ## Reporting Issues
 
-Issues should be reported in the GitHub repo's [issue tab](https://github.com/basil/ptools/issues).
+Please report bugs or request features via the [GitHub Issues
+page](https://github.com/basil/ptools/issues).
 
 ## License
 
-This is code is licensed under the Apache License 2.0. Full license is
-available [here](./LICENSE).
+This project is licensed under the Apache License, Version 2.0. See the
+[LICENSE](LICENSE) file for details.
