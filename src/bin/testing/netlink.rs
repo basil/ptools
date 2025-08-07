@@ -17,7 +17,6 @@
 use nix::sys::socket::{
     bind, socket, AddressFamily, NetlinkAddr, SockFlag, SockProtocol, SockType,
 };
-use nix::unistd::getpid;
 
 use std::fs::File;
 use std::os::fd::AsRawFd;
@@ -33,8 +32,7 @@ fn main() {
     )
     .unwrap();
 
-    let pid = getpid().as_raw() as u32;
-    let netlink_addr = NetlinkAddr::new(pid, 0);
+    let netlink_addr = NetlinkAddr::new(0, 0);
 
     bind(fd.as_raw_fd(), &netlink_addr).unwrap();
 
