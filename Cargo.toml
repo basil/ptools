@@ -1,7 +1,8 @@
 [package]
 name = "ptools"
 version = "0.2.0"
-authors = ["John Gallagher"]
+edition = "2021"
+authors = ["Basil Crow"]
 license = "Apache-2.0"
 description = "Utilities for inspecting Linux processes"
 readme = "README.md"
@@ -13,12 +14,15 @@ path = "src/ptools.rs"
 [[bin]]
 name = "pargs"
 path = "src/bin/pargs.rs"
+
 [[bin]]
 name = "penv"
 path = "src/bin/penv.rs"
+
 [[bin]]
 name = "pfiles"
 path = "src/bin/pfiles.rs"
+
 [[bin]]
 name = "ptree"
 path = "src/bin/ptree.rs"
@@ -26,6 +30,7 @@ path = "src/bin/ptree.rs"
 [[bin]]
 name = "epoll_example"
 path = "src/bin/testing/epoll.rs"
+
 [[bin]]
 name = "netlink_example"
 path = "src/bin/testing/netlink.rs"
@@ -46,7 +51,7 @@ libc = "0.2"
 [package.metadata.deb]
 maintainer = "Basil Crow"
 section = "debug"
-copyright = "2018, 2020 Delphix"
+copyright = "2025 Basil Crow"
 
 extended-description = """\
 A collection of utilities for inspecting the state of processes, modeled \
