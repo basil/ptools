@@ -32,9 +32,7 @@ fn main() {
     )
     .unwrap();
 
-    let netlink_addr = NetlinkAddr::new(0, 0);
-
-    bind(fd.as_raw_fd(), &netlink_addr).unwrap();
+    bind(fd.as_raw_fd(), &NetlinkAddr::new(0, 0)).unwrap();
 
     // Signal parent process (the test process) that this process is ready to be observed by the
     // ptool being tested.
