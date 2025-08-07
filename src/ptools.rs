@@ -32,11 +32,11 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs::{self, File};
+use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::path::Path;
-use std::io::ErrorKind;
 use std::process::exit;
 
 // Issues blocking 0.1 release
@@ -103,7 +103,9 @@ fn print_args(pid: u64) {
                     let arg = String::from_utf8_lossy(bytes);
                     println!("argv[{}]: {}", i, arg);
                 }
-                Err(e) => { eprint!("Error reading args: {}", e)}
+                Err(e) => {
+                    eprint!("Error reading args: {}", e)
+                }
             }
         }
     }
@@ -127,7 +129,9 @@ fn print_env(pid: u64) {
                     let arg = String::from_utf8_lossy(bytes);
                     println!("envp[{}]: {}", i, arg);
                 }
-                Err(e) => { eprint!("Error reading environment: {}", e)}
+                Err(e) => {
+                    eprint!("Error reading environment: {}", e)
+                }
             }
         }
     }
@@ -210,7 +214,8 @@ impl ProcStat {
                 let key = substrs[0].to_string();
                 let value = substrs[1].trim().to_string();
                 Ok((key, value))
-            }).collect::<Result<HashMap<String, String>, Box<dyn Error>>>()?;
+            })
+            .collect::<Result<HashMap<String, String>, Box<dyn Error>>>()?;
 
         Ok(ProcStat {
             pid: pid,
@@ -241,7 +246,6 @@ impl ProcStat {
     }
 }
 
-
 // Loop over all the processes listed in /proc/, find the parent of each one, and build a map from
 // child to parent and a map from parent to children. There doesn't seem to be a more efficient way
 // of doing this reliably.
@@ -258,7 +262,7 @@ fn build_proc_maps() -> Result<(HashMap<u64, u64>, HashMap<u64, Vec<u64>>), Box<
                     Ok(ppid) => ppid,
                     Err(e) => {
                         eprintln!("{}", e.to_string());
-                        continue
+                        continue;
                     }
                 },
                 // Proc probably exited before we could read its status
@@ -320,7 +324,7 @@ fn print_parents(parent_map: &HashMap<u64, u64>, pid: u64) -> u64 {
         // It's actually a bit more complicated (see find_new_reaper() in the kernel), and there is
         // one case we might want to handle better: when a child is re-parented to another thread in
         // the thread group.
-        None => 1
+        None => 1,
     };
 
     // We've reached the top of the process tree. Don't bother printing the parent if the parent
@@ -390,7 +394,7 @@ enum SockType {
     SeqPacket,
     Dccp,
     Packet,
-    Unknown(u16)
+    Unknown(u16),
 }
 
 // Some common types of files have their type described by the st_mode returned by stat. For certain
@@ -415,23 +419,26 @@ fn file_type(mode: u32, link_path: &Path) -> FileType {
         // is in this case just text. fs::read_link converts this arbitrary text to a path, and then
         // we convert it back to a String here. We are assuming this conversion is lossless.
         let faux_path = match fs::read_link(link_path) {
-           Ok(faux_path) => faux_path,
+            Ok(faux_path) => faux_path,
             Err(e) => {
                 eprintln!("Failed to read {:?}: {}", link_path, e);
-                return FileType::Unknown
+                return FileType::Unknown;
             }
         };
         let fd_info = match faux_path.to_str() {
             Some(fd_info) => fd_info,
             None => {
                 eprintln!("Failed to convert path to string: {:?}", faux_path);
-                return FileType::Unknown
+                return FileType::Unknown;
             }
         };
         // For anonymous inodes, this text has the format 'anon_inode:[<type>]' or
         // 'anon_inode:<type>'.
         if fd_info.starts_with("anon_inode:") {
-            let fd_type_str = fd_info.trim_start_matches("anon_inode:").trim_start_matches("[").trim_end_matches("]");
+            let fd_type_str = fd_info
+                .trim_start_matches("anon_inode:")
+                .trim_start_matches("[")
+                .trim_end_matches("]");
             let anon_file_type = match fd_type_str {
                 "eventpoll" => AnonFileType::Epoll,
                 x => AnonFileType::Unknown(x.to_string()),
@@ -513,8 +520,7 @@ fn print_open_flags(flags: u64) {
 
 fn get_flags(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
     let mut contents = String::new();
-    File::open(format!("/proc/{}/fdinfo/{}", pid, fd))?
-        .read_to_string(&mut contents)?;
+    File::open(format!("/proc/{}/fdinfo/{}", pid, fd))?.read_to_string(&mut contents)?;
     let line = contents
         .lines()
         .filter(|line| line.starts_with("flags:"))
@@ -532,7 +538,7 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
         Err(e) => {
             eprintln!("failed to stat {}: {}", &link_path_str, e);
             return;
-        },
+        }
         Ok(stat_info) => stat_info,
     };
 
@@ -576,16 +582,16 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
                 print_sock_type(&sock_info.sock_type);
                 print_sock_address(&sock_info);
             } else {
-                print!("       ERROR: failed to find info for socket with inode num {}\n",
-                       stat_info.st_ino);
-            }
-        },
-        _ => {
-            match fs::read_link(link_path) {
-                Ok(path) => println!("       {}", path.to_string_lossy()),
-                Err(e) => eprintln!("failed to readlink {}: {}", &link_path_str, e),
+                print!(
+                    "       ERROR: failed to find info for socket with inode num {}\n",
+                    stat_info.st_ino
+                );
             }
         }
+        _ => match fs::read_link(link_path) {
+            Ok(path) => println!("       {}", path.to_string_lossy()),
+            Err(e) => eprintln!("failed to readlink {}: {}", &link_path_str, e),
+        },
     }
 }
 
@@ -855,7 +861,6 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
  */
 
 fn print_files(pid: u64) -> bool {
-
     let proc_dir = format!("/proc/{}/", pid);
     if !Path::new(&proc_dir).exists() {
         eprintln!("No such directory {}", &proc_dir);
@@ -879,7 +884,7 @@ fn print_files(pid: u64) -> bool {
             } else {
                 eprint!("Unexpected file /proc/[pid]/fd/{} found", &filename);
             }
-        };
+        }
         Ok(())
     });
 

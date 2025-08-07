@@ -41,4 +41,3 @@ fn main() {
     // Wait for the parent finish running the ptool and then kill us.
     loop {}
 }
-

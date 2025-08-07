@@ -14,14 +14,13 @@
 //   limitations under the License.
 //
 
-use std::path::{Path, PathBuf};
 use std::fs;
 use std::io;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 // Find an executable produced by the Cargo build
 fn find_exec(name: &str) -> PathBuf {
-
     // Find the path where Cargo has placed the executables by looking at this test process's
     // executable, which was also built by Cargo.
     let this_exec = std::env::current_exe().unwrap();
@@ -32,7 +31,6 @@ fn find_exec(name: &str) -> PathBuf {
 
 // Run a ptool against a sample process and return the stdout of the ptool
 pub fn run_ptool(tool: &str, test_proc: &str) -> String {
-
     let signal_file = Path::new("/tmp/ptools-test-ready");
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -67,4 +65,3 @@ pub fn run_ptool(tool: &str, test_proc: &str) -> String {
 
     stdout.into_owned()
 }
-

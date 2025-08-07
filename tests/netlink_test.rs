@@ -35,12 +35,19 @@ fn netlink_basic() {
         .collect::<Vec<_>>();
 
     if split_lines.len() != 2 {
-        panic!("String '{}' not found in command output:\n\n{}\n\n", pattern, stdout);
+        panic!(
+            "String '{}' not found in command output:\n\n{}\n\n",
+            pattern, stdout
+        );
     }
     let fd_info = split_lines[1];
 
     let pattern = "sockname: AF_NETLINK";
     if fd_info[2].trim() != pattern {
-        panic!("String '{}' not found in command output:\n\n{}\n\n", pattern, fd_info.join("\n"));
+        panic!(
+            "String '{}' not found in command output:\n\n{}\n\n",
+            pattern,
+            fd_info.join("\n")
+        );
     }
 }

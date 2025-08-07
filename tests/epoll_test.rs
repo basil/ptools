@@ -22,6 +22,9 @@ fn epoll_basic() {
 
     let pattern = "5: anon_inode(epoll)";
     if !stdout.contains(pattern) {
-        panic!("String '{}' not found in command output:\n\n{}\n\n", pattern, stdout);
+        panic!(
+            "String '{}' not found in command output:\n\n{}\n\n",
+            pattern, stdout
+        );
     }
 }
