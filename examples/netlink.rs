@@ -21,8 +21,6 @@ use nix::sys::socket::{
 use std::fs::File;
 use std::os::fd::AsRawFd;
 
-extern crate nix;
-
 fn main() {
     let fd = socket(
         AddressFamily::Netlink,

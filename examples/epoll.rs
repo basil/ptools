@@ -4,8 +4,6 @@ use nix::unistd::pipe2;
 
 use std::fs::File;
 
-extern crate nix;
-
 fn main() {
     let (readfd, _writefd) = pipe2(OFlag::O_CLOEXEC | OFlag::O_NONBLOCK).unwrap();
 
