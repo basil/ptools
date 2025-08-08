@@ -10,6 +10,10 @@ license = "Apache-2.0"
 keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
+[dependencies]
+getopts = "0.2"
+nix = { version = "0.30", features = ["event", "fs", "process", "socket"] }
+
 [profile.release]
 debug = true
 lto = true
@@ -17,10 +21,6 @@ panic = "abort" # Save size. We don't need unwinding anyway.
 # TODO is there any way to remove the ability to display backtraces? This would
 # likely shave another 50K or so off the binary size, and may not be necessary
 # if systems are typically configured to dump core on SIGABRT
-
-[dependencies]
-getopts = "0.2"
-nix = { version = "0.30", features = ["event", "fs", "process", "socket"] }
 
 [package.metadata.deb]
 maintainer = "Basil Crow"
