@@ -17,7 +17,7 @@
 use getopts::{Options, ParsingStyle};
 use std::env;
 
-fn penv_main() {
+fn main() {
     let args: Vec<String> = env::args().collect();
     let program = &args[0];
 
@@ -49,8 +49,4 @@ fn penv_main() {
             ptools::print_env(pid);
         }
     }
-}
-
-fn main() {
-    penv_main();
 }

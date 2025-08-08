@@ -181,7 +181,7 @@ fn print_ptree_line(pid: u64, indent_level: u64) {
     ptools::print_cmd_summary(pid);
 }
 
-fn ptree_main() {
+fn main() {
     let args: Vec<String> = env::args().collect();
     let program = &args[0];
 
@@ -223,8 +223,4 @@ fn ptree_main() {
             }
         }
     }
-}
-
-fn main() {
-    ptree_main();
 }

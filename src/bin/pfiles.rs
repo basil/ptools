@@ -575,7 +575,7 @@ fn print_files(pid: u64) -> bool {
     return true;
 }
 
-fn pfiles_main() {
+fn main() {
     let args: Vec<String> = env::args().collect();
     let program = &args[0];
 
@@ -612,10 +612,6 @@ fn pfiles_main() {
     if error {
         exit(1);
     }
-}
-
-fn main() {
-    pfiles_main();
 }
 
 #[cfg(test)]

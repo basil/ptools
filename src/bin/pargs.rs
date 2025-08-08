@@ -36,7 +36,7 @@ fn print_args(pid: u64) {
     }
 }
 
-fn pargs_main() {
+fn main() {
     let args: Vec<String> = env::args().collect();
     let program = &args[0];
 
@@ -80,8 +80,4 @@ fn pargs_main() {
             }
         }
     }
-}
-
-fn main() {
-    pargs_main();
 }
