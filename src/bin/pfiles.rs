@@ -556,7 +556,7 @@ fn print_files(pid: u64) -> bool {
             if let Ok(fd) = (&filename).parse::<u64>() {
                 print_file(pid, fd, &sockets);
             } else {
-                eprint!("Une    xpected file /proc/[pid]/fd/{} found", &filename);
+                eprint!("Unexpected file /proc/[pid]/fd/{} found", &filename);
             }
         }
         Ok(())
