@@ -7,34 +7,6 @@ license = "Apache-2.0"
 description = "Utilities for inspecting Linux processes"
 readme = "README.md"
 
-[lib]
-name = "ptools"
-path = "src/ptools.rs"
-
-[[bin]]
-name = "pargs"
-path = "src/bin/pargs.rs"
-
-[[bin]]
-name = "penv"
-path = "src/bin/penv.rs"
-
-[[bin]]
-name = "pfiles"
-path = "src/bin/pfiles.rs"
-
-[[bin]]
-name = "ptree"
-path = "src/bin/ptree.rs"
-
-[[bin]]
-name = "epoll_example"
-path = "src/bin/testing/epoll.rs"
-
-[[bin]]
-name = "netlink_example"
-path = "src/bin/testing/netlink.rs"
-
 [profile.release]
 debug = true
 lto = true

@@ -18,7 +18,7 @@ mod common;
 
 #[test]
 fn netlink_basic() {
-    let stdout = common::run_ptool("pfiles", "netlink_example");
+    let stdout = common::run_ptool("pfiles", "examples/netlink");
     let lines = stdout.lines().collect::<Vec<&str>>();
 
     //

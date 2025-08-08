@@ -18,7 +18,7 @@ mod common;
 
 #[test]
 fn epoll_basic() {
-    let stdout = common::run_ptool("pfiles", "epoll_example");
+    let stdout = common::run_ptool("pfiles", "examples/epoll");
 
     let pattern = "5: anon_inode(epoll)";
     if !stdout.contains(pattern) {
