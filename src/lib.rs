@@ -82,9 +82,9 @@ pub fn open_or_warn(filename: &str) -> Option<File> {
 
 pub fn print_env(pid: u64) {
     // This contains the environ as it was when the proc was started. To get the current
-    // environment, we need to inspect its memory to find out how it has change. POSIX defines a
+    // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
-    // another process is not typically permitted, even if the process owned by the same user. See
+    // another process is not typically permitted, even if the process is owned by the same user. See
     // /etc/sysctl.d/10-ptrace.conf for details.
     //
     // Long term, we might want to print the current environment if we can, and print a warning
