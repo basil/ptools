@@ -23,6 +23,8 @@ use std::io::{BufRead, BufReader};
 use std::process::exit;
 use std::{env, fs};
 
+// TODO Allow a user to be specified in ptree
+
 // Info parsed from /proc/[pid]/status
 struct ProcStat {
     pid: u64,

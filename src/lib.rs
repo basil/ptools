@@ -26,20 +26,12 @@ use std::fs::File;
 use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Read};
 
-// Issues for post 0.1 release
-//  - Offset into file for pfiles
-//  - Finish pfiles (handle remaining file types)
-// - May want to save space by removing regex crate
-// - Add a type alias for Result<Foo, Box<Error>>
-// - Add support for handling core dumps
-// - Handle unprintable characters in anything we need to print and non-UTF8 in any input
-// - Allow a user to be specified in ptree
-// - Replace top-level .unwrap()s with a nicer error message
-// - Read current environ in penv
-// - Test against 32-bit processes
-// - Test pfiles against processes with IPv6 sockets
-// - illumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
-//
+// TODO May want to save space by removing regex crate
+// TODO Add a type alias for Result<Foo, Box<Error>>
+// TODO Add support for handling core dumps
+// TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
+// TODO Replace top-level .unwrap()s with nicer error messages
+// TODO Test against 32-bit processes
 
 //
 // Error handling philosophy: in general these tools should try to recover from errors and continue
@@ -81,7 +73,7 @@ pub fn print_env(pid: u64) {
     // another process is not typically permitted, even if the process is owned by the same user. See
     // /etc/sysctl.d/10-ptrace.conf for details.
     //
-    // Long term, we might want to print the current environment if we can, and print a warning
+    // TODO Long term, we might want to print the current environment if we can, and print a warning
     // + the contents of /proc/[pid]/environ if we can't
     if let Some(file) = open_or_warn(&format!("/proc/{}/environ", pid)) {
         print_proc_summary(pid);

@@ -29,6 +29,11 @@ use std::path::Path;
 use std::process::exit;
 use std::{env, fs};
 
+// TODO Test pfiles against processes with IPv6 sockets
+// TODO llumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
+// TODO Offset into file for pfiles
+// TODO Finish pfiles (handle remaining file types)
+
 // As defined by the file type bits of the st_mode field returned by stat
 #[derive(PartialEq)]
 enum PosixFileType {
