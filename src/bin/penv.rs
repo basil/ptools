@@ -14,6 +14,43 @@
 //   limitations under the License.
 //
 
+use getopts::{Options, ParsingStyle};
+use std::env;
+
+fn penv_main() {
+    let args: Vec<String> = env::args().collect();
+    let program = &args[0];
+
+    let opts = {
+        let mut opts = Options::new();
+        opts.optflag("h", "help", "print this help message");
+        opts.parsing_style(ParsingStyle::StopAtFirstFree);
+        opts
+    };
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(e) => {
+            eprint!("{}\n", e.to_string());
+            ptools::usage_err(program, opts);
+        }
+    };
+
+    if matches.opt_present("h") {
+        ptools::usage(program, opts);
+    }
+
+    if matches.free.len() == 0 {
+        ptools::usage_err(program, opts);
+    }
+
+    for arg in &matches.free {
+        if let Some(pid) = ptools::parse_pid(arg) {
+            ptools::print_env(pid);
+        }
+    }
+}
+
 fn main() {
-    ptools::penv_main();
+    penv_main();
 }
