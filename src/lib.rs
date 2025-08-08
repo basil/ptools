@@ -20,9 +20,6 @@ use std::alloc::System;
 #[global_allocator]
 static ALLOCATOR: System = System;
 
-extern crate getopts;
-extern crate nix;
-
 use getopts::{Options, ParsingStyle};
 
 use nix::fcntl::OFlag;
