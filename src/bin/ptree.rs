@@ -213,7 +213,7 @@ fn main() {
     };
 
     if matches.free.len() == 0 {
-        // Should we print all processes here, including kernel threads? Is there any way this
+        // TODO Should we print all processes here, including kernel threads? Is there any way this
         // could miss userspace processes?
         print_tree(1, &parent_map, &child_map);
     } else {

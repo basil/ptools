@@ -33,7 +33,6 @@ use std::io::{BufRead, BufReader, Read};
 // TODO Replace top-level .unwrap()s with nicer error messages
 // TODO Test against 32-bit processes
 
-//
 // Error handling philosophy: in general these tools should try to recover from errors and continue
 // to produce useful output. Debugging tools, much more so than other tools, are expected to be run
 // on systems which are in unusual and bad states. Indeed, this is when they are most useful. Note
@@ -41,7 +40,6 @@ use std::io::{BufRead, BufReader, Read};
 // For instance, if we expect a particular field in /proc/[pid]/status to have a particular value,
 // and it doesn't, we shouldn't panic. On the other hand, we should feel free to assert that some
 // purely internal invariant holds, and panic if it doesn't.
-//
 
 pub fn usage(program: &str, opts: Options) -> ! {
     usage_impl(program, opts, false);
