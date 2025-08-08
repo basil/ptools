@@ -26,15 +26,9 @@ use std::fs::File;
 use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Read};
 
-// Issues blocking 0.1 release
-//  - Everything marked with BLOCKER
+// Issues for post 0.1 release
 //  - Offset into file for pfiles
 //  - Finish pfiles (handle remaining file types)
-//  - Update README with current build instructions
-//  - Add relevant package metadata
-//  - Format code using rustfmt
-
-// Issues for post 0.1 release
 // - May want to save space by removing regex crate
 // - Add a type alias for Result<Foo, Box<Error>>
 // - Add support for handling core dumps
