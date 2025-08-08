@@ -2,10 +2,13 @@
 name = "ptools"
 version = "0.2.0"
 edition = "2021"
-authors = ["Basil Crow"]
-license = "Apache-2.0"
 description = "Utilities for inspecting Linux processes"
 readme = "README.md"
+homepage = "https://github.com/basil/ptools"
+repository = "https://github.com/basil/ptools"
+license = "Apache-2.0"
+keywords = ["linux", "process", "procfs", "debugging", "cli"]
+categories = ["command-line-utilities", "development-tools::debugging"]
 
 [profile.release]
 debug = true
