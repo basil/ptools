@@ -44,7 +44,7 @@ fn pargs_main() {
         let mut opts = Options::new();
         opts.optflag("a", "", "Print command line args to process");
         // We have a separate penv command, but keep this option for compatibility with Solaris
-        opts.optflag("e", "", "Print environement variables of process");
+        opts.optflag("e", "", "Print environment variables of process");
         opts.optflag("h", "help", "print this help message");
         opts.parsing_style(ParsingStyle::StopAtFirstFree);
         opts
