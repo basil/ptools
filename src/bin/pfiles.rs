@@ -14,20 +14,20 @@
 //   limitations under the License.
 //
 
-use getopts::{Options, ParsingStyle};
+use clap::{command, value_parser, Arg};
 use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
 use nix::sys::stat::{major, minor, stat, SFlag};
 use ptools::ParseError;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::path::Path;
 use std::process::exit;
-use std::{env, fs};
 
 // TODO Test pfiles against processes with IPv6 sockets
 // TODO llumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
@@ -574,38 +574,24 @@ fn print_files(pid: u64) -> bool {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let program = &args[0];
+    let matches = command!()
+        .about("Print information for all open files in each process")
+        .trailing_var_arg(true)
+        .arg(
+            Arg::new("pid")
+                .value_name("PID")
+                .help("Process ID (PID)")
+                .num_args(1..)
+                .required(true)
+                .value_parser(value_parser!(u64).range(1..)),
+        )
+        .get_matches();
 
-    let opts = {
-        let mut opts = Options::new();
-        opts.optflag("h", "help", "print this help message");
-        opts.parsing_style(ParsingStyle::StopAtFirstFree);
-        opts
-    };
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            eprint!("{}\n", e.to_string());
-            ptools::usage_err(program, opts);
-        }
-    };
-
-    if matches.opt_present("h") {
-        ptools::usage(program, opts);
-    }
-
-    if matches.free.len() == 0 {
-        ptools::usage_err(program, opts);
-    }
-
-    let mut error = false;
-    for arg in &matches.free {
-        if let Some(pid) = ptools::parse_pid(arg) {
-            error = error || !print_files(pid);
-        }
-    }
+    let error = matches
+        .get_many::<u64>("pid")
+        .unwrap()
+        .copied()
+        .any(|pid| !print_files(pid));
 
     if error {
         exit(1);

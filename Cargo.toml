@@ -11,7 +11,7 @@ keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
 [dependencies]
-getopts = "0.2"
+clap = { version = "4.5", features = ["cargo"] }
 nix = { version = "0.30", features = ["event", "fs", "process", "socket"] }
 
 [profile.release]

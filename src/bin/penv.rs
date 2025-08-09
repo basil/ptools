@@ -14,39 +14,23 @@
 //   limitations under the License.
 //
 
-use getopts::{Options, ParsingStyle};
-use std::env;
+use clap::{command, value_parser, Arg};
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let program = &args[0];
+    let matches = command!()
+        .about("Print process environment variables")
+        .trailing_var_arg(true)
+        .arg(
+            Arg::new("pid")
+                .value_name("PID")
+                .help("Process ID (PID)")
+                .num_args(1..)
+                .required(true)
+                .value_parser(value_parser!(u64).range(1..)),
+        )
+        .get_matches();
 
-    let opts = {
-        let mut opts = Options::new();
-        opts.optflag("h", "help", "print this help message");
-        opts.parsing_style(ParsingStyle::StopAtFirstFree);
-        opts
-    };
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            eprint!("{}\n", e.to_string());
-            ptools::usage_err(program, opts);
-        }
-    };
-
-    if matches.opt_present("h") {
-        ptools::usage(program, opts);
-    }
-
-    if matches.free.len() == 0 {
-        ptools::usage_err(program, opts);
-    }
-
-    for arg in &matches.free {
-        if let Some(pid) = ptools::parse_pid(arg) {
-            ptools::print_env(pid);
-        }
+    for pid in matches.get_many::<u64>("pid").unwrap() {
+        ptools::print_env(*pid);
     }
 }

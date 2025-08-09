@@ -14,14 +14,14 @@
 //   limitations under the License.
 //
 
-use getopts::{Options, ParsingStyle};
+use clap::{command, value_parser, Arg};
 use ptools::ParseError;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::process::exit;
-use std::{env, fs};
 
 // TODO Allow a user to be specified in ptree
 
@@ -182,27 +182,16 @@ fn print_ptree_line(pid: u64, indent_level: u64) {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let program = &args[0];
-
-    let opts = {
-        let mut opts = Options::new();
-        opts.optflag("h", "help", "print this help message");
-        opts.parsing_style(ParsingStyle::StopAtFirstFree);
-        opts
-    };
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            eprint!("{}\n", e.to_string());
-            ptools::usage_err(program, opts);
-        }
-    };
-
-    if matches.opt_present("h") {
-        ptools::usage(program, opts);
-    }
+    let matches = command!()
+        .about("Print process trees")
+        .arg(
+            Arg::new("pid")
+                .value_name("PID")
+                .help("Process ID (PID)")
+                .num_args(0..)
+                .value_parser(value_parser!(u64).range(1..)),
+        )
+        .get_matches();
 
     let (parent_map, child_map) = match build_proc_maps() {
         Ok(maps) => maps,
@@ -212,15 +201,13 @@ fn main() {
         }
     };
 
-    if matches.free.len() == 0 {
+    if let Some(pids) = matches.get_many::<u64>("pid") {
+        for pid in pids {
+            print_tree(*pid, &parent_map, &child_map);
+        }
+    } else {
         // TODO Should we print all processes here, including kernel threads? Is there any way this
         // could miss userspace processes?
         print_tree(1, &parent_map, &child_map);
-    } else {
-        for arg in &matches.free {
-            if let Some(pid) = ptools::parse_pid(arg) {
-                print_tree(pid, &parent_map, &child_map);
-            }
-        }
     }
 }

@@ -20,7 +20,6 @@ use std::alloc::System;
 #[global_allocator]
 static ALLOCATOR: System = System;
 
-use getopts::Options;
 use std::error::Error;
 use std::fs::File;
 use std::io::ErrorKind;
@@ -40,19 +39,6 @@ use std::io::{BufRead, BufReader, Read};
 // For instance, if we expect a particular field in /proc/[pid]/status to have a particular value,
 // and it doesn't, we shouldn't panic. On the other hand, we should feel free to assert that some
 // purely internal invariant holds, and panic if it doesn't.
-
-pub fn usage(program: &str, opts: Options) -> ! {
-    usage_impl(program, opts, false);
-}
-
-pub fn usage_err(program: &str, opts: Options) -> ! {
-    usage_impl(program, opts, true);
-}
-
-fn usage_impl(program: &str, opts: Options, error: bool) -> ! {
-    print!("{}\n", opts.short_usage(program));
-    std::process::exit(if error { 1 } else { 0 });
-}
 
 pub fn open_or_warn(filename: &str) -> Option<File> {
     match File::open(filename) {
@@ -148,16 +134,6 @@ pub fn print_cmd_summary(pid: u64) {
         Err(e) => {
             println!("<error reading cmdline>");
             eprintln!("{}", e.to_string());
-        }
-    }
-}
-
-pub fn parse_pid(arg: &str) -> Option<u64> {
-    match arg.parse::<u64>() {
-        Ok(pid) => Some(pid),
-        Err(_e) => {
-            eprintln!("'{}' is not a valid PID", arg);
-            None
         }
     }
 }
