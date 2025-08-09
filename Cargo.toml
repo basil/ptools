@@ -40,3 +40,13 @@ assets = [
   ["target/release/pfiles", "usr/bin/", "755"],
   ["target/release/ptree", "usr/bin/", "755"],
 ]
+
+[package.metadata.generate-rpm]
+vendor = "Basil Crow"
+packager = "Basil Crow"
+assets = [
+  { source = "target/release/pargs", dest = "/usr/bin/pargs", mode = "755" },
+  { source = "target/release/penv", dest = "/usr/bin/penv", mode = "755" },
+  { source = "target/release/pfiles", dest = "/usr/bin/pfiles", mode = "755" },
+  { source = "target/release/ptree", dest = "/usr/bin/ptree", mode = "755" },
+]

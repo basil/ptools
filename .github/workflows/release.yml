@@ -52,6 +52,7 @@ jobs:
 
       - name: Verify tag matches Cargo.toml version
         shell: bash
+        id: get_version
         run: |
           tag="${GITHUB_REF_NAME}"
           version="${tag#v}"
@@ -65,12 +66,18 @@ jobs:
             echo "Version mismatch: Cargo.toml has $pkg_version but tag is $tag"
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Install cargo-deb
-        run: cargo install cargo-deb --locked
+      - name: Install cargo-deb and cargo-generate-rpm
+        run: |
+          cargo install cargo-deb --locked
+          cargo install cargo-generate-rpm --locked
 
       - name: Build Debian package
         run: cargo deb
+
+      - name: Build RPM package
+        run: cargo generate-rpm
 
       - name: Publish to crates.io
         env:
@@ -84,7 +91,8 @@ jobs:
         with:
           files: |
             target/debian/*.deb
-          name: ${{ github.ref_name }}
+            target/generate-rpm/*.rpm
+          name: ${{ steps.get_version.outputs.version }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
