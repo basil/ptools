@@ -14,8 +14,7 @@
 //   limitations under the License.
 //
 
-use getopts::{Options, ParsingStyle};
-use std::env;
+use clap::{command, value_parser, Arg, ArgAction};
 use std::io::{BufRead, BufReader};
 
 fn print_args(pid: u64) {
@@ -37,47 +36,44 @@ fn print_args(pid: u64) {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let program = &args[0];
-
-    let opts = {
-        let mut opts = Options::new();
-        opts.optflag("a", "", "Print command line args to process");
+    let matches = command!()
+        .about("Print process arguments")
+        .trailing_var_arg(true)
+        .arg(
+            Arg::new("args")
+                .short('a')
+                .long("args")
+                .help("Print process arguments")
+                .action(ArgAction::SetTrue),
+        )
         // We have a separate penv command, but keep this option for compatibility with Solaris
-        opts.optflag("e", "", "Print environment variables of process");
-        opts.optflag("h", "help", "print this help message");
-        opts.parsing_style(ParsingStyle::StopAtFirstFree);
-        opts
-    };
+        .arg(
+            Arg::new("env")
+                .short('e')
+                .long("env")
+                .help("Print process environment variables")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("pid")
+                .value_name("PID")
+                .help("Process ID (PID)")
+                .num_args(1..)
+                .required(true)
+                .value_parser(value_parser!(u64).range(1..)),
+        )
+        .get_matches();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            eprint!("{}\n", e.to_string());
-            ptools::usage_err(program, opts);
+    let do_print_args = matches.get_flag("args");
+    let do_print_env = matches.get_flag("env");
+    let want_args = do_print_args || !do_print_env;
+
+    for pid in matches.get_many::<u64>("pid").unwrap() {
+        if want_args {
+            print_args(*pid);
         }
-    };
-
-    if matches.opt_present("h") {
-        ptools::usage(program, opts);
-    }
-
-    if matches.free.len() == 0 {
-        ptools::usage_err(program, opts);
-    }
-
-    let do_print_args = matches.opt_present("a");
-    let do_print_env = matches.opt_present("e");
-
-    for arg in &matches.free {
-        if let Some(pid) = ptools::parse_pid(arg) {
-            if do_print_args || !do_print_env {
-                print_args(pid);
-            }
-
-            if do_print_env {
-                ptools::print_env(pid);
-            }
+        if do_print_env {
+            ptools::print_env(*pid);
         }
     }
 }
