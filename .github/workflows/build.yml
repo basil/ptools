@@ -27,7 +27,7 @@ jobs:
       contents: read
     steps:
       - name: Check out
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Check formatting
         run: cargo fmt --all -- --check
