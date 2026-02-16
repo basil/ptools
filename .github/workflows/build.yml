@@ -37,3 +37,11 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
+
+      - name: Install coverage tooling
+        run: |
+          rustup component add llvm-tools-preview
+          cargo install cargo-llvm-cov --locked
+
+      - name: Report coverage
+        run: cargo llvm-cov --all-features --workspace --summary-only
