@@ -296,6 +296,10 @@ fn inet_address_str(addr_fam: AddressFamily, addr: Option<SocketAddr>) -> String
 }
 
 fn print_sock_address(sock_info: &SockInfo) {
+    if let Some(peer_pid) = sock_info.peer_pid {
+        println!("         peerpid: {}", peer_pid);
+    }
+
     println!(
         "         sockname: {}",
         match sock_info.family {
@@ -521,6 +525,7 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
             // TODO make sure we are displaying information that is for the correct namespace
             // TODO handle IPv6
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
+                debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 print_sock_type(&sock_info.sock_type);
                 print_sock_address(&sock_info);
             } else {
