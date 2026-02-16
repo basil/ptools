@@ -37,3 +37,29 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
+
+      - name: Install coverage tooling
+        run: rustup component add llvm-tools-preview
+
+      - name: Build instrumented binaries for E2E coverage
+        run: |
+          RUSTFLAGS='-C instrument-coverage' \
+          cargo build --all-features --workspace --bins --examples
+
+      - name: Run coverage tests
+        run: |
+          mkdir -p target/coverage
+          RUSTFLAGS='-C instrument-coverage' \
+          LLVM_PROFILE_FILE='target/coverage/ptools-%p-%m.profraw' \
+          cargo test --all-features --workspace --tests --bins
+
+      - name: Report coverage
+        shell: bash
+        run: |
+          host_target=$(rustc -vV | awk '/host:/ {print $2}')
+          llvm_bin="$(rustc --print sysroot)/lib/rustlib/${host_target}/bin"
+          "${llvm_bin}/llvm-profdata" merge -sparse target/coverage/*.profraw -o target/coverage/ptools.profdata
+          "${llvm_bin}/llvm-cov" report \
+            --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
+            --instr-profile=target/coverage/ptools.profdata \
+            target/debug/pfiles

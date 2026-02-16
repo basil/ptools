@@ -29,6 +29,30 @@ $ cargo deb
 $ sudo apt install ./target/debian/ptools_0.1.0_amd64.deb
 ```
 
+
+## Code Coverage
+
+The CI build workflow collects and prints coverage results by default on every run.
+
+For local coverage collection without extra Rust components, you can run:
+
+```shell
+$ rm -rf target/coverage && mkdir -p target/coverage
+$ RUSTFLAGS='-C instrument-coverage' cargo build --bins
+$ RUSTFLAGS='-C instrument-coverage' \
+  LLVM_PROFILE_FILE='target/coverage/ptools-%p-%m.profraw' \
+  cargo test --tests
+$ llvm-profdata merge -sparse target/coverage/*.profraw -o target/coverage/ptools.profdata
+$ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
+  --instr-profile=target/coverage/ptools.profdata target/debug/pfiles
+$ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata \
+  target/debug/pfiles > target/coverage/lcov.info
+```
+
+The integration tests (`epoll_test` and `netlink_test`) execute ptools binaries via
+`tests/common::run_ptool`, so make sure the `target/debug/<tool>` binaries are
+instrumented (the `cargo build --bins` step above does that).
+
 ## Why ptools?
 
 Linux already has a number of mechanisms which can be used to inspect the state
