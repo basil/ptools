@@ -31,6 +31,17 @@ fn find_exec(name: &str) -> PathBuf {
 
 // Run a ptool against a sample process and return the stdout of the ptool
 pub fn run_ptool(tool: &str, test_proc: &str) -> String {
+    run_ptool_with_options(tool, &[], test_proc, &[], &[])
+}
+
+// Run a ptool against a sample process (with custom args/env) and return the stdout of the ptool
+pub fn run_ptool_with_options(
+    tool: &str,
+    tool_args: &[&str],
+    test_proc: &str,
+    test_proc_args: &[&str],
+    test_proc_env: &[(&str, &str)],
+) -> String {
     let signal_file = Path::new("/tmp/ptools-test-ready");
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -38,12 +49,15 @@ pub fn run_ptool(tool: &str, test_proc: &str) -> String {
         }
     }
 
-    let mut examined_proc = Command::new(find_exec(test_proc))
+    let mut examined_proc_cmd = Command::new(find_exec(test_proc));
+    examined_proc_cmd
+        .args(test_proc_args)
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
-        .spawn()
-        .unwrap();
+        .envs(test_proc_env.iter().copied());
+
+    let mut examined_proc = examined_proc_cmd.spawn().unwrap();
 
     // Wait for process-to-be-examined to be ready
     while !signal_file.exists() {
@@ -53,6 +67,7 @@ pub fn run_ptool(tool: &str, test_proc: &str) -> String {
     }
 
     let pfiles_output = Command::new(find_exec(tool))
+        .args(tool_args)
         .arg(examined_proc.id().to_string())
         .stdin(Stdio::null())
         .output()

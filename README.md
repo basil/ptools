@@ -44,9 +44,11 @@ $ RUSTFLAGS='-C instrument-coverage' \
   cargo test --tests
 $ llvm-profdata merge -sparse target/coverage/*.profraw -o target/coverage/ptools.profdata
 $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
-  --instr-profile=target/coverage/ptools.profdata target/debug/pfiles
+  --instr-profile=target/coverage/ptools.profdata \
+  target/debug/pfiles --object target/debug/pargs --object target/debug/penv
 $ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata \
-  target/debug/pfiles > target/coverage/lcov.info
+  target/debug/pfiles --object target/debug/pargs --object target/debug/penv \
+  > target/coverage/lcov.info
 ```
 
 The integration tests (`epoll_test` and `netlink_test`) execute ptools binaries via

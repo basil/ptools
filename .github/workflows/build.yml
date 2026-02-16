@@ -62,4 +62,4 @@ jobs:
           "${llvm_bin}/llvm-cov" report \
             --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
             --instr-profile=target/coverage/ptools.profdata \
-            target/debug/pfiles
+            target/debug/pfiles --object target/debug/pargs --object target/debug/penv
