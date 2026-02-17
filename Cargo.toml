@@ -1,6 +1,6 @@
 [package]
 name = "ptools"
-version = "0.2.2"
+version = "0.2.4"
 edition = "2021"
 description = "Utilities for inspecting Linux processes"
 readme = "README.md"
@@ -25,7 +25,7 @@ panic = "abort" # Save size. We don't need unwinding anyway.
 [package.metadata.deb]
 maintainer = "Basil Crow"
 section = "debug"
-copyright = "2025 Basil Crow"
+copyright = "2026 Basil Crow"
 
 extended-description = """\
 A collection of utilities for inspecting the state of processes, modeled \
