@@ -19,11 +19,13 @@ use clap::{command, value_parser, Arg};
 fn main() {
     let matches = command!()
         .about("Print process environment variables")
+        .long_about("Examine a target process and print environment variables and values.")
         .trailing_var_arg(true)
         .arg(
             Arg::new("pid")
                 .value_name("PID")
                 .help("Process ID (PID)")
+                .long_help("A list of process IDs (PIDs)")
                 .num_args(1..)
                 .required(true)
                 .value_parser(value_parser!(u64).range(1..)),

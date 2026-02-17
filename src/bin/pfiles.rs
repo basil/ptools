@@ -1253,17 +1253,30 @@ fn print_files(pid: u64, non_verbose: bool) -> bool {
 fn main() {
     let matches = command!()
         .about("Print information for all open files in each process")
+        .long_about(
+            "Report fstat(2) and fcntl(2) information for all open files in each process. \
+For network endpoints, provide local address information and peer address information when \
+connected. For sockets, provide the socket type, socket options, and send and receive buffer \
+sizes. Also report a path to the file when that information is available from /proc/pid/fd. \
+Do not assume this is the same name used to open the file. See proc(5) for more information.",
+        )
         .trailing_var_arg(true)
         .arg(
             Arg::new("non-verbose")
                 .short('n')
                 .action(ArgAction::SetTrue)
-                .help("Set non-verbose mode"),
+                .help("Set non-verbose mode")
+                .long_help(
+                    "Set non-verbose mode. Do not display verbose information for each file \
+descriptor. Instead, limit output to the information that the process would retrieve by \
+applying fstat(2) to each of its file descriptors.",
+                ),
         )
         .arg(
             Arg::new("pid")
                 .value_name("PID")
                 .help("Process ID (PID)")
+                .long_help("A list of process IDs (PIDs)")
                 .num_args(1..)
                 .required(true)
                 .value_parser(value_parser!(u64).range(1..)),

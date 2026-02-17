@@ -164,11 +164,19 @@ fn print_auxv(pid: u64) {
 fn main() {
     let matches = command!()
         .about("Print process arguments")
+        .long_about(
+            "Examine a target process and print arguments, environment variables and values, \
+or the process auxiliary vector.",
+        )
         .trailing_var_arg(true)
         .arg(
             Arg::new("line")
                 .short('l')
                 .help("Display arguments as command line")
+                .long_help(
+                    "Display the arguments as a single command line. Print the command line in \
+a manner suitable for interpretation by /bin/sh.",
+                )
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -176,6 +184,7 @@ fn main() {
                 .short('a')
                 .long("args")
                 .help("Print process arguments")
+                .long_help("Print process arguments as contained in /proc/pid/cmdline (default).")
                 .action(ArgAction::SetTrue),
         )
         // We have a separate penv command, but keep this option for compatibility with Solaris
@@ -184,6 +193,10 @@ fn main() {
                 .short('e')
                 .long("env")
                 .help("Print process environment variables")
+                .long_help(
+                    "Print process environment variables and values as contained in \
+/proc/pid/environ.",
+                )
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -191,12 +204,14 @@ fn main() {
                 .short('x')
                 .long("auxv")
                 .help("Print process auxiliary vector")
+                .long_help("Print the process auxiliary vector as contained in /proc/pid/auxv.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("pid")
                 .value_name("PID")
                 .help("Process ID (PID)")
+                .long_help("A list of process IDs (PIDs)")
                 .num_args(1..)
                 .required(true)
                 .value_parser(value_parser!(u64).range(1..)),
