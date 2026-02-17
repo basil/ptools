@@ -624,6 +624,29 @@ fn print_epoll_fdinfo(pid: u64, fd: u64) {
     }
 }
 
+fn read_nofile_rlimit(pid: u64) -> Result<(String, String), Box<dyn Error>> {
+    let limits = fs::read_to_string(format!("/proc/{}/limits", pid))?;
+
+    for line in limits.lines() {
+        if line.starts_with("Max open files") {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            if fields.len() < 6 {
+                return Err(Box::new(ParseError::new(
+                    "Max open files",
+                    "line has fewer fields than expected",
+                )));
+            }
+
+            return Ok((fields[3].to_string(), fields[4].to_string()));
+        }
+    }
+
+    Err(Box::new(ParseError::new(
+        "/proc/[pid]/limits",
+        "Max open files line not found",
+    )))
+}
+
 fn print_files(pid: u64) -> bool {
     let proc_dir = format!("/proc/{}/", pid);
     if !Path::new(&proc_dir).exists() {
@@ -632,8 +655,10 @@ fn print_files(pid: u64) -> bool {
     }
 
     ptools::print_proc_summary(pid);
-
-    // TODO print current rlimit
+    match read_nofile_rlimit(pid) {
+        Ok((soft, hard)) => println!("       RLIMIT_NOFILE soft: {} hard: {}", soft, hard),
+        Err(e) => eprintln!("Failed to read RLIMIT_NOFILE for {}: {}", pid, e),
+    }
 
     let sockets = fetch_sock_info(pid);
 
