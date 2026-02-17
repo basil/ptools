@@ -19,6 +19,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::time::Duration;
 
 // Find an executable produced by the Cargo build
@@ -67,7 +68,16 @@ pub fn run_ptool_with_options_and_capture(
     test_proc_args: &[&str],
     test_proc_env: &[(&str, &str)],
 ) -> Output {
-    let signal_file = Path::new("/tmp/ptools-test-ready");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let signal_path = format!(
+        "/tmp/ptools-test-ready-{}-{}",
+        std::process::id(),
+        unique
+    );
+    let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
@@ -80,6 +90,7 @@ pub fn run_ptool_with_options_and_capture(
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
         .envs(test_proc_env.iter().copied());
 
     let mut examined_proc = examined_proc_cmd.spawn().unwrap();
@@ -100,6 +111,11 @@ pub fn run_ptool_with_options_and_capture(
         .unwrap();
 
     examined_proc.kill().unwrap();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
 
     ptool_output
 }

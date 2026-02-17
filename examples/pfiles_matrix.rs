@@ -3,6 +3,7 @@ use nix::sys::epoll::{Epoll, EpollCreateFlags, EpollEvent, EpollFlags};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 use nix::sys::stat::Mode;
 use nix::unistd::pipe2;
+use std::env;
 use std::fs::{self, File};
 use std::io::{Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
@@ -24,6 +25,9 @@ fn find_block_device_path() -> Option<String> {
 }
 
 fn main() {
+    let signal_path =
+        env::var("PTOOLS_TEST_READY_FILE").unwrap_or_else(|_| "/tmp/ptools-test-ready".to_string());
+
     let tmp_file_path = "/tmp/ptools-pfiles-matrix-file";
     let mut tmp_file = File::create(tmp_file_path).unwrap();
     writeln!(tmp_file, "ptools").unwrap();
@@ -75,7 +79,7 @@ fn main() {
 
     // Signal parent process (the test process) that this process is ready to be observed by the
     // ptool being tested.
-    File::create("/tmp/ptools-test-ready").unwrap();
+    File::create(signal_path).unwrap();
 
     // Keep all descriptors alive until killed by test harness.
     let _keep_alive = (
