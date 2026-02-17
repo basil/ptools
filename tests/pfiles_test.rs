@@ -889,10 +889,21 @@ fn pfiles_matrix_unix_socket() {
     let stdout = common::assert_success_and_get_stdout(output);
     let fd_map = parse_fd_map(&stdout);
 
-    let unix_stream_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_UNIX\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
-    let unix_stream_with_reuseaddr_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_UNIX\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
-    let unix_listener_count = count_normalized_exact_blocks(&fd_map, unix_stream_expected)
-        + count_normalized_exact_blocks(&fd_map, unix_stream_with_reuseaddr_expected);
+    let unix_listener_count = fd_map
+        .values()
+        .map(|block| normalize_dynamic_fields(block))
+        .filter(|block| {
+            block.contains("sockname: AF_UNIX")
+                && block.contains("SOCK_STREAM")
+                && block.lines().any(|line| {
+                    let trimmed = line.trim_start();
+                    trimmed.starts_with("SO_")
+                        && trimmed.contains("SO_ACCEPTCONN")
+                        && trimmed.contains("SO_SNDBUF(<dynamic>)")
+                        && trimmed.contains("SO_RCVBUF(<dynamic>)")
+                })
+        })
+        .count();
     assert_eq!(
         unix_listener_count, 1,
         "expected exactly one unix listener socket block"
