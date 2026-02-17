@@ -11,11 +11,39 @@ fn leading_spaces(line: &str) -> usize {
     line.chars().take_while(|c| *c == ' ').count()
 }
 
+fn assert_contains(output: &str, needle: &str, context: &str) {
+    assert!(
+        output.contains(needle),
+        "{}: expected to find {:?} in output:\n{}",
+        context,
+        needle,
+        output
+    );
+}
+
 fn remove_if_exists(path: &Path) {
     if let Err(e) = fs::remove_file(path) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", path, e.kind());
         }
+    }
+}
+
+fn current_username() -> Option<String> {
+    let output = Command::new("id")
+        .arg("-un")
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let username = String::from_utf8(output.stdout).ok()?;
+    let username = username.trim().to_string();
+    if username.is_empty() {
+        None
+    } else {
+        Some(username)
     }
 }
 
@@ -187,5 +215,121 @@ fn ptree_a_includes_children_of_process_zero() {
         "Expected ptree -a to print a process name for PID {}:\n{}",
         kernel_root_pid,
         all_stdout
+    );
+}
+
+#[test]
+fn ptree_accepts_username_operand() {
+    let Some(username) = current_username() else {
+        eprintln!("Skipping: unable to resolve current username");
+        return;
+    };
+
+    let test_pid = std::process::id();
+    let ready_file = std::path::PathBuf::from(format!("/tmp/ptools-test-ready-{}", test_pid));
+    let child_ready_file =
+        std::path::PathBuf::from(format!("/tmp/ptools-test-child-ready-{}", test_pid));
+
+    let parent_arg = "PARG_USER";
+    let child_arg = "CARG_USER";
+
+    remove_if_exists(&ready_file);
+    remove_if_exists(&child_ready_file);
+
+    let mut examined_proc = Command::new(common::find_exec("ptree_parent_child"))
+        .arg(parent_arg)
+        .arg(child_arg)
+        .arg(ready_file.to_str().unwrap())
+        .arg(child_ready_file.to_str().unwrap())
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+
+    while !(ready_file.exists() && child_ready_file.exists()) {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Parent exited too soon with status {}", status);
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("ptree"))
+        .arg(username)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+
+    examined_proc.kill().unwrap();
+    remove_if_exists(&ready_file);
+    remove_if_exists(&child_ready_file);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_contains(
+        &stdout,
+        parent_arg,
+        "Expected ptree <user> output to include spawned parent process",
+    );
+    assert_contains(
+        &stdout,
+        "--child",
+        "Expected ptree <user> output to include spawned child process",
+    );
+}
+
+#[test]
+fn ptree_accepts_mixed_pid_and_user_operands() {
+    let Some(username) = current_username() else {
+        eprintln!("Skipping: unable to resolve current username");
+        return;
+    };
+
+    let test_pid = std::process::id();
+    let ready_file = std::path::PathBuf::from(format!("/tmp/ptools-test-ready-{}", test_pid));
+    let child_ready_file =
+        std::path::PathBuf::from(format!("/tmp/ptools-test-child-ready-{}", test_pid));
+
+    let parent_arg = "PARG_MIXED";
+    let child_arg = "CARG_MIXED";
+
+    remove_if_exists(&ready_file);
+    remove_if_exists(&child_ready_file);
+
+    let mut examined_proc = Command::new(common::find_exec("ptree_parent_child"))
+        .arg(parent_arg)
+        .arg(child_arg)
+        .arg(ready_file.to_str().unwrap())
+        .arg(child_ready_file.to_str().unwrap())
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+
+    while !(ready_file.exists() && child_ready_file.exists()) {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Parent exited too soon with status {}", status);
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("ptree"))
+        .arg(examined_proc.id().to_string())
+        .arg(username)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+
+    examined_proc.kill().unwrap();
+    remove_if_exists(&ready_file);
+    remove_if_exists(&child_ready_file);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_contains(
+        &stdout,
+        parent_arg,
+        "Expected mixed ptree operands output to include spawned parent process",
     );
 }

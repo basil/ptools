@@ -16,14 +16,12 @@
 
 use clap::{command, value_parser, Arg, ArgAction};
 use ptools::ParseError;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::process::exit;
-
-// TODO Allow a user to be specified in ptree
 
 // Info parsed from /proc/[pid]/status
 struct ProcStat {
@@ -96,36 +94,64 @@ impl ProcStat {
     fn ppid(&self) -> Result<u64, Box<dyn Error>> {
         Ok(self.get_field("PPid")?.parse()?)
     }
+
+    fn euid(&self) -> Result<u32, Box<dyn Error>> {
+        let fields = self
+            .get_field("Uid")?
+            .split_whitespace()
+            .collect::<Vec<&str>>();
+        if fields.len() < 2 {
+            return Err(From::from(ParseError::in_file(
+                "status",
+                &format!(
+                    "Uid field in {} had fewer fields than expected",
+                    ProcStat::status_file(self.pid)
+                ),
+            )));
+        }
+        Ok(fields[1].parse::<u32>()?)
+    }
 }
 
 // Loop over all the processes listed in /proc/, find the parent of each one, and build a map from
 // child to parent and a map from parent to children. There doesn't seem to be a more efficient way
 // of doing this reliably.
-fn build_proc_maps() -> Result<(HashMap<u64, u64>, HashMap<u64, Vec<u64>>), Box<dyn Error>> {
+fn build_proc_maps(
+) -> Result<(HashMap<u64, u64>, HashMap<u64, Vec<u64>>, HashMap<u64, u32>), Box<dyn Error>> {
     let mut child_map = HashMap::new(); // Map of pid to pids of children
     let mut parent_map = HashMap::new(); // Map of pid to pid of parent
+    let mut uid_map = HashMap::new(); // Map of pid to effective uid
 
     for entry in fs::read_dir("/proc")? {
         let entry = entry?;
         let filename = entry.file_name();
         if let Some(pid) = filename.to_str().and_then(|s| s.parse::<u64>().ok()) {
-            let ppid = match ProcStat::read(pid) {
-                Ok(proc_stat) => match proc_stat.ppid() {
-                    Ok(ppid) => ppid,
-                    Err(e) => {
-                        eprintln!("{}", e.to_string());
-                        continue;
-                    }
-                },
+            let proc_stat = match ProcStat::read(pid) {
+                Ok(proc_stat) => proc_stat,
                 // Proc probably exited before we could read its status
                 Err(_) => continue,
             };
+            let ppid = match proc_stat.ppid() {
+                Ok(ppid) => ppid,
+                Err(e) => {
+                    eprintln!("{}", e.to_string());
+                    continue;
+                }
+            };
+            let euid = match proc_stat.euid() {
+                Ok(euid) => euid,
+                Err(e) => {
+                    eprintln!("{}", e.to_string());
+                    continue;
+                }
+            };
             child_map.entry(ppid).or_insert(vec![]).push(pid);
             parent_map.insert(pid, ppid);
+            uid_map.insert(pid, euid);
         }
     }
 
-    Ok((parent_map, child_map))
+    Ok((parent_map, child_map, uid_map))
 }
 
 fn print_tree(pid: u64, parent_map: &HashMap<u64, u64>, child_map: &HashMap<u64, Vec<u64>>) {
@@ -189,9 +215,48 @@ fn print_ptree_line(pid: u64, indent_level: u64) {
     ptools::print_cmd_summary(pid);
 }
 
+fn lookup_uid_by_username(username: &str) -> Result<Option<u32>, Box<dyn Error>> {
+    let passwd = fs::read_to_string("/etc/passwd")?;
+    for line in passwd.lines() {
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        let fields = line.split(':').collect::<Vec<&str>>();
+        if fields.len() < 3 {
+            continue;
+        }
+        if fields[0] != username {
+            continue;
+        }
+        let uid = fields[2].parse::<u32>()?;
+        return Ok(Some(uid));
+    }
+    Ok(None)
+}
+
+fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>, Box<dyn Error>> {
+    let uid = match lookup_uid_by_username(username)? {
+        Some(uid) => uid,
+        None => {
+            return Err(From::from(ParseError::new(
+                "username",
+                &format!("No such user '{}'", username),
+            )))
+        }
+    };
+
+    let mut pids = uid_map
+        .iter()
+        .filter_map(|(pid, euid)| if *euid == uid { Some(*pid) } else { None })
+        .collect::<Vec<u64>>();
+    pids.sort_unstable();
+    Ok(pids)
+}
+
 fn main() {
     let matches = command!()
         .about("Print process trees")
+        .override_usage("ptree [ {pid|user} ... ]")
         .arg(
             Arg::new("all")
                 .short('a')
@@ -200,15 +265,15 @@ fn main() {
                 .help("Include children of PID 0"),
         )
         .arg(
-            Arg::new("pid")
-                .value_name("PID")
-                .help("Process ID (PID)")
+            Arg::new("target")
+                .value_name("pid|user")
+                .help("Process ID (PID) or username")
                 .num_args(0..)
-                .value_parser(value_parser!(u64).range(1..)),
+                .value_parser(value_parser!(String)),
         )
         .get_matches();
 
-    let (parent_map, child_map) = match build_proc_maps() {
+    let (parent_map, child_map, uid_map) = match build_proc_maps() {
         Ok(maps) => maps,
         Err(e) => {
             eprintln!("Error building parent/child maps: {}", e);
@@ -216,9 +281,30 @@ fn main() {
         }
     };
 
-    if let Some(pids) = matches.get_many::<u64>("pid") {
-        for pid in pids {
-            print_tree(*pid, &parent_map, &child_map);
+    if let Some(targets) = matches.get_many::<String>("target") {
+        let mut printed = HashSet::new();
+        for target in targets {
+            if let Ok(pid) = target.parse::<u64>() {
+                if pid == 0 {
+                    eprintln!("PID must be > 0: {}", pid);
+                    continue;
+                }
+                if printed.insert(pid) {
+                    print_tree(pid, &parent_map, &child_map);
+                }
+                continue;
+            }
+
+            match pids_for_user(target, &uid_map) {
+                Ok(pids) => {
+                    for pid in pids {
+                        if printed.insert(pid) {
+                            print_tree(pid, &parent_map, &child_map);
+                        }
+                    }
+                }
+                Err(e) => eprintln!("{}", e),
+            }
         }
     } else if matches.get_flag("all") {
         print_all_trees(&child_map);
