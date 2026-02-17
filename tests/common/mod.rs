@@ -106,7 +106,8 @@ pub fn run_ptool_with_options_and_capture(
         .output()
         .unwrap();
 
-    examined_proc.kill().unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
