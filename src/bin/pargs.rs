@@ -179,7 +179,10 @@ fn read_auxv(pid: u64) -> Option<Vec<(u64, u64)>> {
             }
         }
 
-        eprintln!("Error parsing auxv: unexpected auxv format ({} bytes)", bytes.len());
+        eprintln!(
+            "Error parsing auxv: unexpected auxv format ({} bytes)",
+            bytes.len()
+        );
         None
     } else {
         None
