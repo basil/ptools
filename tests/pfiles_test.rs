@@ -1,7 +1,11 @@
 mod common;
 
+use std::fs;
+use std::io;
 use std::os::unix::fs::FileTypeExt;
-use std::process::Command;
+use std::os::unix::process::CommandExt;
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 fn assert_contains(output: &str, needle: &str) {
     assert!(
@@ -71,6 +75,74 @@ fn pfiles_rejects_pid_zero() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_contains(&stderr, "invalid value");
+}
+
+#[test]
+fn pfiles_prints_current_nofile_rlimit() {
+    const EXPECTED_SOFT: u64 = 123;
+    const EXPECTED_HARD: u64 = 456;
+
+    let signal_file = Path::new("/tmp/ptools-test-ready");
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/args_env"));
+    examined_proc
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit());
+
+    unsafe {
+        examined_proc.pre_exec(|| {
+            let lim = nix::libc::rlimit {
+                rlim_cur: EXPECTED_SOFT,
+                rlim_max: EXPECTED_HARD,
+            };
+
+            if nix::libc::setrlimit(nix::libc::RLIMIT_NOFILE, &lim) != 0 {
+                return Err(io::Error::last_os_error());
+            }
+
+            Ok(())
+        });
+    }
+
+    let mut examined_proc = examined_proc.spawn().expect("failed to spawn args_env");
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().expect("failed to wait on child") {
+            panic!("Child exited too soon with status {}", status)
+        }
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run pfiles");
+
+    examined_proc.kill().expect("failed to kill child process");
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let rlimit_line = stdout
+        .lines()
+        .find(|line| line.contains("RLIMIT_NOFILE soft:"))
+        .expect("missing RLIMIT_NOFILE line");
+
+    let parts: Vec<&str> = rlimit_line.split_whitespace().collect();
+    assert!(
+        parts.len() >= 5,
+        "unexpected RLIMIT_NOFILE line format: {}",
+        rlimit_line
+    );
+
+    assert_eq!(parts[2], EXPECTED_SOFT.to_string());
+    assert_eq!(parts[4], EXPECTED_HARD.to_string());
 }
 
 #[test]
