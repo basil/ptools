@@ -992,28 +992,6 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
     sockets
 }
 
-// TODO Some things about illumos pfiles output seem less than ideal. For instance, would
-// printing 'TCP' be preferrable to 'SOCK_STREAM'? Could we add somewhere in output the
-// psuedo file for the socket? That could be very useful for manually inspecting or
-// draining the output.
-//
-//    435: S_IFSOCK mode:0666 dev:556,0 ino:38252 uid:0 gid:0 rdev:0,0
-//         O_RDWR
-//           SOCK_STREAM
-//           SO_SNDBUF(16384),SO_RCVBUF(5120)
-//           sockname: AF_UNIX
-//           peer: java[1053] zone: global[0]
-//
-// Another example: we can guess by the way that there is no peer address that this socket
-// is listening. Could we make this more explicit? Even for sockets that aren't listening, it
-// might be really useful to know the state of the connection
-//
-//    436: S_IFSOCK mode:0666 dev:556,0 ino:37604 uid:0 gid:0 rdev:0,0
-//         O_RDWR|O_NONBLOCK
-//           SOCK_STREAM
-//           SO_REUSEADDR,SO_SNDBUF(16777216),SO_RCVBUF(4194304)
-//           sockname: AF_INET6 ::  port: 8341
-
 fn print_file(
     pid: u64,
     fd: u64,
