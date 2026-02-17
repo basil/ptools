@@ -103,6 +103,9 @@ fn normalize_line(line: &str) -> String {
                 .collect::<String>()
         );
     }
+    if line.trim_start().starts_with("congestion control:") {
+        return replace_after_literal(line, "congestion control:", " <dynamic>");
+    }
 
     let mut normalized = line.to_string();
 
@@ -274,6 +277,14 @@ fn replace_after_marker(line: &str, marker: &str, replacement: &str) -> String {
         replacement,
         &line[token_end..]
     )
+}
+
+fn replace_after_literal(line: &str, marker: &str, replacement: &str) -> String {
+    let Some(start) = line.find(marker) else {
+        return line.to_string();
+    };
+    let end = start + marker.len();
+    format!("{}{}", &line[..end], replacement)
 }
 
 fn replace_tuple_value(line: &str, marker: &str, replacement: &str) -> String {
@@ -885,7 +896,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one unix listener socket block"
     );
 
-    let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_LISTEN";
+    let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, inet_listen_expected),
         1,
@@ -898,7 +909,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected at least one IPv4 established socket block"
     );
 
-    let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_LISTEN";
+    let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, inet6_listen_expected),
         1,
@@ -954,7 +965,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
             .get(&listen_fd)
             .expect("expected listening socket fd"),
     );
-    let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_LISTEN";
+    let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
     let listen_without_sockopts = drop_sockopts_line(listen_with_sockopts);
     assert!(
         listen_normalized == listen_with_sockopts || listen_normalized == listen_without_sockopts,

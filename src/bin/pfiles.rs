@@ -26,7 +26,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
-use std::os::fd::{FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::Path;
 use std::process::exit;
 
@@ -471,6 +471,30 @@ fn print_socket_options(pid: u64, fd: u64) {
     }
 }
 
+fn tcp_congestion_control(pid: u64, fd: u64) -> Option<String> {
+    let duplicated_fd = duplicate_target_fd(pid, fd)?;
+    let mut buf = [0u8; 64];
+    let mut len = buf.len() as nix::libc::socklen_t;
+    let rc = unsafe {
+        nix::libc::getsockopt(
+            duplicated_fd.as_raw_fd(),
+            nix::libc::IPPROTO_TCP,
+            nix::libc::TCP_CONGESTION,
+            buf.as_mut_ptr().cast::<nix::libc::c_void>(),
+            &mut len,
+        )
+    };
+    if rc != 0 || len == 0 {
+        return None;
+    }
+
+    let len = len as usize;
+    let end = buf[..len].iter().position(|&b| b == 0).unwrap_or(len);
+    std::str::from_utf8(&buf[..end])
+        .ok()
+        .map(|name| name.to_string())
+}
+
 fn address_family_str(addr_fam: AddressFamily) -> &'static str {
     match addr_fam {
         AddressFamily::Unix => "AF_UNIX",
@@ -541,7 +565,7 @@ fn print_sockname(sock_info: &SockInfo) {
     );
 }
 
-fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
+fn print_sock_address(pid: u64, fd: u64, sock_info: &SockInfo, peer: Option<&PeerProcess>) {
     // If we have some additional info to print about the remote side of this socket, print it here
     if let Some(peer) = peer {
         println!("         peer: {}[{}]", peer.comm, peer.pid);
@@ -554,6 +578,12 @@ fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
             "         peername: {} ",
             inet_address_str(sock_info.family, Some(addr))
         );
+    }
+
+    if matches!(sock_info.tcp_state, Some(TcpState::Listen)) {
+        if let Some(congestion_control) = tcp_congestion_control(pid, fd) {
+            println!("         congestion control: {}", congestion_control);
+        }
     }
 
     if let Some(state) = sock_info.tcp_state {
@@ -1048,7 +1078,7 @@ fn print_file(
                             AddressFamily::Unix => unix_peer_process(pid, fd),
                             _ => None,
                         });
-                print_sock_address(&sock_info, peer.as_ref());
+                print_sock_address(pid, fd, &sock_info, peer.as_ref());
             } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
                 println!(
                     "         sockname: {}",
