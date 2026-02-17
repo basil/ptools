@@ -77,25 +77,9 @@ pub fn run_ptool_with_options_and_capture(
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
 
-    let afalg_status_path = format!("/tmp/ptools-afalg-status-{}-{}", test_pid, unique);
-    let afalg_status_file = Path::new(&afalg_status_path);
-
-    let sockopts_ready_path = format!("/tmp/ptools-sockopts-ready-{}-{}", test_pid, unique);
-    let sockopts_ready_file = Path::new(&sockopts_ready_path);
-
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
-        }
-    }
-    if let Err(e) = fs::remove_file(afalg_status_file) {
-        if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", afalg_status_file, e.kind())
-        }
-    }
-    if let Err(e) = fs::remove_file(sockopts_ready_file) {
-        if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())
         }
     }
 
@@ -106,8 +90,6 @@ pub fn run_ptool_with_options_and_capture(
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
         .env("PTOOLS_TEST_READY_FILE", &signal_path)
-        .env("PTOOLS_AFALG_STATUS_FILE", &afalg_status_path)
-        .env("PTOOLS_SOCKOPTS_READY_FILE", &sockopts_ready_path)
         .envs(test_proc_env.iter().copied());
 
     let mut examined_proc = examined_proc_cmd.spawn().unwrap();
@@ -132,16 +114,6 @@ pub fn run_ptool_with_options_and_capture(
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
-        }
-    }
-    if let Err(e) = fs::remove_file(afalg_status_file) {
-        if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", afalg_status_file, e.kind())
-        }
-    }
-    if let Err(e) = fs::remove_file(sockopts_ready_file) {
-        if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())
         }
     }
 
