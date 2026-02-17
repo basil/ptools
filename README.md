@@ -45,7 +45,8 @@ $ RUSTFLAGS='-C instrument-coverage' \
 $ llvm-profdata merge -sparse target/coverage/*.profraw -o target/coverage/ptools.profdata
 $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
   --instr-profile=target/coverage/ptools.profdata \
-  target/debug/pargs --object target/debug/penv --object target/debug/pfiles
+  target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
+  --object target/debug/ptree
 $ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
   --object target/debug/ptree > target/coverage/lcov.info
