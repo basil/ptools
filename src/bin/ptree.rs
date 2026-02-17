@@ -14,7 +14,7 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg};
+use clap::{command, value_parser, Arg, ArgAction};
 use ptools::ParseError;
 use std::collections::HashMap;
 use std::error::Error;
@@ -141,6 +141,14 @@ fn print_tree(pid: u64, parent_map: &HashMap<u64, u64>, child_map: &HashMap<u64,
     print_children(&child_map, pid, indent_level);
 }
 
+fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>) {
+    if let Some(root_children) = child_map.get(&0) {
+        for pid in root_children {
+            print_children(child_map, *pid, 0);
+        }
+    }
+}
+
 // Returns the current indentation level
 fn print_parents(parent_map: &HashMap<u64, u64>, pid: u64) -> u64 {
     let ppid = match parent_map.get(&pid) {
@@ -185,6 +193,13 @@ fn main() {
     let matches = command!()
         .about("Print process trees")
         .arg(
+            Arg::new("all")
+                .short('a')
+                .long("all")
+                .action(ArgAction::SetTrue)
+                .help("Include children of PID 0"),
+        )
+        .arg(
             Arg::new("pid")
                 .value_name("PID")
                 .help("Process ID (PID)")
@@ -205,9 +220,9 @@ fn main() {
         for pid in pids {
             print_tree(*pid, &parent_map, &child_map);
         }
+    } else if matches.get_flag("all") {
+        print_all_trees(&child_map);
     } else {
-        // TODO Should we print all processes here, including kernel threads? Is there any way this
-        // could miss userspace processes?
         print_tree(1, &parent_map, &child_map);
     }
 }

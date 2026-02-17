@@ -116,13 +116,37 @@ impl std::fmt::Display for ParseError {
 pub fn print_cmd_summary(pid: u64) {
     match File::open(format!("/proc/{}/cmdline", pid)) {
         Ok(file) => {
+            let mut printed_anything = false;
             for arg in BufReader::new(file).take(80).split('\0' as u8) {
                 match arg {
-                    Ok(arg) => print!("{} ", String::from_utf8_lossy(&arg)),
+                    Ok(arg) => {
+                        if !arg.is_empty() {
+                            printed_anything = true;
+                            print!("{} ", String::from_utf8_lossy(&arg));
+                        }
+                    }
                     Err(e) => {
                         println!("<error reading cmdline>");
                         eprintln!("{}", e.to_string());
                         break;
+                    }
+                }
+            }
+            if !printed_anything {
+                match std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
+                    Ok(comm) => {
+                        let comm = comm.trim_end();
+                        if comm.is_empty() {
+                            print!("<unknown>");
+                        } else {
+                            print!("{}", comm);
+                        }
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::NotFound => {
+                        print!("<exited>");
+                    }
+                    Err(_) => {
+                        print!("<unknown>");
                     }
                 }
             }
