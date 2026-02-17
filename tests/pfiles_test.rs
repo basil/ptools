@@ -3,6 +3,7 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::FileTypeExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
@@ -503,6 +504,45 @@ fn pfiles_reports_netlink_socket() {
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&netlink_fd).expect("expected netlink fd")),
         "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_NETLINK"
+    );
+}
+
+#[test]
+fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
+    use nix::errno::Errno;
+    use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
+
+    let alg_socket = match socket(
+        AddressFamily::Alg,
+        SockType::SeqPacket,
+        SockFlag::empty(),
+        None,
+    ) {
+        Ok(fd) => fd,
+        Err(Errno::EAFNOSUPPORT | Errno::EPROTONOSUPPORT) => {
+            eprintln!("skipping test: AF_ALG sockets are not supported by this kernel");
+            return;
+        }
+        Err(e) => panic!("failed to create AF_ALG socket: {}", e),
+    };
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(std::process::id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run pfiles");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let fd_map = parse_fd_map(&stdout);
+    let fd = alg_socket.as_raw_fd() as u32;
+    assert_eq!(
+        normalize_dynamic_fields(
+            fd_map
+                .get(&fd)
+                .unwrap_or_else(|| panic!("missing fd block for AF_ALG socket fd {}", fd)),
+        ),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         sockname: AF_ALG"
     );
 }
 

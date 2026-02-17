@@ -245,6 +245,81 @@ fn get_offset(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
     Ok(str_offset.parse::<u64>()?)
 }
 
+fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let path = std::ffi::CString::new(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
+        let name = std::ffi::CString::new("system.sockprotoname").ok()?;
+
+        let size =
+            unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
+
+        if size < 0 {
+            handle_sockprotoname_xattr_error(pid, fd);
+            return None;
+        }
+
+        let mut buf = vec![0u8; size as usize];
+        let filled = unsafe {
+            nix::libc::getxattr(
+                path.as_ptr(),
+                name.as_ptr(),
+                buf.as_mut_ptr().cast::<nix::libc::c_void>(),
+                buf.len(),
+            )
+        };
+        if filled < 0 {
+            handle_sockprotoname_xattr_error(pid, fd);
+            return None;
+        }
+
+        buf.truncate(filled as usize);
+        if buf.last() == Some(&0) {
+            buf.pop();
+        }
+
+        if buf.is_empty() {
+            return None;
+        }
+
+        return String::from_utf8(buf).ok();
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (pid, fd);
+        None
+    }
+}
+
+fn sockname_from_sockprotoname(sockprotoname: &str) -> String {
+    if sockprotoname.starts_with("AF_") {
+        sockprotoname.to_string()
+    } else {
+        format!("AF_{}", sockprotoname)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
+    match std::io::Error::last_os_error().raw_os_error() {
+        // Missing xattr or unsupported xattr for this procfs entry.
+        Some(nix::libc::ENODATA)
+        | Some(nix::libc::EOPNOTSUPP)
+        | Some(nix::libc::ENOENT)
+        | Some(nix::libc::EPERM)
+        | Some(nix::libc::EACCES) => {}
+        Some(errno) => eprintln!(
+            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}: errno {}",
+            pid, fd, errno
+        ),
+        None => eprintln!(
+            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}",
+            pid, fd
+        ),
+    }
+}
+
 struct SockInfo {
     family: AddressFamily,
     sock_type: SockType,
@@ -677,15 +752,17 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
 
     match file_type {
         FileType::Posix(PosixFileType::Socket) => {
-            // TODO We should read the 'system.sockprotoname' xattr for /proc/[pid]/fd/[fd] for
-            // sockets. That way we can at least print the protocol even if we weren't able to find
-            // any info for the socket in procfs.
             // Socket metadata is resolved from /proc/<pid>/net/*, so inode lookups are
             // evaluated in the target process's network namespace.
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 print_sock_type(&sock_info.sock_type);
                 print_sock_address(&sock_info);
+            } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
+                println!(
+                    "         sockname: {}",
+                    sockname_from_sockprotoname(&sockprotoname)
+                );
             } else {
                 print!(
                     "       ERROR: failed to find info for socket with inode num {}\n",
