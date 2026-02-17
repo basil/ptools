@@ -74,6 +74,23 @@ enum SockType {
     Unknown(u16),
 }
 
+#[derive(Copy, Clone)]
+enum TcpState {
+    Established,
+    SynSent,
+    SynRecv,
+    FinWait1,
+    FinWait2,
+    TimeWait,
+    Close,
+    CloseWait,
+    LastAck,
+    Listen,
+    Closing,
+    NewSynRecv,
+    Unknown(u8),
+}
+
 // Some common types of files have their type described by the st_mode returned by stat. For certain
 // types of files, though, st_mode is zero. In this case we can try to get more info from the text
 // in /proc/[pid]/fd/[fd]
@@ -235,7 +252,7 @@ struct SockInfo {
     local_addr: Option<SocketAddr>, // Doesn't apply to unix sockets
     peer_addr: Option<SocketAddr>,  // Doesn't apply to unix sockets
     peer_pid: Option<u64>,          // If the peer is another process on this system
-                                    // TODO state: Option<SockState>, // TCP only
+    tcp_state: Option<TcpState>,    // TCP only
 }
 
 fn print_sock_type(sock_type: &SockType) {
@@ -335,8 +352,49 @@ fn print_sock_address(sock_info: &SockInfo) {
             inet_address_str(sock_info.family, Some(addr))
         );
     }
+
+    if let Some(state) = sock_info.tcp_state {
+        println!("         state: {}", tcp_state_str(state));
+    }
+
     // TODO for unix sockets, or for tcp connections connected to another process on this machine,
     // see if we can find and print the pid/comm of the other process
+}
+
+fn parse_tcp_state(state_hex: &str) -> Result<TcpState, ParseIntError> {
+    Ok(match u8::from_str_radix(state_hex, 16)? {
+        0x01 => TcpState::Established,
+        0x02 => TcpState::SynSent,
+        0x03 => TcpState::SynRecv,
+        0x04 => TcpState::FinWait1,
+        0x05 => TcpState::FinWait2,
+        0x06 => TcpState::TimeWait,
+        0x07 => TcpState::Close,
+        0x08 => TcpState::CloseWait,
+        0x09 => TcpState::LastAck,
+        0x0A => TcpState::Listen,
+        0x0B => TcpState::Closing,
+        0x0C => TcpState::NewSynRecv,
+        n => TcpState::Unknown(n),
+    })
+}
+
+fn tcp_state_str(state: TcpState) -> String {
+    match state {
+        TcpState::Established => "TCP_ESTABLISHED".into(),
+        TcpState::SynSent => "TCP_SYN_SENT".into(),
+        TcpState::SynRecv => "TCP_SYN_RECV".into(),
+        TcpState::FinWait1 => "TCP_FIN_WAIT1".into(),
+        TcpState::FinWait2 => "TCP_FIN_WAIT2".into(),
+        TcpState::TimeWait => "TCP_TIME_WAIT".into(),
+        TcpState::Close => "TCP_CLOSE".into(),
+        TcpState::CloseWait => "TCP_CLOSE_WAIT".into(),
+        TcpState::LastAck => "TCP_LAST_ACK".into(),
+        TcpState::Listen => "TCP_LISTEN".into(),
+        TcpState::Closing => "TCP_CLOSING".into(),
+        TcpState::NewSynRecv => "TCP_NEW_SYN_RECV".into(),
+        TcpState::Unknown(n) => format!("TCP_UNKNOWN_{:02X}", n),
+    }
 }
 
 fn parse_sock_type(type_code: &str) -> Result<SockType, ParseIntError> {
@@ -444,6 +502,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                     local_addr: None,
                     peer_addr: None,
                     peer_pid: None,
+                    tcp_state: None,
                 };
                 Ok((inode, sock_info))
             })
@@ -466,6 +525,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                     local_addr: None,
                     peer_addr: None,
                     peer_pid: None,
+                    tcp_state: None,
                 };
                 Ok((inode, sock_info))
             })
@@ -477,6 +537,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
     let mut parse_file =
         |filename, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, ParseError>| {
             if let Some(file) = ptools::open_or_warn(&format!("/proc/{}/net/{}", pid, filename)) {
+                let is_tcp = filename == "tcp" || filename == "tcp6";
                 let additional_sockets = BufReader::new(file)
                     .lines()
                     .skip(1) // Header
@@ -491,6 +552,11 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                             local_addr: Some(parse_addr(fields[1])?),
                             peer_addr: concrete_peer_addr(peer_addr),
                             peer_pid: None,
+                            tcp_state: if is_tcp {
+                                Some(parse_tcp_state(fields[3])?)
+                            } else {
+                                None
+                            },
                             inode: inode,
                         };
                         Ok((inode, sock_info))
