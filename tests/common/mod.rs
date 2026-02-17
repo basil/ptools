@@ -17,10 +17,10 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 
 // Find an executable produced by the Cargo build
-fn find_exec(name: &str) -> PathBuf {
+pub fn find_exec(name: &str) -> PathBuf {
     // Find the path where Cargo has placed the executables by looking at this test process's
     // executable, which was also built by Cargo.
     let this_exec = std::env::current_exe().unwrap();
@@ -30,6 +30,7 @@ fn find_exec(name: &str) -> PathBuf {
 }
 
 // Run a ptool against a sample process and return the stdout of the ptool
+#[allow(dead_code)]
 pub fn run_ptool(tool: &str, test_proc: &str) -> String {
     run_ptool_with_options(tool, &[], test_proc, &[], &[])
 }
@@ -42,6 +43,28 @@ pub fn run_ptool_with_options(
     test_proc_args: &[&str],
     test_proc_env: &[(&str, &str)],
 ) -> String {
+    let output = run_ptool_with_options_and_capture(
+        tool,
+        tool_args,
+        test_proc,
+        test_proc_args,
+        test_proc_env,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+
+    stdout.into_owned()
+}
+
+pub fn run_ptool_with_options_and_capture(
+    tool: &str,
+    tool_args: &[&str],
+    test_proc: &str,
+    test_proc_args: &[&str],
+    test_proc_env: &[(&str, &str)],
+) -> Output {
     let signal_file = Path::new("/tmp/ptools-test-ready");
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -66,17 +89,14 @@ pub fn run_ptool_with_options(
         }
     }
 
-    let pfiles_output = Command::new(find_exec(tool))
+    let ptool_output = Command::new(find_exec(tool))
         .args(tool_args)
         .arg(examined_proc.id().to_string())
         .stdin(Stdio::null())
         .output()
         .unwrap();
-    let stderr = String::from_utf8_lossy(&pfiles_output.stderr);
-    let stdout = String::from_utf8_lossy(&pfiles_output.stdout);
-    assert_eq!(stderr, "");
 
     examined_proc.kill().unwrap();
 
-    stdout.into_owned()
+    ptool_output
 }

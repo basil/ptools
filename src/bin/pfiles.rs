@@ -606,6 +606,7 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
+    use nix::sys::socket::AddressFamily;
     use std::net::SocketAddr;
 
     #[test]
@@ -614,9 +615,74 @@ mod test {
             parse_ipv4_sock_addr("0100007F:1538").unwrap(),
             "127.0.0.1:5432".parse::<SocketAddr>().unwrap()
         );
+        assert_eq!(
+            parse_ipv4_sock_addr("00000000:0000").unwrap(),
+            "0.0.0.0:0".parse::<SocketAddr>().unwrap()
+        );
 
         assert!(parse_ipv4_sock_addr("0100007F 1538").is_err());
+        assert!(parse_ipv4_sock_addr("0100007F:1538:00").is_err());
         assert!(parse_ipv4_sock_addr("010000YY:1538").is_err());
         assert!(parse_ipv4_sock_addr("0100007F:15YY").is_err());
+        assert!(parse_ipv4_sock_addr(":1538").is_err());
+    }
+
+    #[test]
+    fn test_parse_sock_type() {
+        assert!(matches!(parse_sock_type("1").unwrap(), SockType::Stream));
+        assert!(matches!(parse_sock_type("2").unwrap(), SockType::Datagram));
+        assert!(matches!(parse_sock_type("3").unwrap(), SockType::Raw));
+        assert!(matches!(parse_sock_type("4").unwrap(), SockType::Rdm));
+        assert!(matches!(parse_sock_type("5").unwrap(), SockType::SeqPacket));
+        assert!(matches!(parse_sock_type("6").unwrap(), SockType::Dccp));
+        assert!(matches!(parse_sock_type("10").unwrap(), SockType::Packet));
+
+        assert!(matches!(
+            parse_sock_type("999").unwrap(),
+            SockType::Unknown(999)
+        ));
+        assert!(parse_sock_type("abc").is_err());
+    }
+
+    #[test]
+    fn test_address_family_str() {
+        assert_eq!(address_family_str(AddressFamily::Unix), "AF_UNIX");
+        assert_eq!(address_family_str(AddressFamily::Inet), "AF_INET");
+        assert_eq!(address_family_str(AddressFamily::Inet6), "AF_INET6");
+        assert_eq!(address_family_str(AddressFamily::Netlink), "AF_NETLINK");
+        assert_eq!(address_family_str(AddressFamily::Packet), "AF_PACKET");
+        assert_eq!(address_family_str(AddressFamily::Bluetooth), "AF_BLUETOOTH");
+        assert_eq!(address_family_str(AddressFamily::Vsock), "AF_VSOCK");
+        assert_eq!(address_family_str(AddressFamily::Alg), "AF_ALG");
+        assert_eq!(address_family_str(AddressFamily::Can), "AF_CAN");
+        assert_eq!(address_family_str(AddressFamily::Pppox), "AF_PPPOX");
+        assert_eq!(address_family_str(AddressFamily::Ib), "AF_IB");
+
+        assert_eq!(address_family_str(AddressFamily::Ipx), "AF_IPX");
+        assert_eq!(address_family_str(AddressFamily::X25), "AF_X25");
+        assert_eq!(address_family_str(AddressFamily::Ax25), "AF_AX25");
+        assert_eq!(address_family_str(AddressFamily::AppleTalk), "AF_APPLETALK");
+        assert_eq!(address_family_str(AddressFamily::Tipc), "AF_TIPC");
+        assert_eq!(address_family_str(AddressFamily::Nfc), "AF_NFC");
+        assert_eq!(address_family_str(AddressFamily::Unspec), "AF_UNSPEC");
+    }
+
+    #[test]
+    fn test_posix_file_type_symlink_and_block_device() {
+        let dummy = Path::new("/proc/self/fd/0");
+
+        let symlink_type = file_type(SFlag::S_IFLNK.bits(), dummy);
+        assert!(matches!(
+            symlink_type,
+            FileType::Posix(PosixFileType::SymLink)
+        ));
+        assert_eq!(print_file_type(&symlink_type), "S_IFLNK");
+
+        let block_device_type = file_type(SFlag::S_IFBLK.bits(), dummy);
+        assert!(matches!(
+            block_device_type,
+            FileType::Posix(PosixFileType::BlockDevice)
+        ));
+        assert_eq!(print_file_type(&block_device_type), "S_IFBLK");
     }
 }
