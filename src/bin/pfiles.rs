@@ -46,8 +46,8 @@ enum PosixFileType {
     Unknown(u32),
 }
 
-// As defined by contents of the symlink for the file descriptor in /proc/[pid]/fd/, which has the
-// form 'anon_inode:[eventpoll]' TODO better comment
+// For descriptors where stat(2) cannot identify a concrete POSIX file type, Linux may expose
+// anonymous inode metadata via /proc/[pid]/fd/<fd> symlink text like "anon_inode:[eventpoll]".
 #[derive(PartialEq)]
 enum AnonFileType {
     Epoll,
