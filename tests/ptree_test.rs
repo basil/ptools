@@ -91,13 +91,13 @@ fn ptree_shows_parent_and_child_with_arguments() {
     let child_ready_file =
         std::path::PathBuf::from(format!("/tmp/ptools-test-child-ready-{}", test_pid));
 
-    let parent_arg = "PARG";
-    let child_arg = "CARG";
+    let parent_arg = "P";
+    let child_arg = "C";
 
     remove_if_exists(&ready_file);
     remove_if_exists(&child_ready_file);
 
-    let mut examined_proc = Command::new(common::find_exec("ptree_parent_child"))
+    let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
         .arg(parent_arg)
         .arg(child_arg)
         .arg(ready_file.to_str().unwrap())
@@ -138,7 +138,7 @@ fn ptree_shows_parent_and_child_with_arguments() {
 
     let child_index = lines
         .iter()
-        .position(|line| line.contains("--child"))
+        .position(|line| line.contains("--ch"))
         .expect(&format!(
             "Did not find child process line in output:\n{}",
             stdout
@@ -230,13 +230,13 @@ fn ptree_accepts_username_operand() {
     let child_ready_file =
         std::path::PathBuf::from(format!("/tmp/ptools-test-child-ready-{}", test_pid));
 
-    let parent_arg = "PARG_USER";
-    let child_arg = "CARG_USER";
+    let parent_arg = "PU";
+    let child_arg = "CU";
 
     remove_if_exists(&ready_file);
     remove_if_exists(&child_ready_file);
 
-    let mut examined_proc = Command::new(common::find_exec("ptree_parent_child"))
+    let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
         .arg(parent_arg)
         .arg(child_arg)
         .arg(ready_file.to_str().unwrap())
@@ -273,7 +273,7 @@ fn ptree_accepts_username_operand() {
     );
     assert_contains(
         &stdout,
-        "--child",
+        "--ch",
         "Expected ptree <user> output to include spawned child process",
     );
 }
@@ -290,13 +290,13 @@ fn ptree_accepts_mixed_pid_and_user_operands() {
     let child_ready_file =
         std::path::PathBuf::from(format!("/tmp/ptools-test-child-ready-{}", test_pid));
 
-    let parent_arg = "PARG_MIXED";
-    let child_arg = "CARG_MIXED";
+    let parent_arg = "PM";
+    let child_arg = "CM";
 
     remove_if_exists(&ready_file);
     remove_if_exists(&child_ready_file);
 
-    let mut examined_proc = Command::new(common::find_exec("ptree_parent_child"))
+    let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
         .arg(parent_arg)
         .arg(child_arg)
         .arg(ready_file.to_str().unwrap())
