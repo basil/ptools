@@ -1,5 +1,6 @@
 mod common;
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::os::unix::fs::FileTypeExt;
@@ -14,6 +15,166 @@ fn assert_contains(output: &str, needle: &str) {
         needle,
         output
     );
+}
+
+fn parse_fd_map(output: &str) -> BTreeMap<u32, String> {
+    let mut fd_map: BTreeMap<u32, Vec<String>> = BTreeMap::new();
+    let mut current_fd: Option<u32> = None;
+
+    for line in output.lines() {
+        let trimmed = line.trim_start();
+        let Some((fd_prefix, rest)) = trimmed.split_once(':') else {
+            if let Some(fd) = current_fd {
+                fd_map.entry(fd).or_default().push(line.to_string());
+            }
+            continue;
+        };
+
+        if fd_prefix.chars().all(|c| c.is_ascii_digit()) {
+            let fd = fd_prefix.parse::<u32>().expect("fd should parse as u32");
+            current_fd = Some(fd);
+            fd_map
+                .entry(fd)
+                .or_default()
+                .push(rest.trim_start().to_string());
+        } else if let Some(fd) = current_fd {
+            fd_map.entry(fd).or_default().push(line.to_string());
+        }
+    }
+
+    fd_map
+        .into_iter()
+        .map(|(fd, lines)| (fd, lines.join("\n")))
+        .collect()
+}
+
+fn normalize_dynamic_fields(block: &str) -> String {
+    block
+        .lines()
+        .map(normalize_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn normalize_line(line: &str) -> String {
+    let mut normalized = line.to_string();
+
+    normalized = replace_token(&normalized, "dev:", "<dynamic>");
+    normalized = replace_token(&normalized, "ino:", "<dynamic>");
+    normalized = replace_token(&normalized, "uid:", "<dynamic>");
+    normalized = replace_token(&normalized, "gid:", "<dynamic>");
+    normalized = replace_token(&normalized, "size:", "<dynamic>");
+    normalized = replace_pipe_inode(&normalized);
+    normalized = replace_port(&normalized);
+    normalized = replace_after_marker(&normalized, "epoll tfd: ", "<dynamic>");
+
+    normalized
+}
+
+fn replace_token(line: &str, marker: &str, replacement: &str) -> String {
+    let Some(start) = line.find(marker) else {
+        return line.to_string();
+    };
+
+    let value_start = start + marker.len();
+    let mut ws_end = value_start;
+    for c in line[value_start..].chars() {
+        if c == ' ' {
+            ws_end += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    let mut value_end = ws_end;
+    for c in line[ws_end..].chars() {
+        if c.is_ascii_hexdigit() || c == ',' {
+            value_end += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    if value_end == ws_end {
+        return line.to_string();
+    }
+
+    let mut out = String::new();
+    out.push_str(&line[..ws_end]);
+    out.push_str(replacement);
+    out.push_str(&line[value_end..]);
+    out
+}
+
+fn replace_pipe_inode(line: &str) -> String {
+    let Some(start) = line.find("pipe:[") else {
+        return line.to_string();
+    };
+    let value_start = start + "pipe:[".len();
+    let Some(end_rel) = line[value_start..].find(']') else {
+        return line.to_string();
+    };
+    let value_end = value_start + end_rel;
+
+    if !line[value_start..value_end]
+        .chars()
+        .all(|c| c.is_ascii_digit())
+    {
+        return line.to_string();
+    }
+
+    format!(
+        "{}pipe:[<dynamic>]{}",
+        &line[..start],
+        &line[value_end + 1..]
+    )
+}
+
+fn replace_port(line: &str) -> String {
+    let Some(start) = line.find("port: ") else {
+        return line.to_string();
+    };
+    let value_start = start + "port: ".len();
+    let mut value_end = value_start;
+    for c in line[value_start..].chars() {
+        if c.is_ascii_digit() {
+            value_end += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    if value_end == value_start {
+        return line.to_string();
+    }
+
+    format!("{}port: <dynamic>{}", &line[..start], &line[value_end..])
+}
+
+fn replace_after_marker(line: &str, marker: &str, replacement: &str) -> String {
+    let Some(start) = line.find(marker) else {
+        return line.to_string();
+    };
+    let value_start = start + marker.len();
+    let mut value_end = value_start;
+    for c in line[value_start..].chars() {
+        if c.is_ascii_digit() {
+            value_end += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    if value_end == value_start {
+        return line.to_string();
+    }
+
+    format!(
+        "{}{}{}",
+        &line[..value_start],
+        replacement,
+        &line[value_end..]
+    )
 }
 
 fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
@@ -51,6 +212,63 @@ fn find_block_device_path() -> Option<String> {
             None
         }
     })
+}
+
+fn find_fd_by_path(fd_map: &BTreeMap<u32, String>, path: &str) -> u32 {
+    let matches: Vec<u32> = fd_map
+        .iter()
+        .filter_map(|(fd, block)| {
+            block
+                .lines()
+                .last()
+                .map(|line| line.trim() == path)
+                .unwrap_or(false)
+                .then_some(*fd)
+        })
+        .collect();
+
+    assert_eq!(
+        matches.len(),
+        1,
+        "Expected exactly one fd block ending with path {:?}, got {}",
+        path,
+        matches.len()
+    );
+
+    matches[0]
+}
+
+fn find_fd_containing(fd_map: &BTreeMap<u32, String>, needle: &str) -> u32 {
+    let matches: Vec<u32> = fd_map
+        .iter()
+        .filter_map(|(fd, block)| {
+            if block.contains(needle) {
+                Some(*fd)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        matches.len(),
+        1,
+        "Expected exactly one fd containing {:?}, got {}",
+        needle,
+        matches.len()
+    );
+
+    matches[0]
+}
+
+fn find_first_fd_matching<F>(fd_map: &BTreeMap<u32, String>, mut predicate: F, context: &str) -> u32
+where
+    F: FnMut(&str) -> bool,
+{
+    fd_map
+        .iter()
+        .find_map(|(fd, block)| predicate(block).then_some(*fd))
+        .unwrap_or_else(|| panic!("Expected at least one fd matching {}", context))
 }
 
 #[test]
@@ -148,59 +366,162 @@ fn pfiles_prints_current_nofile_rlimit() {
 #[test]
 fn pfiles_reports_epoll_anon_inode() {
     let stdout = common::run_ptool("pfiles", "examples/epoll");
+    let fd_map = parse_fd_map(&stdout);
 
-    assert_contains(&stdout, "anon_inode(epoll)");
-    assert_contains(&stdout, "anon_inode:[eventpoll]");
-    assert_contains(&stdout, "epoll tfd: 3");
+    let null_fd = find_fd_by_path(&fd_map, "/dev/null");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&null_fd).expect("expected /dev/null fd")),
+        "S_IFCHR mode:666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n         offset: 0\n       /dev/null"
+    );
+    let epoll_fd = find_fd_containing(&fd_map, "anon_inode:[eventpoll]");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&epoll_fd).expect("expected eventpoll fd")),
+        "anon_inode(epoll) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n       anon_inode:[eventpoll]\n       epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
+    );
 }
 
 #[test]
 fn pfiles_reports_netlink_socket() {
     let stdout = common::run_ptool("pfiles", "examples/netlink");
+    let fd_map = parse_fd_map(&stdout);
 
-    assert_contains(&stdout, "S_IFSOCK");
-    assert_contains(&stdout, "SOCK_DGRAM");
-    assert_contains(&stdout, "sockname: AF_NETLINK");
+    let null_fd = find_fd_by_path(&fd_map, "/dev/null");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&null_fd).expect("expected /dev/null fd")),
+        "S_IFCHR mode:666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n         offset: 0\n       /dev/null"
+    );
+    let netlink_fd = find_fd_containing(&fd_map, "sockname: AF_NETLINK");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&netlink_fd).expect("expected netlink fd")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_NETLINK"
+    );
 }
 
 #[test]
 fn pfiles_matrix_covers_file_types_and_socket_families() {
     let stdout = common::run_ptool("pfiles", "examples/pfiles_matrix");
+    let fd_map = parse_fd_map(&stdout);
+    let cwd = std::env::current_dir()
+        .expect("failed to get cwd")
+        .to_string_lossy()
+        .to_string();
 
-    assert_contains(&stdout, "S_IFCHR");
-    assert_contains(&stdout, "/dev/null");
+    let null_fd = find_fd_by_path(&fd_map, "/dev/null");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&null_fd).expect("expected /dev/null fd")),
+        "S_IFCHR mode:666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n         offset: 0\n       /dev/null"
+    );
 
-    assert_contains(&stdout, "S_IFREG");
-    assert_contains(&stdout, "/tmp/ptools-pfiles-matrix-file");
+    let reg_fd = find_fd_by_path(&fd_map, "/tmp/ptools-pfiles-matrix-file");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
+        "S_IFREG mode:644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n         offset: 3\n       /tmp/ptools-pfiles-matrix-file"
+    );
+    let symlink_fd = find_fd_by_path(&fd_map, "/tmp/ptools-pfiles-matrix-link");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
+        "S_IFLNK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n         offset: 0\n       /tmp/ptools-pfiles-matrix-link"
+    );
+    let dir_fd = find_fd_by_path(&fd_map, &cwd);
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&dir_fd).expect("expected cwd directory fd")),
+        format!(
+            "S_IFDIR mode:755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_DIRECTORY|O_TMPFILE\n         offset: 0\n       {}",
+            cwd
+        )
+    );
 
-    assert_contains(&stdout, "S_IFDIR");
+    if find_block_device_path().is_some() {
+        let block_devices: Vec<&str> = fd_map
+            .values()
+            .map(|s| s.as_str())
+            .filter(|block| block.starts_with("S_IFBLK "))
+            .collect();
+        assert!(
+            !block_devices.is_empty(),
+            "expected at least one S_IFBLK fd block, output:\n{}",
+            stdout
+        );
 
-    assert_contains(&stdout, "S_IFLNK");
-    assert_contains(&stdout, "/tmp/ptools-pfiles-matrix-link");
-
-    if let Some(block_device_path) = find_block_device_path() {
-        assert_contains(&stdout, "S_IFBLK");
-        assert_contains(&stdout, &block_device_path);
+        let block_device = normalize_dynamic_fields(block_devices[0]);
+        let lines: Vec<&str> = block_device.lines().collect();
+        assert!(
+            lines.len() >= 4,
+            "Unexpected S_IFBLK block: {}",
+            block_device
+        );
+        assert_eq!(lines[1], "       O_RDONLY|O_CLOEXEC|O_PATH");
+        assert_eq!(lines[2], "         offset: 0");
+        assert!(lines[3].trim_start().starts_with("/dev/"));
     }
 
-    assert_contains(&stdout, "S_IFIFO");
-    assert_contains(&stdout, "pipe:[");
+    let rd_pipe_fd = find_fd_containing(
+        &fd_map,
+        "O_RDONLY|O_CLOEXEC\n         offset: 0\n       pipe:[",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&rd_pipe_fd).expect("expected read pipe fd")),
+        "S_IFIFO mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC\n         offset: 0\n       pipe:[<dynamic>]"
+    );
+    let wr_pipe_fd = find_fd_containing(
+        &fd_map,
+        "O_WRONLY|O_CLOEXEC\n         offset: 0\n       pipe:[",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&wr_pipe_fd).expect("expected write pipe fd")),
+        "S_IFIFO mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n         offset: 0\n       pipe:[<dynamic>]"
+    );
 
-    assert_contains(&stdout, "S_IFSOCK");
-    assert_contains(&stdout, "SOCK_STREAM");
-    assert_contains(&stdout, "SOCK_DGRAM");
-    assert_contains(&stdout, "sockname: AF_UNIX");
-    assert_contains(&stdout, "sockname: AF_INET");
-    assert_contains(&stdout, "peername: AF_INET");
+    let epoll_fd = find_fd_containing(&fd_map, "anon_inode:[eventpoll]");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&epoll_fd).expect("expected eventpoll fd")),
+        "anon_inode(epoll) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n       anon_inode:[eventpoll]\n       epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
+    );
+    let eventfd_fd = find_fd_containing(&fd_map, "anon_inode:[eventfd]");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&eventfd_fd).expect("expected eventfd fd")),
+        "anon_inode(eventfd) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_NONBLOCK\n         offset: 0\n       anon_inode:[eventfd]"
+    );
 
-    assert_contains(&stdout, "anon_inode(epoll)");
-    assert_contains(&stdout, "anon_inode(eventfd)");
+    let unix_stream_fd = find_first_fd_matching(
+        &fd_map,
+        |block| block.contains("SOCK_STREAM") && block.contains("sockname: AF_UNIX"),
+        "SOCK_STREAM + sockname: AF_UNIX",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&unix_stream_fd).expect("expected unix stream fd")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_UNIX"
+    );
 
-    assert_contains(&stdout, "O_RDONLY");
-    assert_contains(&stdout, "O_WRONLY");
-    assert_contains(&stdout, "O_RDWR");
-    assert_contains(&stdout, "O_CLOEXEC");
-    assert_contains(&stdout, "O_NONBLOCK");
+    let inet_listen_fd = find_first_fd_matching(
+        &fd_map,
+        |block| {
+            block.contains("SOCK_STREAM")
+                && block.contains("sockname: AF_INET")
+                && !block.contains("peername: AF_INET")
+        },
+        "SOCK_STREAM + sockname: AF_INET without peername",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&inet_listen_fd).expect("expected inet listen fd")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>"
+    );
+
+    let inet_peer_fd = find_first_fd_matching(
+        &fd_map,
+        |block| block.contains("SOCK_STREAM") && block.contains("peername: AF_INET"),
+        "SOCK_STREAM + peername: AF_INET",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&inet_peer_fd).expect("expected fd with peername")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> "
+    );
+
+    let inet_dgram_fd = find_fd_containing(&fd_map, "SOCK_DGRAM");
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&inet_dgram_fd).expect("expected inet dgram fd")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>"
+    );
 
     assert_offset_for_path(&stdout, "/tmp/ptools-pfiles-matrix-file", 3);
 }
