@@ -16,6 +16,14 @@
 
 mod common;
 
+use std::fs;
+use std::io;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 fn shell_quote(arg: &str) -> String {
     if arg.is_empty() {
         return "''".to_string();
@@ -41,8 +49,52 @@ fn pargs_matches_started_process_arguments() {
         "tabs\tinside",
     ];
 
-    let stdout =
-        common::run_ptool_with_options("pargs", &[], "examples/pargs_penv", &expected_args, &[]);
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .args(expected_args)
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pargs"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
 
     for arg in expected_args {
         let expected_line = format!("{}", arg);
@@ -75,21 +127,105 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
         "tabs\tinside",
     ];
 
-    let regular_stdout =
-        common::run_ptool_with_options("pargs", &[], "examples/pargs_penv", &expected_args, &[]);
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .args(expected_args)
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pargs"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let regular_stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let regular_stdout = regular_stdout.into_owned();
     let argv0 = regular_stdout
         .lines()
         .find(|line| line.starts_with("argv[0]: "))
         .unwrap()
         .trim_start_matches("argv[0]: ");
 
-    let stdout = common::run_ptool_with_options(
-        "pargs",
-        &["-l"],
-        "examples/pargs_penv",
-        &expected_args,
-        &[],
-    );
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .args(expected_args)
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pargs"))
+        .arg("-l")
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
 
     let mut lines = stdout.lines();
     let command_line = lines.next().unwrap_or("");
@@ -117,8 +253,52 @@ fn penv_matches_started_process_environment() {
         ("PTOOLS_TEST_UNICODE", "✓"),
     ];
 
-    let stdout =
-        common::run_ptool_with_options("penv", &[], "examples/pargs_penv", &[], &expected_env);
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .envs(expected_env.iter().copied())
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("penv"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
 
     for (key, value) in expected_env {
         let expected_line = format!("{}={}", key, value);
@@ -140,8 +320,53 @@ fn pargs_e_alias_matches_started_process_environment() {
         ("PTOOLS_TEST_UNICODE", "✓"),
     ];
 
-    let stdout =
-        common::run_ptool_with_options("pargs", &["-e"], "examples/pargs_penv", &[], &expected_env);
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .envs(expected_env.iter().copied())
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pargs"))
+        .arg("-e")
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
 
     for (key, value) in expected_env {
         let expected_line = format!("{}={}", key, value);
@@ -156,7 +381,52 @@ fn pargs_e_alias_matches_started_process_environment() {
 
 #[test]
 fn pargs_x_prints_auxv_entries() {
-    let stdout = common::run_ptool_with_options("pargs", &["-x"], "examples/pargs_penv", &[], &[]);
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pargs"))
+        .arg("-x")
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
 
     assert!(
         !stdout.contains("argv["),

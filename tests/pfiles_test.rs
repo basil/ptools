@@ -7,6 +7,8 @@ use std::os::unix::fs::FileTypeExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn assert_contains(output: &str, needle: &str) {
@@ -537,7 +539,44 @@ fn pfiles_prints_header_lines() {
 
 #[test]
 fn pfiles_reports_epoll_anon_inode() {
-    let stdout = common::run_ptool("pfiles", "examples/pfiles_epoll");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    remove_if_exists(signal_file);
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_epoll"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
+
     let fd_map = parse_fd_map(&stdout);
 
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
@@ -554,8 +593,45 @@ fn pfiles_reports_epoll_anon_inode() {
 
 #[test]
 fn pfiles_non_verbose_mode_prints_fstat_only_descriptor_lines() {
-    let stdout =
-        common::run_ptool_with_options("pfiles", &["-n"], "examples/pfiles_epoll", &[], &[]);
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    remove_if_exists(signal_file);
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_epoll"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg("-n")
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
+
     let fd_map = parse_fd_map(&stdout);
     assert!(!fd_map.is_empty(), "expected at least one fd block");
     assert_contains(&stdout, "Current soft rlimit:");
@@ -676,7 +752,44 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
 
 #[test]
 fn pfiles_reports_netlink_socket() {
-    let stdout = common::run_ptool("pfiles", "examples/pfiles_netlink");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    remove_if_exists(signal_file);
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_netlink"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
+
     let fd_map = parse_fd_map(&stdout);
 
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
@@ -713,13 +826,34 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
         }
     }
 
-    let output = common::run_ptool_with_options_and_capture(
-        "pfiles",
-        &[],
-        "examples/pfiles_af_alg",
-        &[],
-        &[("PTOOLS_AFALG_STATUS_FILE", &status_path)],
-    );
+    let ready_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let ready_file = Path::new(&ready_path);
+    remove_if_exists(ready_file);
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_af_alg"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &ready_path)
+        .env("PTOOLS_AFALG_STATUS_FILE", &status_path)
+        .spawn()
+        .unwrap();
+
+    while !ready_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(ready_file);
 
     assert!(
         output.status.success(),
@@ -763,16 +897,40 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-link-{}-{}", test_pid, unique);
     let matrix_link_file = Path::new(&matrix_link_path);
 
-    let stdout = common::run_ptool_with_options(
-        "pfiles",
-        &[],
-        "examples/pfiles_matrix",
-        &[],
-        &[
-            ("PTOOLS_MATRIX_FILE_FILE", matrix_file_path.as_str()),
-            ("PTOOLS_MATRIX_LINK_FILE", matrix_link_path.as_str()),
-        ],
-    );
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    remove_if_exists(signal_file);
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_matrix"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .env("PTOOLS_MATRIX_FILE_FILE", matrix_file_path.as_str())
+        .env("PTOOLS_MATRIX_LINK_FILE", matrix_link_path.as_str())
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
+
     let fd_map = parse_fd_map(&stdout);
     let cwd = std::env::current_dir()
         .expect("failed to get cwd")
@@ -1077,13 +1235,38 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
 
 #[test]
 fn pfiles_exits_nonzero_when_any_pid_fails() {
-    let output = common::run_ptool_with_options_and_capture(
-        "pfiles",
-        &["999999999"],
-        "examples/pargs_penv",
-        &[],
-        &[],
-    );
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    remove_if_exists(signal_file);
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg("999999999")
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
