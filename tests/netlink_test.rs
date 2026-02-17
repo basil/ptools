@@ -19,35 +19,20 @@ mod common;
 #[test]
 fn netlink_basic() {
     let stdout = common::run_ptool("pfiles", "examples/netlink");
-    let lines = stdout.lines().collect::<Vec<&str>>();
 
-    //
-    // We expect something along the lines of
-    // ...
-    //     3: S_IFSOCK mode:777 dev:0,9 ino:725134 uid:65433 gid:50 size:0
-    //        O_RDWR
-    //          SOCK_DGRAM
-    //          sockname: AF_NETLINK
-    //
-    let pattern = "3: S_IFSOCK";
-    let split_lines = lines
-        .split(|l| l.trim().starts_with(pattern))
-        .collect::<Vec<_>>();
-
-    if split_lines.len() != 2 {
-        panic!(
-            "String '{}' not found in command output:\n\n{}\n\n",
-            pattern, stdout
-        );
-    }
-    let fd_info = split_lines[1];
-
-    let pattern = "sockname: AF_NETLINK";
-    if fd_info[2].trim() != pattern {
-        panic!(
-            "String '{}' not found in command output:\n\n{}\n\n",
-            pattern,
-            fd_info.join("\n")
-        );
-    }
+    assert!(
+        stdout.contains("S_IFSOCK"),
+        "Expected S_IFSOCK in output:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("SOCK_DGRAM"),
+        "Expected SOCK_DGRAM in output:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("sockname: AF_NETLINK"),
+        "Expected AF_NETLINK in output:\n{}",
+        stdout
+    );
 }

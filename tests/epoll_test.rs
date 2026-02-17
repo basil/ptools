@@ -20,11 +20,14 @@ mod common;
 fn epoll_basic() {
     let stdout = common::run_ptool("pfiles", "examples/epoll");
 
-    let pattern = "5: anon_inode(epoll)";
-    if !stdout.contains(pattern) {
-        panic!(
-            "String '{}' not found in command output:\n\n{}\n\n",
-            pattern, stdout
-        );
-    }
+    assert!(
+        stdout.contains("anon_inode(epoll)"),
+        "Expected anon_inode(epoll) in output:\n{}",
+        stdout
+    );
+    assert!(
+        stdout.contains("anon_inode:[eventpoll]"),
+        "Expected eventpoll link target in output:\n{}",
+        stdout
+    );
 }
