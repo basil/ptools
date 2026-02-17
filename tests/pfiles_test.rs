@@ -426,7 +426,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&dir_fd).expect("expected cwd directory fd")),
         format!(
-            "S_IFDIR mode:755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_DIRECTORY|O_TMPFILE\n         offset: 0\n       {}",
+            "S_IFDIR mode:755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_DIRECTORY\n         offset: 0\n       {}",
             cwd
         )
     );

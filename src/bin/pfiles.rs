@@ -185,8 +185,10 @@ fn print_open_flags(flags: u64) {
     // O_LARGEFILE == 0. Should that get printed everywhere?
     // probably yes, if we want to match illumos
 
+    let raw_flags = flags as i32;
     for &(flag, desc) in open_flags.iter() {
-        if (flags as i32 & flag.bits()) != 0 {
+        let bits = flag.bits();
+        if bits != 0 && (raw_flags & bits) == bits {
             print!("|{}", desc);
         }
     }
