@@ -3,7 +3,6 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
-use std::os::fd::AsRawFd;
 use std::os::unix::fs::FileTypeExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
@@ -17,6 +16,14 @@ fn assert_contains(output: &str, needle: &str) {
         needle,
         output
     );
+}
+
+fn remove_if_exists(path: &Path) {
+    if let Err(e) = fs::remove_file(path) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", path, e.kind());
+        }
+    }
 }
 
 fn parse_fd_map(output: &str) -> BTreeMap<u32, String> {
@@ -696,38 +703,48 @@ fn pfiles_reports_netlink_socket() {
 
 #[test]
 fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
-    use nix::errno::Errno;
-    use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
-
-    let alg_socket = match socket(
-        AddressFamily::Alg,
-        SockType::SeqPacket,
-        SockFlag::empty(),
-        None,
-    ) {
-        Ok(fd) => fd,
-        Err(Errno::EAFNOSUPPORT | Errno::EPROTONOSUPPORT) => {
-            eprintln!("skipping test: AF_ALG sockets are not supported by this kernel");
-            return;
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let status_path = format!("/tmp/ptools-afalg-status-{}-{}", std::process::id(), unique);
+    let status_file = Path::new(&status_path);
+    if let Err(e) = fs::remove_file(status_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", status_file, e.kind())
         }
-        Err(e) => panic!("failed to create AF_ALG socket: {}", e),
-    };
+    }
 
-    let output = Command::new(common::find_exec("pfiles"))
-        .arg(std::process::id().to_string())
-        .stdin(Stdio::null())
-        .output()
-        .expect("failed to run pfiles");
+    let output = common::run_ptool_with_options_and_capture(
+        "pfiles",
+        &[],
+        "examples/pfiles_af_alg",
+        &[],
+        &[("PTOOLS_AFALG_STATUS_FILE", &status_path)],
+    );
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "pfiles failed: {:?}",
+        output.status
+    );
+    let helper_status = fs::read_to_string(status_file)
+        .unwrap_or_else(|e| panic!("failed to read helper status file {:?}: {}", status_file, e));
+    if helper_status.trim() == "unsupported" {
+        remove_if_exists(status_file);
+        eprintln!("skipping test: AF_ALG sockets are not supported by this kernel");
+        return;
+    }
+    remove_if_exists(status_file);
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     let fd_map = parse_fd_map(&stdout);
-    let fd = alg_socket.as_raw_fd() as u32;
+    let alg_fd = find_fd_containing(&fd_map, "sockname: AF_ALG");
     assert_eq!(
         normalize_dynamic_fields(
             fd_map
-                .get(&fd)
-                .unwrap_or_else(|| panic!("missing fd block for AF_ALG socket fd {}", fd)),
+                .get(&alg_fd)
+                .expect("missing fd block for AF_ALG socket"),
         ),
         "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         sockname: AF_ALG"
     );
