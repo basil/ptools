@@ -95,7 +95,7 @@ fn ptree_shows_parent_and_child_with_arguments() {
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
 
-    let child_signal_path = format!("/tmp/ptools-test-child-ready-{}-{}", test_pid, unique);
+    let child_signal_path = format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique);
     let child_signal_file = Path::new(&child_signal_path);
 
     let parent_arg = "P";
@@ -107,8 +107,11 @@ fn ptree_shows_parent_and_child_with_arguments() {
     let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
         .arg(parent_arg)
         .arg(child_arg)
-        .arg(signal_file.to_str().unwrap())
-        .arg(child_signal_file.to_str().unwrap())
+        .env("PTOOLS_TEST_READY_FILE", signal_file.to_str().unwrap())
+        .env(
+            "PTOOLS_TEST_READY_CHILD_FILE",
+            child_signal_file.to_str().unwrap(),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -241,7 +244,7 @@ fn ptree_accepts_username_operand() {
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
 
-    let child_signal_path = format!("/tmp/ptools-test-child-ready-{}-{}", test_pid, unique);
+    let child_signal_path = format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique);
     let child_signal_file = Path::new(&child_signal_path);
 
     let parent_arg = "PU";
@@ -253,8 +256,11 @@ fn ptree_accepts_username_operand() {
     let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
         .arg(parent_arg)
         .arg(child_arg)
-        .arg(signal_file.to_str().unwrap())
-        .arg(child_signal_file.to_str().unwrap())
+        .env("PTOOLS_TEST_READY_FILE", signal_file.to_str().unwrap())
+        .env(
+            "PTOOLS_TEST_READY_CHILD_FILE",
+            child_signal_file.to_str().unwrap(),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -308,7 +314,7 @@ fn ptree_accepts_mixed_pid_and_user_operands() {
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
 
-    let child_signal_path = format!("/tmp/ptools-test-child-ready-{}-{}", test_pid, unique);
+    let child_signal_path = format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique);
     let child_signal_file = Path::new(&child_signal_path);
 
     let parent_arg = "PM";
@@ -320,8 +326,11 @@ fn ptree_accepts_mixed_pid_and_user_operands() {
     let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
         .arg(parent_arg)
         .arg(child_arg)
-        .arg(signal_file.to_str().unwrap())
-        .arg(child_signal_file.to_str().unwrap())
+        .env("PTOOLS_TEST_READY_FILE", signal_file.to_str().unwrap())
+        .env(
+            "PTOOLS_TEST_READY_CHILD_FILE",
+            child_signal_file.to_str().unwrap(),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

@@ -9,8 +9,9 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.get(1).map(String::as_str) == Some("--child") {
-        let child_ready_file = args.get(3).expect("missing child ready file path");
-        File::create(child_ready_file).expect("failed to create child ready file");
+        let ready_child_file = env::var("PTOOLS_TEST_READY_CHILD_FILE")
+            .expect("PTOOLS_TEST_READY_CHILD_FILE must be set");
+        File::create(ready_child_file).expect("failed to create ready child file");
 
         while getppid().as_raw() != 1 {
             thread::sleep(Duration::from_millis(50));
@@ -20,13 +21,16 @@ fn main() {
 
     args.get(1).expect("missing parent arg");
     let child_arg = args.get(2).expect("missing child arg");
-    let ready_file = args.get(3).expect("missing ready file path");
-    let child_ready_file = args.get(4).expect("missing child ready file path");
+    let ready_file =
+        env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
+    let ready_child_file =
+        env::var("PTOOLS_TEST_READY_CHILD_FILE").expect("PTOOLS_TEST_READY_CHILD_FILE must be set");
 
     Command::new(&args[0])
         .arg("--child")
         .arg(child_arg)
-        .arg(child_ready_file)
+        .env("PTOOLS_TEST_READY_FILE", ready_file.as_str())
+        .env("PTOOLS_TEST_READY_CHILD_FILE", ready_child_file)
         .spawn()
         .expect("failed to spawn child process");
 
