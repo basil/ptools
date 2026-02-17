@@ -3,10 +3,12 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::FileTypeExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn assert_contains(output: &str, needle: &str) {
     assert!(
@@ -271,6 +273,18 @@ where
         .unwrap_or_else(|| panic!("Expected at least one fd matching {}", context))
 }
 
+fn unique_matrix_prefix() -> String {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    format!(
+        "/tmp/ptools-pfiles-matrix-{}-{}",
+        std::process::id(),
+        unique
+    )
+}
+
 #[test]
 fn pfiles_rejects_missing_pid() {
     let output = Command::new(common::find_exec("pfiles"))
@@ -300,7 +314,12 @@ fn pfiles_prints_current_nofile_rlimit() {
     const EXPECTED_SOFT: u64 = 123;
     const EXPECTED_HARD: u64 = 456;
 
-    let signal_file = Path::new("/tmp/ptools-test-ready");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
+    let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
@@ -311,7 +330,8 @@ fn pfiles_prints_current_nofile_rlimit() {
     examined_proc
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
-        .stdout(Stdio::inherit());
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path);
 
     unsafe {
         examined_proc.pre_exec(|| {
@@ -343,6 +363,11 @@ fn pfiles_prints_current_nofile_rlimit() {
         .expect("failed to run pfiles");
 
     examined_proc.kill().expect("failed to kill child process");
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
 
     assert!(output.status.success());
 
@@ -381,6 +406,91 @@ fn pfiles_reports_epoll_anon_inode() {
 }
 
 #[test]
+fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let example = common::find_exec("examples/netlink");
+    let mut unshare_cmd = Command::new("unshare");
+    unshare_cmd
+        .arg("--net")
+        .arg(example)
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let mut examined_proc = match unshare_cmd.spawn() {
+        Ok(child) => child,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Skipping net namespace e2e test: unshare not installed");
+            return;
+        }
+        Err(e) => panic!("failed to launch unshare for pfiles_matrix: {}", e),
+    };
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc
+            .try_wait()
+            .expect("failed waiting for unshare child")
+        {
+            let stderr = examined_proc
+                .wait_with_output()
+                .expect("failed to collect unshare output")
+                .stderr;
+            let stderr = String::from_utf8_lossy(&stderr);
+            if status.code() == Some(1)
+                && (stderr.contains("Operation not permitted")
+                    || stderr.contains("unshare failed")
+                    || stderr.contains("Invalid argument"))
+            {
+                eprintln!(
+                    "Skipping net namespace e2e test: unshare unavailable in this environment: {}",
+                    stderr.trim()
+                );
+                return;
+            }
+            panic!(
+                "unshare child exited before readiness signal, status: {}, stderr: {}",
+                status, stderr
+            );
+        }
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run pfiles");
+
+    examined_proc.kill().expect("failed to kill unshare child");
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    assert!(output.status.success(), "pfiles failed: {:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        !stdout.contains("ERROR: failed to find info for socket with inode num"),
+        "socket metadata lookup failed unexpectedly in target net namespace:
+{}",
+        stdout
+    );
+    assert_contains(&stdout, "sockname: AF_NETLINK");
+}
+
+#[test]
 fn pfiles_reports_netlink_socket() {
     let stdout = common::run_ptool("pfiles", "examples/netlink");
     let fd_map = parse_fd_map(&stdout);
@@ -398,8 +508,56 @@ fn pfiles_reports_netlink_socket() {
 }
 
 #[test]
+fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
+    use nix::errno::Errno;
+    use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
+
+    let alg_socket = match socket(
+        AddressFamily::Alg,
+        SockType::SeqPacket,
+        SockFlag::empty(),
+        None,
+    ) {
+        Ok(fd) => fd,
+        Err(Errno::EAFNOSUPPORT | Errno::EPROTONOSUPPORT) => {
+            eprintln!("skipping test: AF_ALG sockets are not supported by this kernel");
+            return;
+        }
+        Err(e) => panic!("failed to create AF_ALG socket: {}", e),
+    };
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(std::process::id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run pfiles");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let fd_map = parse_fd_map(&stdout);
+    let fd = alg_socket.as_raw_fd() as u32;
+    assert_eq!(
+        normalize_dynamic_fields(
+            fd_map
+                .get(&fd)
+                .unwrap_or_else(|| panic!("missing fd block for AF_ALG socket fd {}", fd)),
+        ),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         sockprotoname: ALG"
+    );
+}
+
+#[test]
 fn pfiles_matrix_covers_file_types_and_socket_families() {
-    let stdout = common::run_ptool("pfiles", "examples/pfiles_matrix");
+    let matrix_prefix = unique_matrix_prefix();
+    let matrix_file_path = format!("{}-file", matrix_prefix);
+    let matrix_link_path = format!("{}-link", matrix_prefix);
+    let stdout = common::run_ptool_with_options(
+        "pfiles",
+        &[],
+        "examples/pfiles_matrix",
+        &[],
+        &[("PTOOLS_MATRIX_PREFIX", matrix_prefix.as_str())],
+    );
     let fd_map = parse_fd_map(&stdout);
     let cwd = std::env::current_dir()
         .expect("failed to get cwd")
@@ -412,15 +570,21 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "S_IFCHR mode:666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n         offset: 0\n       /dev/null"
     );
 
-    let reg_fd = find_fd_by_path(&fd_map, "/tmp/ptools-pfiles-matrix-file");
+    let reg_fd = find_fd_by_path(&fd_map, &matrix_file_path);
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
-        "S_IFREG mode:644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n         offset: 3\n       /tmp/ptools-pfiles-matrix-file"
+        format!(
+            "S_IFREG mode:644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n         offset: 3\n       {}",
+            matrix_file_path
+        )
     );
-    let symlink_fd = find_fd_by_path(&fd_map, "/tmp/ptools-pfiles-matrix-link");
+    let symlink_fd = find_fd_by_path(&fd_map, &matrix_link_path);
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
-        "S_IFLNK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n         offset: 0\n       /tmp/ptools-pfiles-matrix-link"
+        format!(
+            "S_IFLNK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n         offset: 0\n       {}",
+            matrix_link_path
+        )
     );
     let dir_fd = find_fd_by_path(&fd_map, &cwd);
     assert_eq!(
@@ -490,7 +654,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&unix_stream_fd).expect("expected unix stream fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_UNIX"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_UNIX"
     );
 
     let inet_listen_fd = find_first_fd_matching(
@@ -504,7 +668,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet_listen_fd).expect("expected inet listen fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         state: TCP_LISTEN"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         state: TCP_LISTEN"
     );
 
     let inet_peer_fd = find_first_fd_matching(
@@ -514,7 +678,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet_peer_fd).expect("expected fd with peername")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED"
     );
 
     let inet6_listen_fd = find_first_fd_matching(
@@ -528,7 +692,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet6_listen_fd).expect("expected inet6 listen fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>\n         state: TCP_LISTEN"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>\n         state: TCP_LISTEN"
     );
 
     let inet6_peer_fd = find_first_fd_matching(
@@ -538,7 +702,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet6_peer_fd).expect("expected fd with inet6 peername")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED"
     );
 
     let inet_dgram_fd = find_first_fd_matching(
@@ -548,7 +712,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet_dgram_fd).expect("expected inet dgram fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>"
     );
 
     let inet6_dgram_fd = find_first_fd_matching(
@@ -558,10 +722,10 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet6_dgram_fd).expect("expected inet6 dgram fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET6 ::1  port: <dynamic>"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET6 ::1  port: <dynamic>"
     );
 
-    assert_offset_for_path(&stdout, "/tmp/ptools-pfiles-matrix-file", 3);
+    assert_offset_for_path(&stdout, &matrix_file_path, 3);
 }
 
 #[test]
