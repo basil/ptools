@@ -14,7 +14,7 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg};
+use clap::{command, value_parser, Arg, ArgAction};
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
@@ -530,13 +530,7 @@ fn inet_address_str(addr_fam: AddressFamily, addr: Option<SocketAddr>) -> String
     )
 }
 
-fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
-    if let Some(peer) = peer {
-        println!("         peer: {}[{}]", peer.comm, peer.pid);
-    } else if let Some(peer_pid) = sock_info.peer_pid {
-        println!("         peerpid: {}", peer_pid);
-    }
-
+fn print_sockname(sock_info: &SockInfo) {
     println!(
         "         sockname: {}",
         match sock_info.family {
@@ -545,8 +539,15 @@ fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
             addr_fam => address_family_str(addr_fam).to_string(),
         }
     );
+}
 
+fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
     // If we have some additional info to print about the remote side of this socket, print it here
+    if let Some(peer) = peer {
+        println!("         peer: {}[{}]", peer.comm, peer.pid);
+    } else if let Some(peer_pid) = sock_info.peer_pid {
+        println!("         peerpid: {}", peer_pid);
+    }
 
     if let Some(addr) = sock_info.peer_addr {
         println!(
@@ -986,6 +987,7 @@ fn print_file(
     fd: u64,
     sockets: &HashMap<u64, SockInfo>,
     peers: &HashMap<u64, PeerProcess>,
+    non_verbose: bool,
 ) {
     let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
     let link_path = Path::new(&link_path_str);
@@ -1000,7 +1002,7 @@ fn print_file(
     let file_type = file_type(stat_info.st_mode, &link_path);
 
     print!(
-        " {: >4}: {} mode:{:o} dev:{},{} ino:{} uid:{} gid:{}",
+        " {: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
         fd,
         print_file_type(&file_type),
         stat_info.st_mode & 0o7777,
@@ -1019,15 +1021,14 @@ fn print_file(
         print!(" rdev:{},{}\n", rdev_major, rdev_minor);
     }
 
+    if non_verbose {
+        return;
+    }
+
     print!("       ");
     match get_flags(pid, fd) {
         Ok(flags) => print_open_flags(flags),
         Err(e) => eprintln!("failed to read fd flags: {}", e),
-    }
-
-    match get_offset(pid, fd) {
-        Ok(offset) => println!("         offset: {}", offset),
-        Err(e) => eprintln!("failed to read fd offset: {}", e),
     }
 
     match file_type {
@@ -1036,6 +1037,7 @@ fn print_file(
             // evaluated in the target process's network namespace.
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
+                print_sockname(sock_info);
                 print_sock_type(&sock_info.sock_type);
                 print_socket_options(pid, fd);
                 let peer =
@@ -1062,6 +1064,10 @@ fn print_file(
         _ => match fs::read_link(link_path) {
             Ok(path) => {
                 println!("       {}", path.to_string_lossy());
+                match get_offset(pid, fd) {
+                    Ok(offset) => println!("       offset: {}", offset),
+                    Err(e) => eprintln!("failed to read fd offset: {}", e),
+                }
                 match path.as_os_str().to_string_lossy().as_ref() {
                     "anon_inode:[eventpoll]" => print_epoll_fdinfo(pid, fd),
                     "anon_inode:[eventfd]" => {
@@ -1169,7 +1175,26 @@ fn read_nofile_rlimit(pid: u64) -> Result<(String, String), Box<dyn Error>> {
     )))
 }
 
-fn print_files(pid: u64) -> bool {
+fn read_umask(pid: u64) -> Result<String, Box<dyn Error>> {
+    let status = fs::read_to_string(format!("/proc/{}/status", pid))?;
+    for line in status.lines() {
+        let Some((field, value)) = line.split_once(':') else {
+            continue;
+        };
+
+        if field == "Umask" {
+            let parsed = u16::from_str_radix(value.trim(), 8)?;
+            return Ok(format!("{:03o}", parsed));
+        }
+    }
+
+    Err(Box::new(ParseError::new(
+        "/proc/[pid]/status",
+        "Umask line not found",
+    )))
+}
+
+fn print_files(pid: u64, non_verbose: bool) -> bool {
     let proc_dir = format!("/proc/{}/", pid);
     if !Path::new(&proc_dir).exists() {
         eprintln!("No such directory {}", &proc_dir);
@@ -1178,8 +1203,15 @@ fn print_files(pid: u64) -> bool {
 
     ptools::print_proc_summary(pid);
     match read_nofile_rlimit(pid) {
-        Ok((soft, hard)) => println!("       RLIMIT_NOFILE soft: {} hard: {}", soft, hard),
+        Ok((soft, hard)) => {
+            println!("  Current soft rlimit: {} file descriptors", soft);
+            println!("  Current hard rlimit: {} file descriptors", hard);
+        }
         Err(e) => eprintln!("Failed to read RLIMIT_NOFILE for {}: {}", pid, e),
+    }
+    match read_umask(pid) {
+        Ok(umask) => println!("  Current umask: {}", umask),
+        Err(e) => eprintln!("Failed to read umask for {}: {}", pid, e),
     }
 
     let sockets = fetch_sock_info(pid);
@@ -1192,7 +1224,7 @@ fn print_files(pid: u64) -> bool {
             let filename = entry.file_name();
             let filename = filename.to_string_lossy();
             if let Ok(fd) = (&filename).parse::<u64>() {
-                print_file(pid, fd, &sockets, &peers);
+                print_file(pid, fd, &sockets, &peers, non_verbose);
             } else {
                 eprint!("Unexpected file /proc/[pid]/fd/{} found", &filename);
             }
@@ -1213,6 +1245,12 @@ fn main() {
         .about("Print information for all open files in each process")
         .trailing_var_arg(true)
         .arg(
+            Arg::new("non-verbose")
+                .short('n')
+                .action(ArgAction::SetTrue)
+                .help("Set non-verbose mode"),
+        )
+        .arg(
             Arg::new("pid")
                 .value_name("PID")
                 .help("Process ID (PID)")
@@ -1222,11 +1260,12 @@ fn main() {
         )
         .get_matches();
 
+    let non_verbose = matches.get_flag("non-verbose");
     let error = matches
         .get_many::<u64>("pid")
         .unwrap()
         .copied()
-        .any(|pid| !print_files(pid));
+        .any(|pid| !print_files(pid, non_verbose));
 
     if error {
         exit(1);
