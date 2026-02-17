@@ -757,10 +757,10 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
 
     let test_pid = std::process::id();
 
-    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-{}-{}-file", test_pid, unique);
+    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-file-{}-{}", test_pid, unique);
     let matrix_file_file = Path::new(&matrix_file_path);
 
-    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-{}-{}-link", test_pid, unique);
+    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-link-{}-{}", test_pid, unique);
     let matrix_link_file = Path::new(&matrix_link_path);
 
     let stdout = common::run_ptool_with_options(
@@ -768,12 +768,10 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         &[],
         "examples/pfiles_matrix",
         &[],
-        &[(
-            "PTOOLS_MATRIX_PREFIX",
-            matrix_file_path
-                .strip_suffix("-file")
-                .expect("matrix file path should end in -file"),
-        )],
+        &[
+            ("PTOOLS_MATRIX_FILE_PATH", matrix_file_path.as_str()),
+            ("PTOOLS_MATRIX_LINK_PATH", matrix_link_path.as_str()),
+        ],
     );
     let fd_map = parse_fd_map(&stdout);
     let cwd = std::env::current_dir()

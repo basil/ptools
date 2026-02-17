@@ -100,14 +100,14 @@ fn main() {
 
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
-    let matrix_prefix = env::var("PTOOLS_MATRIX_PREFIX").expect("PTOOLS_MATRIX_PREFIX must be set");
-
-    let tmp_file_path = format!("{}-file", matrix_prefix);
+    let tmp_file_path =
+        env::var("PTOOLS_MATRIX_FILE_PATH").expect("PTOOLS_MATRIX_FILE_PATH must be set");
+    let symlink_path =
+        env::var("PTOOLS_MATRIX_LINK_PATH").expect("PTOOLS_MATRIX_LINK_PATH must be set");
     let mut tmp_file = File::create(&tmp_file_path).unwrap();
     writeln!(tmp_file, "ptools").unwrap();
     tmp_file.seek(SeekFrom::Start(3)).unwrap();
 
-    let symlink_path = format!("{}-link", matrix_prefix);
     let _ = fs::remove_file(&symlink_path);
     symlink(&tmp_file_path, &symlink_path).unwrap();
     let symlink_fd = open(
@@ -143,7 +143,7 @@ fn main() {
         }
     }
 
-    let unix_socket_path = format!("{}.sock", matrix_prefix);
+    let unix_socket_path = format!("{}.sock", tmp_file_path);
     let _ = std::fs::remove_file(&unix_socket_path);
     let unix_listener = std::os::unix::net::UnixListener::bind(&unix_socket_path).unwrap();
     let _unix_client = std::os::unix::net::UnixStream::connect(&unix_socket_path).unwrap();
