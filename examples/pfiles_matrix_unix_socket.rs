@@ -18,8 +18,6 @@ fn main() {
     );
     let _ = std::fs::remove_file(&unix_socket_path);
     let unix_listener = std::os::unix::net::UnixListener::bind(&unix_socket_path).unwrap();
-    let _unix_client = std::os::unix::net::UnixStream::connect(&unix_socket_path).unwrap();
-    let (_unix_server_conn, _unix_addr) = unix_listener.accept().unwrap();
 
     File::create(signal_path).unwrap();
 
