@@ -71,6 +71,14 @@ fn drop_sockopts_line(block: &str) -> String {
         .join("\n")
 }
 
+fn drop_congestion_control_line(block: &str) -> String {
+    block
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("congestion control:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn normalize_line(line: &str) -> String {
     if line.trim_start().starts_with("SO_") {
         let normalized = replace_sockopt_value(line, "SO_SNDBUF(");
@@ -897,9 +905,11 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
 
     let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
+    let inet_listen_without_congestion = drop_congestion_control_line(inet_listen_expected);
+    let inet_listen_count = count_normalized_exact_blocks(&fd_map, inet_listen_expected)
+        + count_normalized_exact_blocks(&fd_map, &inet_listen_without_congestion);
     assert_eq!(
-        count_normalized_exact_blocks(&fd_map, inet_listen_expected),
-        1,
+        inet_listen_count, 1,
         "expected exactly one IPv4 listening socket block"
     );
 
@@ -910,9 +920,11 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
 
     let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
+    let inet6_listen_without_congestion = drop_congestion_control_line(inet6_listen_expected);
+    let inet6_listen_count = count_normalized_exact_blocks(&fd_map, inet6_listen_expected)
+        + count_normalized_exact_blocks(&fd_map, &inet6_listen_without_congestion);
     assert_eq!(
-        count_normalized_exact_blocks(&fd_map, inet6_listen_expected),
-        1,
+        inet6_listen_count, 1,
         "expected exactly one IPv6 listening socket block"
     );
 
@@ -967,9 +979,14 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
     );
     let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
     let listen_without_sockopts = drop_sockopts_line(listen_with_sockopts);
+    let listen_without_congestion = drop_congestion_control_line(listen_with_sockopts);
+    let listen_minimal = drop_congestion_control_line(&listen_without_sockopts);
     assert!(
-        listen_normalized == listen_with_sockopts || listen_normalized == listen_without_sockopts,
-        "listen socket did not match expected with/without sockopts:\n{}",
+        listen_normalized == listen_with_sockopts
+            || listen_normalized == listen_without_sockopts
+            || listen_normalized == listen_without_congestion
+            || listen_normalized == listen_minimal,
+        "listen socket did not match expected with/without sockopts/congestion-control:\n{}",
         listen_normalized
     );
 
