@@ -101,8 +101,8 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     assert_contains(&stdout, "O_RDONLY");
     assert_contains(&stdout, "O_WRONLY");
     assert_contains(&stdout, "O_RDWR");
-    assert_contains(&stdout, "OFlag(O_CLOEXEC)");
-    assert_contains(&stdout, "OFlag(O_NDELAY)");
+    assert_contains(&stdout, "O_CLOEXEC");
+    assert_contains(&stdout, "O_NONBLOCK");
 }
 
 #[test]
