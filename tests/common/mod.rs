@@ -18,6 +18,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::Duration;
 
 // Find an executable produced by the Cargo build
 pub fn find_exec(name: &str) -> PathBuf {
@@ -87,6 +89,7 @@ pub fn run_ptool_with_options_and_capture(
         if let Some(status) = examined_proc.try_wait().unwrap() {
             panic!("Child exited too soon with status {}", status)
         }
+        thread::sleep(Duration::from_millis(5));
     }
 
     let ptool_output = Command::new(find_exec(tool))

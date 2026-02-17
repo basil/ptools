@@ -3,6 +3,8 @@ use nix::sys::epoll::{Epoll, EpollCreateFlags, EpollEvent, EpollFlags};
 use nix::unistd::pipe2;
 
 use std::fs::File;
+use std::thread;
+use std::time::Duration;
 
 fn main() {
     let (readfd, _writefd) = pipe2(OFlag::O_CLOEXEC | OFlag::O_NONBLOCK).unwrap();
@@ -15,6 +17,8 @@ fn main() {
     // ptool being tested.
     File::create("/tmp/ptools-test-ready").unwrap();
 
-    // Wait for the parent finish running the ptool and then kill us.
-    loop {}
+    // Wait for the parent to finish running the ptool and then kill us.
+    loop {
+        thread::sleep(Duration::from_millis(100));
+    }
 }
