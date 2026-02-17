@@ -24,7 +24,25 @@ fn find_block_device_path() -> Option<String> {
     })
 }
 
+#[cfg(target_os = "linux")]
+fn allow_ptrace_for_tests() {
+    unsafe {
+        nix::libc::prctl(
+            nix::libc::PR_SET_PTRACER,
+            nix::libc::PR_SET_PTRACER_ANY,
+            0,
+            0,
+            0,
+        );
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn allow_ptrace_for_tests() {}
+
 fn main() {
+    allow_ptrace_for_tests();
+
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").unwrap_or_else(|_| "/tmp/ptools-test-ready".to_string());
     let matrix_prefix = env::var("PTOOLS_MATRIX_PREFIX")

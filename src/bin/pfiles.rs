@@ -26,6 +26,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
+use std::os::fd::{FromRawFd, OwnedFd};
 use std::path::Path;
 use std::process::exit;
 
@@ -35,7 +36,6 @@ struct PeerProcess {
     comm: String,
 }
 
-// TODO llumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
 // TODO Finish pfiles (handle remaining file types)
 
 // As defined by the file type bits of the st_mode field returned by stat
@@ -367,6 +367,71 @@ fn print_sock_type(sock_type: &SockType) {
             SockType::Unknown(n) => format!("SOCK_TYPE_UNKNOWN_{}", n),
         }
     )
+}
+
+#[cfg(target_os = "linux")]
+fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
+    let pid_i32 = i32::try_from(pid).ok()?;
+    let fd_i32 = i32::try_from(fd).ok()?;
+
+    let pidfd = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_open, pid_i32, 0) };
+    if pidfd < 0 {
+        return None;
+    }
+
+    let duplicated = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_getfd, pidfd, fd_i32, 0) };
+    let _ = unsafe { nix::libc::close(pidfd as i32) };
+
+    if duplicated < 0 {
+        return None;
+    }
+
+    Some(unsafe { OwnedFd::from_raw_fd(duplicated as i32) })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
+    None
+}
+
+fn socket_options(pid: u64, fd: u64) -> Vec<String> {
+    let Some(duplicated_fd) = duplicate_target_fd(pid, fd) else {
+        return Vec::new();
+    };
+
+    let mut options = Vec::new();
+
+    if matches!(getsockopt(&duplicated_fd, sockopt::AcceptConn), Ok(true)) {
+        options.push("SO_ACCEPTCONN".to_string());
+    }
+    if matches!(getsockopt(&duplicated_fd, sockopt::Broadcast), Ok(true)) {
+        options.push("SO_BROADCAST".to_string());
+    }
+    if matches!(getsockopt(&duplicated_fd, sockopt::KeepAlive), Ok(true)) {
+        options.push("SO_KEEPALIVE".to_string());
+    }
+    if matches!(getsockopt(&duplicated_fd, sockopt::ReuseAddr), Ok(true)) {
+        options.push("SO_REUSEADDR".to_string());
+    }
+    if matches!(getsockopt(&duplicated_fd, sockopt::OobInline), Ok(true)) {
+        options.push("SO_OOBINLINE".to_string());
+    }
+
+    if let Ok(sndbuf) = getsockopt(&duplicated_fd, sockopt::SndBuf) {
+        options.push(format!("SO_SNDBUF({})", sndbuf));
+    }
+    if let Ok(rcvbuf) = getsockopt(&duplicated_fd, sockopt::RcvBuf) {
+        options.push(format!("SO_RCVBUF({})", rcvbuf));
+    }
+
+    options
+}
+
+fn print_socket_options(pid: u64, fd: u64) {
+    let options = socket_options(pid, fd);
+    if !options.is_empty() {
+        println!("         {}", options.join(","));
+    }
 }
 
 fn address_family_str(addr_fam: AddressFamily) -> &'static str {
@@ -935,6 +1000,7 @@ fn print_file(
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 print_sock_type(&sock_info.sock_type);
+                print_socket_options(pid, fd);
                 let peer =
                     peers
                         .get(&sock_info.inode)
