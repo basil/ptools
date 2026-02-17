@@ -36,7 +36,11 @@ struct PeerProcess {
     comm: String,
 }
 
-// TODO Finish pfiles (handle remaining file types)
+// TODO Handle remaining anonymous inode types:
+// - anon_inode:[io_uring]
+// - anon_inode:[userfaultfd]
+// - anon_inode:[fanotify]
+// - anon_inode:[perf_event], BPF, etc.
 
 // As defined by the file type bits of the st_mode field returned by stat
 #[derive(PartialEq)]
