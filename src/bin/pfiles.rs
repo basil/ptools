@@ -292,11 +292,28 @@ fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
     }
 }
 
+fn address_family_from_sockprotoname(sockprotoname: &str) -> Option<AddressFamily> {
+    let name = sockprotoname.strip_prefix("AF_").unwrap_or(sockprotoname);
+    Some(match name {
+        // Kernel proto names (sk_prot_creator->name), not AF_* family names.
+        "UNIX" | "UNIX-STREAM" => AddressFamily::Unix,
+        "TCP" | "UDP" | "RAW" | "PING" | "MPTCP" | "L2TP/IP" => AddressFamily::Inet,
+        "TCPv6" | "UDPv6" | "RAWv6" | "SCTPv6" | "SMC6" | "L2TP/IPv6" => AddressFamily::Inet6,
+        "SCTP" | "SMC" => AddressFamily::Inet,
+        "NETLINK" => AddressFamily::Netlink,
+        "PACKET" => AddressFamily::Packet,
+        "ALG" => AddressFamily::Alg,
+        "XDP" => AddressFamily::Packet,
+        "ROSE" => AddressFamily::Rose,
+        _ => return None,
+    })
+}
+
 fn sockname_from_sockprotoname(sockprotoname: &str) -> String {
-    if sockprotoname.starts_with("AF_") {
-        sockprotoname.to_string()
+    if let Some(addr_fam) = address_family_from_sockprotoname(sockprotoname) {
+        address_family_str(addr_fam).to_string()
     } else {
-        format!("AF_{}", sockprotoname)
+        sockprotoname.to_string()
     }
 }
 
@@ -986,6 +1003,16 @@ mod test {
         assert_eq!(address_family_str(AddressFamily::Tipc), "AF_TIPC");
         assert_eq!(address_family_str(AddressFamily::Nfc), "AF_NFC");
         assert_eq!(address_family_str(AddressFamily::Unspec), "AF_UNSPEC");
+    }
+
+    #[test]
+    fn test_sockname_from_sockprotoname() {
+        assert_eq!(sockname_from_sockprotoname("ALG"), "AF_ALG");
+        assert_eq!(sockname_from_sockprotoname("AF_ALG"), "AF_ALG");
+        assert_eq!(
+            sockname_from_sockprotoname("SOMETHING_UNKNOWN"),
+            "SOMETHING_UNKNOWN"
+        );
     }
 
     #[test]
