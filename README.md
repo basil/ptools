@@ -43,7 +43,7 @@ To generate man pages from the same Clap help definitions used by each binary:
 $ cargo run --bin gen-man-pages
 ```
 
-This writes `pargs.1`, `penv.1`, `pfiles.1`, and `ptree.1` to `target/man/`.
+This writes `pargs.1`, `penv.1`, `pfiles.1`, `psig.1`, and `ptree.1` to `target/man/`.
 
 
 ## Code Coverage
@@ -62,9 +62,11 @@ $ llvm-profdata merge -sparse target/coverage/*.profraw -o target/coverage/ptool
 $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
   --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
+  --object target/debug/psig \
   --object target/debug/ptree
 $ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
+  --object target/debug/psig \
   --object target/debug/ptree > target/coverage/lcov.info
 ```
 
@@ -101,6 +103,7 @@ The following utilities are currently available:
 | `pfiles(1)` | Show the open files and sockets of the process, as well as their corresponding file descriptors |
 | `pargs(1)`  | Show the command line arguments passed to the process                                           |
 | `penv(1)`   | Show the environment of the process                                                             |
+| `psig(1)`   | Show process signal actions                                                                     |
 | `ptree(1)`  | Show the process tree containing the process                                                    |
 
 There are a number of other commands available on Solaris/illumos which have not

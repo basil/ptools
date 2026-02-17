@@ -12,6 +12,9 @@ mod penv;
 #[path = "pfiles.rs"]
 mod pfiles;
 #[allow(dead_code)]
+#[path = "psig.rs"]
+mod psig;
+#[allow(dead_code)]
 #[path = "ptree.rs"]
 mod ptree;
 
@@ -42,6 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     render_man_page(pargs::build_cli(), &out_dir)?;
     render_man_page(penv::build_cli(), &out_dir)?;
     render_man_page(pfiles::build_cli(), &out_dir)?;
+    render_man_page(psig::build_cli(), &out_dir)?;
     render_man_page(ptree::build_cli(), &out_dir)?;
 
     Ok(())
