@@ -19,8 +19,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // Find an executable produced by the Cargo build
 pub fn find_exec(name: &str) -> PathBuf {
@@ -72,11 +72,7 @@ pub fn run_ptool_with_options_and_capture(
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let signal_path = format!(
-        "/tmp/ptools-test-ready-{}-{}",
-        std::process::id(),
-        unique
-    );
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
     let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {

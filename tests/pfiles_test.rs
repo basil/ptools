@@ -305,11 +305,7 @@ fn pfiles_prints_current_nofile_rlimit() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let signal_path = format!(
-        "/tmp/ptools-test-ready-{}-{}",
-        std::process::id(),
-        unique
-    );
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
     let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -402,11 +398,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let signal_path = format!(
-        "/tmp/ptools-test-ready-{}-{}",
-        std::process::id(),
-        unique
-    );
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
     let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
