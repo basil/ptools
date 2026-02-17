@@ -26,7 +26,7 @@ fn child_main() {
     File::create(ready_path).expect("create ready file");
 
     loop {
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -48,7 +48,7 @@ fn parent_main() {
         if let Some(status) = child.try_wait().expect("wait child") {
             panic!("child exited early: {}", status);
         }
-        thread::sleep(Duration::from_millis(5));
+        thread::sleep(Duration::from_millis(100));
     }
 
     let output = Command::new(find_exec("pfiles"))

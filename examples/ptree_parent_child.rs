@@ -14,7 +14,7 @@ fn main() {
         File::create(ready_child_file).expect("failed to create ready child file");
 
         while getppid().as_raw() != 1 {
-            thread::sleep(Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(100));
         }
         return;
     }
@@ -36,5 +36,7 @@ fn main() {
 
     File::create(ready_file).expect("failed to create parent ready file");
 
-    thread::sleep(Duration::from_secs(600));
+    loop {
+        thread::sleep(Duration::from_millis(100));
+    }
 }
