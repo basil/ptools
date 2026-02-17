@@ -16,6 +16,8 @@
 
 use clap::{command, value_parser, Arg, ArgAction};
 use nix::libc;
+use std::collections::HashSet;
+use std::fs::File;
 use std::io::Read;
 use std::mem::size_of;
 
@@ -87,18 +89,65 @@ fn aux_key_name(key: u64) -> String {
         .unwrap_or_else(|| format!("AT_{}", key))
 }
 
-fn parse_native_word(chunk: &[u8]) -> u64 {
-    #[cfg(target_pointer_width = "64")]
-    {
-        let mut raw = [0u8; 8];
-        raw.copy_from_slice(chunk);
-        u64::from_ne_bytes(raw)
+fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, String> {
+    match word_size {
+        4 => {
+            let raw: [u8; 4] = chunk
+                .try_into()
+                .map_err(|_| format!("invalid 32-bit word length {}", chunk.len()))?;
+            Ok(u32::from_ne_bytes(raw) as u64)
+        }
+        8 => {
+            let raw: [u8; 8] = chunk
+                .try_into()
+                .map_err(|_| format!("invalid 64-bit word length {}", chunk.len()))?;
+            Ok(u64::from_ne_bytes(raw))
+        }
+        n => Err(format!("unsupported auxv word size {}", n)),
     }
-    #[cfg(target_pointer_width = "32")]
-    {
-        let mut raw = [0u8; 4];
-        raw.copy_from_slice(chunk);
-        u32::from_ne_bytes(raw) as u64
+}
+
+fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<(u64, u64)>, String> {
+    let record_size = word_size
+        .checked_mul(2)
+        .ok_or_else(|| "auxv record size overflow".to_string())?;
+    if record_size == 0 || bytes.len() % record_size != 0 {
+        return Err(format!("unexpected auxv size {}", bytes.len()));
+    }
+
+    let mut result = Vec::new();
+    let mut saw_terminator = false;
+    for chunk in bytes.chunks_exact(record_size) {
+        let key = parse_word(&chunk[..word_size], word_size)?;
+        let value = parse_word(&chunk[word_size..record_size], word_size)?;
+        if key == 0 {
+            saw_terminator = true;
+            break;
+        }
+        result.push((key, value));
+    }
+
+    if !saw_terminator {
+        return Err("missing AT_NULL terminator".to_string());
+    }
+
+    Ok(result)
+}
+
+fn elf_word_size(pid: u64) -> Option<usize> {
+    let exe_path = std::fs::read_link(format!("/proc/{}/exe", pid)).ok()?;
+    let mut exe_file = File::open(exe_path).ok()?;
+    let mut header = [0u8; 5];
+    exe_file.read_exact(&mut header).ok()?;
+
+    if header[..4] != [0x7f, b'E', b'L', b'F'] {
+        return None;
+    }
+
+    match header[4] {
+        1 => Some(4), // ELFCLASS32
+        2 => Some(8), // ELFCLASS64
+        _ => None,
     }
 }
 
@@ -110,23 +159,28 @@ fn read_auxv(pid: u64) -> Option<Vec<(u64, u64)>> {
             return None;
         }
 
-        let word_size = size_of::<usize>();
-        let record_size = word_size * 2;
-        if record_size == 0 || bytes.len() % record_size != 0 {
-            eprintln!("Error parsing auxv: unexpected auxv size {}", bytes.len());
-            return None;
+        let native_word_size = size_of::<usize>();
+        let mut candidate_word_sizes = Vec::new();
+        if let Some(ws) = elf_word_size(pid) {
+            candidate_word_sizes.push(ws);
+        }
+        candidate_word_sizes.push(native_word_size);
+        candidate_word_sizes.push(4);
+        candidate_word_sizes.push(8);
+
+        let mut seen = HashSet::new();
+        for word_size in candidate_word_sizes {
+            if !seen.insert(word_size) {
+                continue;
+            }
+
+            if let Ok(result) = parse_auxv_records(&bytes, word_size) {
+                return Some(result);
+            }
         }
 
-        let mut result = Vec::new();
-        for chunk in bytes.chunks_exact(record_size) {
-            let key = parse_native_word(&chunk[..word_size]);
-            let value = parse_native_word(&chunk[word_size..record_size]);
-            if key == 0 {
-                break;
-            }
-            result.push((key, value));
-        }
-        Some(result)
+        eprintln!("Error parsing auxv: unexpected auxv format ({} bytes)", bytes.len());
+        None
     } else {
         None
     }
@@ -242,5 +296,43 @@ fn main() {
         if do_print_auxv {
             print_auxv(*pid);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_auxv_records_64_bit() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(6u64).to_ne_bytes()); // AT_PAGESZ
+        bytes.extend_from_slice(&(4096u64).to_ne_bytes());
+        bytes.extend_from_slice(&(0u64).to_ne_bytes()); // AT_NULL
+        bytes.extend_from_slice(&(0u64).to_ne_bytes());
+
+        let auxv = parse_auxv_records(&bytes, 8).expect("parse 64-bit auxv");
+        assert_eq!(auxv, vec![(6, 4096)]);
+    }
+
+    #[test]
+    fn parse_auxv_records_32_bit() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(6u32).to_ne_bytes()); // AT_PAGESZ
+        bytes.extend_from_slice(&(4096u32).to_ne_bytes());
+        bytes.extend_from_slice(&(0u32).to_ne_bytes()); // AT_NULL
+        bytes.extend_from_slice(&(0u32).to_ne_bytes());
+
+        let auxv = parse_auxv_records(&bytes, 4).expect("parse 32-bit auxv");
+        assert_eq!(auxv, vec![(6, 4096)]);
+    }
+
+    #[test]
+    fn parse_auxv_records_rejects_missing_terminator() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(6u64).to_ne_bytes());
+        bytes.extend_from_slice(&(4096u64).to_ne_bytes());
+
+        assert!(parse_auxv_records(&bytes, 8).is_err());
     }
 }
