@@ -31,7 +31,6 @@ use std::process::exit;
 
 // TODO Test pfiles against processes with IPv6 sockets
 // TODO llumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
-// TODO Offset into file for pfiles
 // TODO Finish pfiles (handle remaining file types)
 
 // As defined by the file type bits of the st_mode field returned by stat
@@ -153,7 +152,7 @@ fn print_file_type(file_type: &FileType) -> String {
 }
 
 fn print_open_flags(flags: u64) {
-    let open_flags = vec![
+    let open_flags = [
         (OFlag::O_APPEND, "O_APPEND"),
         (OFlag::O_ASYNC, "O_ASYNC"),
         (OFlag::O_CLOEXEC, "O_CLOEXEC"),
@@ -186,9 +185,9 @@ fn print_open_flags(flags: u64) {
     // O_LARGEFILE == 0. Should that get printed everywhere?
     // probably yes, if we want to match illumos
 
-    for &(flag, _desc) in open_flags.iter() {
+    for &(flag, desc) in open_flags.iter() {
         if (flags as i32 & flag.bits()) != 0 {
-            print!("|{:?}", flag); // TODO don't use debug
+            print!("|{}", desc);
         }
     }
 
@@ -197,17 +196,35 @@ fn print_open_flags(flags: u64) {
     print!("\n");
 }
 
-fn get_flags(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
+fn get_fdinfo_field(pid: u64, fd: u64, field: &str) -> Result<String, Box<dyn Error>> {
     let mut contents = String::new();
     File::open(format!("/proc/{}/fdinfo/{}", pid, fd))?.read_to_string(&mut contents)?;
     let line = contents
         .lines()
-        .filter(|line| line.starts_with("flags:"))
+        .filter(|line| line.starts_with(&format!("{}:", field)))
         .collect::<Vec<&str>>()
         .pop()
-        .ok_or(ParseError::in_file("fdinfo", "no value 'flags'"))?;
-    let str_flags = line.replace("flags:", "");
+        .ok_or(ParseError::in_file(
+            "fdinfo",
+            &format!("no value '{}'", field),
+        ))?;
+
+    let (_, value) = line.split_once(':').ok_or(ParseError::in_file(
+        "fdinfo",
+        &format!("unexpected format for '{}': {}", field, line),
+    ))?;
+
+    Ok(value.trim().to_string())
+}
+
+fn get_flags(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
+    let str_flags = get_fdinfo_field(pid, fd, "flags")?;
     Ok(u64::from_str_radix(str_flags.trim(), 8)?)
+}
+
+fn get_offset(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
+    let str_offset = get_fdinfo_field(pid, fd, "pos")?;
+    Ok(str_offset.parse::<u64>()?)
 }
 
 struct SockInfo {
@@ -514,6 +531,11 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
     match get_flags(pid, fd) {
         Ok(flags) => print_open_flags(flags),
         Err(e) => eprintln!("failed to read fd flags: {}", e),
+    }
+
+    match get_offset(pid, fd) {
+        Ok(offset) => println!("         offset: {}", offset),
+        Err(e) => eprintln!("failed to read fd offset: {}", e),
     }
 
     match file_type {
