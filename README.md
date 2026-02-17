@@ -51,7 +51,7 @@ $ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata 
   --object target/debug/ptree > target/coverage/lcov.info
 ```
 
-The integration tests (`epoll_test` and `netlink_test`) execute ptools binaries via
+The integration tests in `tests/` execute ptools binaries via
 `tests/common::run_ptool`, so make sure the `target/debug/<tool>` binaries are
 instrumented (the `cargo build --bins` step above does that).
 
