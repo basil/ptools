@@ -457,8 +457,8 @@ fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
         println!("         state: {}", tcp_state_str(state));
     }
 
-    // TODO for unix sockets, or for tcp connections connected to another process on this machine,
-    // see if we can find and print the pid/comm of the other process
+    // TODO Expand peer pid/comm resolution beyond current coverage (unix sockets and loopback TCP)
+    // to additional local and namespace edge cases.
 }
 
 fn read_comm(pid: u64) -> Option<String> {
