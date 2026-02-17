@@ -29,6 +29,14 @@ $ cargo deb
 $ sudo apt install ./target/debian/ptools_0.1.0_amd64.deb
 ```
 
+To generate man pages from the same Clap help definitions used by each binary:
+
+```shell
+$ cargo run --bin gen-man-pages
+```
+
+This writes `pargs.1`, `penv.1`, `pfiles.1`, and `ptree.1` to `target/man/`.
+
 
 ## Code Coverage
 

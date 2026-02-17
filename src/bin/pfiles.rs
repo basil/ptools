@@ -1250,8 +1250,9 @@ fn print_files(pid: u64, non_verbose: bool) -> bool {
     return true;
 }
 
-fn main() {
-    let matches = command!()
+pub fn build_cli() -> clap::Command {
+    command!()
+        .name("pfiles")
         .about("Print information for all open files in each process")
         .long_about(
             "Report fstat(2) and fcntl(2) information for all open files in each process. \
@@ -1281,7 +1282,10 @@ applying fstat(2) to each of its file descriptors.",
                 .required(true)
                 .value_parser(value_parser!(u64).range(1..)),
         )
-        .get_matches();
+}
+
+fn main() {
+    let matches = build_cli().get_matches();
 
     let non_verbose = matches.get_flag("non-verbose");
     let error = matches

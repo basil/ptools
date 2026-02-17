@@ -16,8 +16,9 @@
 
 use clap::{command, value_parser, Arg};
 
-fn main() {
-    let matches = command!()
+pub fn build_cli() -> clap::Command {
+    command!()
+        .name("penv")
         .about("Print process environment variables")
         .long_about("Examine a target process and print environment variables and values.")
         .trailing_var_arg(true)
@@ -30,7 +31,10 @@ fn main() {
                 .required(true)
                 .value_parser(value_parser!(u64).range(1..)),
         )
-        .get_matches();
+}
+
+fn main() {
+    let matches = build_cli().get_matches();
 
     for pid in matches.get_many::<u64>("pid").unwrap() {
         ptools::print_env(*pid);

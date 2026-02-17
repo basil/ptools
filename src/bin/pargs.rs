@@ -161,8 +161,9 @@ fn print_auxv(pid: u64) {
     }
 }
 
-fn main() {
-    let matches = command!()
+pub fn build_cli() -> clap::Command {
+    command!()
+        .name("pargs")
         .about("Print process arguments")
         .long_about(
             "Examine a target process and print arguments, environment variables and values, \
@@ -216,7 +217,10 @@ a manner suitable for interpretation by /bin/sh.",
                 .required(true)
                 .value_parser(value_parser!(u64).range(1..)),
         )
-        .get_matches();
+}
+
+fn main() {
+    let matches = build_cli().get_matches();
 
     let do_print_args = matches.get_flag("args");
     let do_print_env = matches.get_flag("env");

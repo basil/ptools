@@ -253,8 +253,9 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
     Ok(pids)
 }
 
-fn main() {
-    let matches = command!()
+pub fn build_cli() -> clap::Command {
+    command!()
+        .name("ptree")
         .about("Print process trees")
         .long_about(
             "Print process trees containing the specified pids or users, with child processes \
@@ -277,7 +278,10 @@ ID (PID); otherwise, treat it as a user login name. Default to all processes.",
                 .num_args(0..)
                 .value_parser(value_parser!(String)),
         )
-        .get_matches();
+}
+
+fn main() {
+    let matches = build_cli().get_matches();
 
     let (parent_map, child_map, uid_map) = match build_proc_maps() {
         Ok(maps) => maps,
