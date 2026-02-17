@@ -272,6 +272,18 @@ where
         .unwrap_or_else(|| panic!("Expected at least one fd matching {}", context))
 }
 
+fn unique_matrix_prefix() -> String {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    format!(
+        "/tmp/ptools-pfiles-matrix-{}-{}",
+        std::process::id(),
+        unique
+    )
+}
+
 #[test]
 fn pfiles_rejects_missing_pid() {
     let output = Command::new(common::find_exec("pfiles"))
@@ -406,7 +418,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
         }
     }
 
-    let example = common::find_exec("examples/pfiles_matrix");
+    let example = common::find_exec("examples/netlink");
     let mut unshare_cmd = Command::new("unshare");
     unshare_cmd
         .arg("--net")
@@ -474,7 +486,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
 {}",
         stdout
     );
-    assert_contains(&stdout, "sockname: AF_INET 127.0.0.1");
+    assert_contains(&stdout, "sockname: AF_NETLINK");
 }
 
 #[test]
@@ -496,7 +508,16 @@ fn pfiles_reports_netlink_socket() {
 
 #[test]
 fn pfiles_matrix_covers_file_types_and_socket_families() {
-    let stdout = common::run_ptool("pfiles", "examples/pfiles_matrix");
+    let matrix_prefix = unique_matrix_prefix();
+    let matrix_file_path = format!("{}-file", matrix_prefix);
+    let matrix_link_path = format!("{}-link", matrix_prefix);
+    let stdout = common::run_ptool_with_options(
+        "pfiles",
+        &[],
+        "examples/pfiles_matrix",
+        &[],
+        &[("PTOOLS_MATRIX_PREFIX", matrix_prefix.as_str())],
+    );
     let fd_map = parse_fd_map(&stdout);
     let cwd = std::env::current_dir()
         .expect("failed to get cwd")
@@ -509,15 +530,21 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "S_IFCHR mode:666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n         offset: 0\n       /dev/null"
     );
 
-    let reg_fd = find_fd_by_path(&fd_map, "/tmp/ptools-pfiles-matrix-file");
+    let reg_fd = find_fd_by_path(&fd_map, &matrix_file_path);
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
-        "S_IFREG mode:644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n         offset: 3\n       /tmp/ptools-pfiles-matrix-file"
+        format!(
+            "S_IFREG mode:644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n         offset: 3\n       {}",
+            matrix_file_path
+        )
     );
-    let symlink_fd = find_fd_by_path(&fd_map, "/tmp/ptools-pfiles-matrix-link");
+    let symlink_fd = find_fd_by_path(&fd_map, &matrix_link_path);
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
-        "S_IFLNK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n         offset: 0\n       /tmp/ptools-pfiles-matrix-link"
+        format!(
+            "S_IFLNK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n         offset: 0\n       {}",
+            matrix_link_path
+        )
     );
     let dir_fd = find_fd_by_path(&fd_map, &cwd);
     assert_eq!(
@@ -658,7 +685,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET6 ::1  port: <dynamic>"
     );
 
-    assert_offset_for_path(&stdout, "/tmp/ptools-pfiles-matrix-file", 3);
+    assert_offset_for_path(&stdout, &matrix_file_path, 3);
 }
 
 #[test]

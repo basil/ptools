@@ -27,17 +27,19 @@ fn find_block_device_path() -> Option<String> {
 fn main() {
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").unwrap_or_else(|_| "/tmp/ptools-test-ready".to_string());
+    let matrix_prefix = env::var("PTOOLS_MATRIX_PREFIX")
+        .unwrap_or_else(|_| "/tmp/ptools-pfiles-matrix".to_string());
 
-    let tmp_file_path = "/tmp/ptools-pfiles-matrix-file";
-    let mut tmp_file = File::create(tmp_file_path).unwrap();
+    let tmp_file_path = format!("{}-file", matrix_prefix);
+    let mut tmp_file = File::create(&tmp_file_path).unwrap();
     writeln!(tmp_file, "ptools").unwrap();
     tmp_file.seek(SeekFrom::Start(3)).unwrap();
 
-    let symlink_path = "/tmp/ptools-pfiles-matrix-link";
-    let _ = fs::remove_file(symlink_path);
-    symlink(tmp_file_path, symlink_path).unwrap();
+    let symlink_path = format!("{}-link", matrix_prefix);
+    let _ = fs::remove_file(&symlink_path);
+    symlink(&tmp_file_path, &symlink_path).unwrap();
     let symlink_fd = open(
-        symlink_path,
+        &*symlink_path,
         OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
         Mode::empty(),
     )
@@ -57,11 +59,10 @@ fn main() {
     let event = EpollEvent::new(EpollFlags::EPOLLIN, 0);
     epoll.add(eventfd.as_fd(), event).unwrap();
 
-    let _ = std::fs::remove_file("/tmp/ptools-pfiles-matrix.sock");
-    let unix_listener =
-        std::os::unix::net::UnixListener::bind("/tmp/ptools-pfiles-matrix.sock").unwrap();
-    let _unix_client =
-        std::os::unix::net::UnixStream::connect("/tmp/ptools-pfiles-matrix.sock").unwrap();
+    let unix_socket_path = format!("{}.sock", matrix_prefix);
+    let _ = std::fs::remove_file(&unix_socket_path);
+    let unix_listener = std::os::unix::net::UnixListener::bind(&unix_socket_path).unwrap();
+    let _unix_client = std::os::unix::net::UnixStream::connect(&unix_socket_path).unwrap();
     let (_unix_server_conn, _unix_addr) = unix_listener.accept().unwrap();
 
     let tcp_listener = TcpListener::bind("127.0.0.1:0").unwrap();
