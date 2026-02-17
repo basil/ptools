@@ -24,6 +24,11 @@ fn parse_fd_map(output: &str) -> BTreeMap<u32, String> {
     let mut current_fd: Option<u32> = None;
 
     for line in output.lines() {
+        let is_fd_header_candidate = line
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_whitespace())
+            .unwrap_or(false);
         let trimmed = line.trim_start();
         let Some((fd_prefix, rest)) = trimmed.split_once(':') else {
             if let Some(fd) = current_fd {
@@ -32,7 +37,7 @@ fn parse_fd_map(output: &str) -> BTreeMap<u32, String> {
             continue;
         };
 
-        if fd_prefix.chars().all(|c| c.is_ascii_digit()) {
+        if is_fd_header_candidate && fd_prefix.chars().all(|c| c.is_ascii_digit()) {
             let fd = fd_prefix.parse::<u32>().expect("fd should parse as u32");
             current_fd = Some(fd);
             fd_map
@@ -70,6 +75,33 @@ fn normalize_line(line: &str) -> String {
     if line.trim_start().starts_with("SO_") {
         let normalized = replace_sockopt_value(line, "SO_SNDBUF(");
         return replace_sockopt_value(&normalized, "SO_RCVBUF(");
+    }
+
+    if line.trim_start().starts_with("sigmask:") {
+        return replace_after_marker(line, "sigmask:", " <dynamic>");
+    }
+    if line.trim_start().starts_with("clockid:") {
+        return replace_after_marker(line, "clockid:", " <dynamic>");
+    }
+    if line.trim_start().starts_with("ticks:") {
+        return replace_after_marker(line, "ticks:", " <dynamic>");
+    }
+    if line.trim_start().starts_with("settime flags:") {
+        return replace_after_marker(line, "settime flags:", " <dynamic>");
+    }
+    if line.trim_start().starts_with("it_value:") {
+        return replace_tuple_value(line, "it_value:", "<dynamic>");
+    }
+    if line.trim_start().starts_with("it_interval:") {
+        return replace_tuple_value(line, "it_interval:", "<dynamic>");
+    }
+    if line.trim_start().starts_with("inotify ") {
+        return format!(
+            "{}inotify <dynamic>",
+            line.chars()
+                .take_while(|c| c.is_ascii_whitespace())
+                .collect::<String>()
+        );
     }
 
     let mut normalized = line.to_string();
@@ -217,14 +249,22 @@ fn replace_after_marker(line: &str, marker: &str, replacement: &str) -> String {
     let value_start = start + marker.len();
     let mut value_end = value_start;
     for c in line[value_start..].chars() {
-        if c.is_ascii_digit() {
+        if c.is_ascii_whitespace() {
             value_end += c.len_utf8();
         } else {
             break;
         }
     }
+    let mut token_end = value_end;
+    for c in line[value_end..].chars() {
+        if c.is_ascii_hexdigit() {
+            token_end += c.len_utf8();
+        } else {
+            break;
+        }
+    }
 
-    if value_end == value_start {
+    if token_end == value_end {
         return line.to_string();
     }
 
@@ -232,8 +272,26 @@ fn replace_after_marker(line: &str, marker: &str, replacement: &str) -> String {
         "{}{}{}",
         &line[..value_start],
         replacement,
-        &line[value_end..]
+        &line[token_end..]
     )
+}
+
+fn replace_tuple_value(line: &str, marker: &str, replacement: &str) -> String {
+    let Some(start) = line.find(marker) else {
+        return line.to_string();
+    };
+    let value_start = start + marker.len();
+    let value = line[value_start..].trim_start();
+    if !value.starts_with('(') || !value.ends_with(')') {
+        return line.to_string();
+    }
+
+    let prefix = &line[..value_start];
+    let leading_ws = line[value_start..]
+        .chars()
+        .take_while(|c| c.is_ascii_whitespace())
+        .collect::<String>();
+    format!("{}{}{}", prefix, leading_ws, replacement)
 }
 
 fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
@@ -328,6 +386,14 @@ where
         .iter()
         .find_map(|(fd, block)| predicate(block).then_some(*fd))
         .unwrap_or_else(|| panic!("Expected at least one fd matching {}", context))
+}
+
+fn count_normalized_exact_blocks(fd_map: &BTreeMap<u32, String>, expected: &str) -> usize {
+    fd_map
+        .values()
+        .map(|block| normalize_dynamic_fields(block))
+        .filter(|block| block == expected)
+        .count()
 }
 
 fn unique_matrix_prefix() -> String {
@@ -706,85 +772,103 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     let eventfd_fd = find_fd_containing(&fd_map, "anon_inode:[eventfd]");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&eventfd_fd).expect("expected eventfd fd")),
-        "anon_inode(eventfd) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_NONBLOCK\n         offset: 0\n       anon_inode:[eventfd]"
+        "anon_inode(eventfd) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_NONBLOCK\n         offset: 0\n       anon_inode:[eventfd]\n       eventfd-count:                0"
     );
 
-    let unix_stream_fd = find_first_fd_matching(
-        &fd_map,
-        |block| block.contains("SOCK_STREAM") && block.contains("sockname: AF_UNIX"),
-        "SOCK_STREAM + sockname: AF_UNIX",
-    );
+    let signalfd_expected =
+        "anon_inode(signalfd) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC|O_NONBLOCK\n         offset: 0\n       anon_inode:[signalfd]\n       sigmask: <dynamic>";
     assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&unix_stream_fd).expect("expected unix stream fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_UNIX"
+        count_normalized_exact_blocks(&fd_map, signalfd_expected),
+        1,
+        "expected exactly one normalized signalfd block"
     );
 
-    let inet_listen_fd = find_first_fd_matching(
-        &fd_map,
-        |block| {
-            block.contains("SOCK_STREAM")
-                && block.contains("sockname: AF_INET")
-                && !block.contains("peername: AF_INET")
-        },
-        "SOCK_STREAM + sockname: AF_INET without peername",
-    );
+    let timerfd_expected =
+        "anon_inode(timerfd) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC|O_NONBLOCK\n         offset: 0\n       anon_inode:[timerfd]\n       clockid: <dynamic>\n       ticks: <dynamic>\n       settime flags: <dynamic>\n       it_value: <dynamic>\n       it_interval: <dynamic>";
     assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&inet_listen_fd).expect("expected inet listen fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         state: TCP_LISTEN"
+        count_normalized_exact_blocks(&fd_map, timerfd_expected),
+        1,
+        "expected exactly one normalized timerfd block"
     );
 
-    let inet_peer_fd = find_first_fd_matching(
-        &fd_map,
-        |block| block.contains("SOCK_STREAM") && block.contains("peername: AF_INET"),
-        "SOCK_STREAM + peername: AF_INET",
+    let inotify_fd = fd_map
+        .iter()
+        .find_map(|(fd, block)| {
+            normalize_dynamic_fields(block)
+                .starts_with("anon_inode(inotify) mode:")
+                .then_some(*fd)
+        })
+        .expect("expected inotify anon inode fd");
+    let inotify_block = normalize_dynamic_fields(
+        fd_map
+            .get(&inotify_fd)
+            .expect("expected inotify anon inode fd"),
+    );
+    let inotify_lines: Vec<&str> = inotify_block.lines().collect();
+    assert!(
+        inotify_lines.len() >= 5,
+        "unexpected inotify block:\n{}",
+        inotify_block
     );
     assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&inet_peer_fd).expect("expected fd with peername")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED"
+        inotify_lines[0],
+        "anon_inode(inotify) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>"
+    );
+    assert_eq!(inotify_lines[1], "       O_RDONLY|O_CLOEXEC|O_NONBLOCK");
+    assert_eq!(inotify_lines[2], "         offset: 0");
+    assert!(
+        inotify_lines[3] == "       anon_inode:inotify"
+            || inotify_lines[3] == "       anon_inode:[inotify]",
+        "unexpected inotify path line: {}",
+        inotify_lines[3]
+    );
+    assert_eq!(inotify_lines[4], "       inotify <dynamic>");
+
+    let unix_stream_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_UNIX";
+    assert_eq!(
+        count_normalized_exact_blocks(&fd_map, unix_stream_expected),
+        1,
+        "expected exactly one unix listener socket block"
     );
 
-    let inet6_listen_fd = find_first_fd_matching(
-        &fd_map,
-        |block| {
-            block.contains("SOCK_STREAM")
-                && block.contains("sockname: AF_INET6")
-                && !block.contains("peername: AF_INET6")
-        },
-        "SOCK_STREAM + sockname: AF_INET6 without peername",
-    );
+    let inet_listen_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         state: TCP_LISTEN";
     assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&inet6_listen_fd).expect("expected inet6 listen fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET6 ::1  port: <dynamic>\n         state: TCP_LISTEN"
+        count_normalized_exact_blocks(&fd_map, inet_listen_expected),
+        1,
+        "expected exactly one IPv4 listening socket block"
     );
 
-    let inet6_peer_fd = find_first_fd_matching(
-        &fd_map,
-        |block| block.contains("SOCK_STREAM") && block.contains("peername: AF_INET6"),
-        "SOCK_STREAM + peername: AF_INET6",
-    );
-    assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&inet6_peer_fd).expect("expected fd with inet6 peername")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED"
+    let inet_peer_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED";
+    assert!(
+        count_normalized_exact_blocks(&fd_map, inet_peer_expected) >= 1,
+        "expected at least one IPv4 established socket block"
     );
 
-    let inet_dgram_fd = find_first_fd_matching(
-        &fd_map,
-        |block| block.contains("SOCK_DGRAM") && block.contains("sockname: AF_INET "),
-        "SOCK_DGRAM + sockname: AF_INET",
-    );
+    let inet6_listen_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET6 ::1  port: <dynamic>\n         state: TCP_LISTEN";
     assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&inet_dgram_fd).expect("expected inet dgram fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET 127.0.0.1  port: <dynamic>"
+        count_normalized_exact_blocks(&fd_map, inet6_listen_expected),
+        1,
+        "expected exactly one IPv6 listening socket block"
     );
 
-    let inet6_dgram_fd = find_first_fd_matching(
-        &fd_map,
-        |block| block.contains("SOCK_DGRAM") && block.contains("sockname: AF_INET6"),
-        "SOCK_DGRAM + sockname: AF_INET6",
+    let inet6_peer_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED";
+    assert!(
+        count_normalized_exact_blocks(&fd_map, inet6_peer_expected) >= 1,
+        "expected at least one IPv6 established socket block"
     );
+
+    let inet_dgram_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET 127.0.0.1  port: <dynamic>";
     assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&inet6_dgram_fd).expect("expected inet6 dgram fd")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET6 ::1  port: <dynamic>"
+        count_normalized_exact_blocks(&fd_map, inet_dgram_expected),
+        1,
+        "expected exactly one IPv4 datagram socket block"
+    );
+
+    let inet6_dgram_expected = "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         sockname: AF_INET6 ::1  port: <dynamic>";
+    assert_eq!(
+        count_normalized_exact_blocks(&fd_map, inet6_dgram_expected),
+        1,
+        "expected exactly one IPv6 datagram socket block"
     );
 
     assert_offset_for_path(&stdout, &matrix_file_path, 3);

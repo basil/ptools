@@ -4,13 +4,68 @@ use nix::sys::eventfd::{EfdFlags, EventFd};
 use nix::sys::stat::Mode;
 use nix::unistd::pipe2;
 use std::env;
+use std::ffi::CString;
 use std::fs::{self, File};
 use std::io::{Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, RawFd};
 use std::os::unix::fs::{symlink, FileTypeExt};
 use std::thread;
 use std::time::Duration;
+
+fn open_signalfd() -> RawFd {
+    unsafe {
+        let mut mask = std::mem::zeroed::<nix::libc::sigset_t>();
+        if nix::libc::sigemptyset(&mut mask) != 0 {
+            panic!("sigemptyset failed: {}", std::io::Error::last_os_error());
+        }
+        if nix::libc::sigaddset(&mut mask, nix::libc::SIGUSR1) != 0 {
+            panic!("sigaddset failed: {}", std::io::Error::last_os_error());
+        }
+        if nix::libc::sigprocmask(nix::libc::SIG_BLOCK, &mask, std::ptr::null_mut()) != 0 {
+            panic!("sigprocmask failed: {}", std::io::Error::last_os_error());
+        }
+
+        let fd = nix::libc::signalfd(-1, &mask, nix::libc::SFD_CLOEXEC | nix::libc::SFD_NONBLOCK);
+        if fd < 0 {
+            panic!("signalfd failed: {}", std::io::Error::last_os_error());
+        }
+        fd
+    }
+}
+
+fn open_timerfd() -> RawFd {
+    unsafe {
+        let fd = nix::libc::timerfd_create(
+            nix::libc::CLOCK_MONOTONIC,
+            nix::libc::TFD_CLOEXEC | nix::libc::TFD_NONBLOCK,
+        );
+        if fd < 0 {
+            panic!("timerfd_create failed: {}", std::io::Error::last_os_error());
+        }
+
+        let mut spec = std::mem::zeroed::<nix::libc::itimerspec>();
+        spec.it_value.tv_sec = 5;
+        if nix::libc::timerfd_settime(fd, 0, &spec, std::ptr::null_mut()) != 0 {
+            panic!(
+                "timerfd_settime failed: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+
+        fd
+    }
+}
+
+fn open_inotify() -> RawFd {
+    unsafe {
+        let fd = nix::libc::inotify_init1(nix::libc::IN_CLOEXEC | nix::libc::IN_NONBLOCK);
+        if fd < 0 {
+            panic!("inotify_init1 failed: {}", std::io::Error::last_os_error());
+        }
+        fd
+    }
+}
 
 fn find_block_device_path() -> Option<String> {
     fs::read_dir("/dev").ok()?.flatten().find_map(|entry| {
@@ -76,6 +131,18 @@ fn main() {
     let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
     let event = EpollEvent::new(EpollFlags::EPOLLIN, 0);
     epoll.add(eventfd.as_fd(), event).unwrap();
+    let signalfd = open_signalfd();
+    let timerfd = open_timerfd();
+    let inotify_fd = open_inotify();
+    unsafe {
+        let watch_path = CString::new("/tmp").unwrap();
+        if nix::libc::inotify_add_watch(inotify_fd, watch_path.as_ptr(), nix::libc::IN_CREATE) < 0 {
+            panic!(
+                "inotify_add_watch failed: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
 
     let unix_socket_path = format!("{}.sock", matrix_prefix);
     let _ = std::fs::remove_file(&unix_socket_path);
@@ -110,6 +177,9 @@ fn main() {
         pipe_write,
         epoll,
         eventfd,
+        signalfd,
+        timerfd,
+        inotify_fd,
         unix_listener,
         tcp_listener,
         tcp6_listener,

@@ -56,6 +56,11 @@ enum PosixFileType {
 #[derive(PartialEq)]
 enum AnonFileType {
     Epoll,
+    EventFd,
+    SignalFd,
+    TimerFd,
+    Inotify,
+    PidFd,
     Unknown(String),
 }
 
@@ -141,6 +146,11 @@ fn file_type(mode: u32, link_path: &Path) -> FileType {
                 .trim_end_matches("]");
             let anon_file_type = match fd_type_str {
                 "eventpoll" => AnonFileType::Epoll,
+                "eventfd" => AnonFileType::EventFd,
+                "signalfd" => AnonFileType::SignalFd,
+                "timerfd" => AnonFileType::TimerFd,
+                "inotify" => AnonFileType::Inotify,
+                "pidfd" => AnonFileType::PidFd,
                 x => AnonFileType::Unknown(x.to_string()),
             };
             FileType::Anon(anon_file_type)
@@ -168,8 +178,31 @@ fn print_file_type(file_type: &FileType) -> String {
         FileType::Posix(PosixFileType::Fifo) => "S_IFIFO".into(),
         FileType::Posix(PosixFileType::Unknown(x)) => format!("UNKNOWN_TYPE(mode={})", x),
         FileType::Anon(AnonFileType::Epoll) => "anon_inode(epoll)".into(),
+        FileType::Anon(AnonFileType::EventFd) => "anon_inode(eventfd)".into(),
+        FileType::Anon(AnonFileType::SignalFd) => "anon_inode(signalfd)".into(),
+        FileType::Anon(AnonFileType::TimerFd) => "anon_inode(timerfd)".into(),
+        FileType::Anon(AnonFileType::Inotify) => "anon_inode(inotify)".into(),
+        FileType::Anon(AnonFileType::PidFd) => "anon_inode(pidfd)".into(),
         FileType::Anon(AnonFileType::Unknown(s)) => format!("anon_inode({})", s),
         FileType::Unknown => "UNKNOWN_TYPE".into(),
+    }
+}
+
+fn print_matching_fdinfo_lines(pid: u64, fd: u64, prefixes: &[&str]) {
+    let fdinfo_path = format!("/proc/{}/fdinfo/{}", pid, fd);
+    let fdinfo = match fs::read_to_string(&fdinfo_path) {
+        Ok(fdinfo) => fdinfo,
+        Err(e) => {
+            eprintln!("failed to read {}: {}", &fdinfo_path, e);
+            return;
+        }
+    };
+
+    for line in fdinfo
+        .lines()
+        .filter(|line| prefixes.iter().any(|prefix| line.starts_with(prefix)))
+    {
+        println!("       {}", line);
     }
 }
 
@@ -1025,8 +1058,27 @@ fn print_file(
         _ => match fs::read_link(link_path) {
             Ok(path) => {
                 println!("       {}", path.to_string_lossy());
-                if path == Path::new("anon_inode:[eventpoll]") {
-                    print_epoll_fdinfo(pid, fd);
+                match path.as_os_str().to_string_lossy().as_ref() {
+                    "anon_inode:[eventpoll]" => print_epoll_fdinfo(pid, fd),
+                    "anon_inode:[eventfd]" => {
+                        print_matching_fdinfo_lines(pid, fd, &["eventfd-count:"])
+                    }
+                    "anon_inode:[signalfd]" => print_matching_fdinfo_lines(pid, fd, &["sigmask:"]),
+                    "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
+                        pid,
+                        fd,
+                        &[
+                            "clockid:",
+                            "ticks:",
+                            "settime flags:",
+                            "it_value:",
+                            "it_interval:",
+                        ],
+                    ),
+                    "anon_inode:inotify" | "anon_inode:[inotify]" => {
+                        print_matching_fdinfo_lines(pid, fd, &["inotify "])
+                    }
+                    _ => {}
                 }
             }
             Err(e) => eprintln!("failed to readlink {}: {}", &link_path_str, e),
