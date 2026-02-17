@@ -252,7 +252,9 @@ fn print_open_flags(flags: u64) {
         }
     }
 
-    // TODO why does illumos print close on exec separately?
+    // illumos prints close-on-exec separately because it is a descriptor flag (FD_CLOEXEC via
+    // fcntl(F_GETFD)), not an open-file status flag (F_GETFL). Linux exposes the CLOEXEC bit in
+    // /proc/[pid]/fdinfo flags, so we keep it in this compact flag list.
 
     print!("\n");
 }
