@@ -42,7 +42,7 @@ fn pargs_matches_started_process_arguments() {
     ];
 
     let stdout =
-        common::run_ptool_with_options("pargs", &[], "examples/args_env", &expected_args, &[]);
+        common::run_ptool_with_options("pargs", &[], "examples/pargs_penv", &expected_args, &[]);
 
     for arg in expected_args {
         let expected_line = format!("{}", arg);
@@ -76,15 +76,20 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
     ];
 
     let regular_stdout =
-        common::run_ptool_with_options("pargs", &[], "examples/args_env", &expected_args, &[]);
+        common::run_ptool_with_options("pargs", &[], "examples/pargs_penv", &expected_args, &[]);
     let argv0 = regular_stdout
         .lines()
         .find(|line| line.starts_with("argv[0]: "))
         .unwrap()
         .trim_start_matches("argv[0]: ");
 
-    let stdout =
-        common::run_ptool_with_options("pargs", &["-l"], "examples/args_env", &expected_args, &[]);
+    let stdout = common::run_ptool_with_options(
+        "pargs",
+        &["-l"],
+        "examples/pargs_penv",
+        &expected_args,
+        &[],
+    );
 
     let mut lines = stdout.lines();
     let command_line = lines.next().unwrap_or("");
@@ -113,7 +118,7 @@ fn penv_matches_started_process_environment() {
     ];
 
     let stdout =
-        common::run_ptool_with_options("penv", &[], "examples/args_env", &[], &expected_env);
+        common::run_ptool_with_options("penv", &[], "examples/pargs_penv", &[], &expected_env);
 
     for (key, value) in expected_env {
         let expected_line = format!("{}={}", key, value);
@@ -136,7 +141,7 @@ fn pargs_e_alias_matches_started_process_environment() {
     ];
 
     let stdout =
-        common::run_ptool_with_options("pargs", &["-e"], "examples/args_env", &[], &expected_env);
+        common::run_ptool_with_options("pargs", &["-e"], "examples/pargs_penv", &[], &expected_env);
 
     for (key, value) in expected_env {
         let expected_line = format!("{}={}", key, value);
@@ -151,7 +156,7 @@ fn pargs_e_alias_matches_started_process_environment() {
 
 #[test]
 fn pargs_x_prints_auxv_entries() {
-    let stdout = common::run_ptool_with_options("pargs", &["-x"], "examples/args_env", &[], &[]);
+    let stdout = common::run_ptool_with_options("pargs", &["-x"], "examples/pargs_penv", &[], &[]);
 
     assert!(
         !stdout.contains("argv["),

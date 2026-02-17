@@ -469,7 +469,7 @@ fn pfiles_prints_header_lines() {
         }
     }
 
-    let mut examined_proc = Command::new(common::find_exec("examples/args_env"));
+    let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"));
     examined_proc
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
@@ -492,7 +492,7 @@ fn pfiles_prints_header_lines() {
         });
     }
 
-    let mut examined_proc = examined_proc.spawn().expect("failed to spawn args_env");
+    let mut examined_proc = examined_proc.spawn().expect("failed to spawn pargs_penv");
 
     while !signal_file.exists() {
         if let Some(status) = examined_proc.try_wait().expect("failed to wait on child") {
@@ -546,7 +546,7 @@ fn pfiles_prints_header_lines() {
 
 #[test]
 fn pfiles_reports_epoll_anon_inode() {
-    let stdout = common::run_ptool("pfiles", "examples/epoll");
+    let stdout = common::run_ptool("pfiles", "examples/pfiles_epoll");
     let fd_map = parse_fd_map(&stdout);
 
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
@@ -563,7 +563,8 @@ fn pfiles_reports_epoll_anon_inode() {
 
 #[test]
 fn pfiles_non_verbose_mode_prints_fstat_only_descriptor_lines() {
-    let stdout = common::run_ptool_with_options("pfiles", &["-n"], "examples/epoll", &[], &[]);
+    let stdout =
+        common::run_ptool_with_options("pfiles", &["-n"], "examples/pfiles_epoll", &[], &[]);
     let fd_map = parse_fd_map(&stdout);
     assert!(!fd_map.is_empty(), "expected at least one fd block");
     assert_contains(&stdout, "Current soft rlimit:");
@@ -608,7 +609,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
         }
     }
 
-    let example = common::find_exec("examples/netlink");
+    let example = common::find_exec("examples/pfiles_netlink");
     let mut unshare_cmd = Command::new("unshare");
     unshare_cmd
         .arg("--net")
@@ -681,7 +682,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
 
 #[test]
 fn pfiles_reports_netlink_socket() {
-    let stdout = common::run_ptool("pfiles", "examples/netlink");
+    let stdout = common::run_ptool("pfiles", "examples/pfiles_netlink");
     let fd_map = parse_fd_map(&stdout);
 
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
@@ -1028,7 +1029,7 @@ fn pfiles_exits_nonzero_when_any_pid_fails() {
     let output = common::run_ptool_with_options_and_capture(
         "pfiles",
         &["999999999"],
-        "examples/args_env",
+        "examples/pargs_penv",
         &[],
         &[],
     );
