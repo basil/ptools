@@ -1,11 +1,7 @@
 mod common;
 
 use std::fs;
-use std::io;
-use std::path::Path;
 use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn leading_spaces(line: &str) -> usize {
     line.chars().take_while(|c| *c == ' ').count()
@@ -19,14 +15,6 @@ fn assert_contains(output: &str, needle: &str, context: &str) {
         needle,
         output
     );
-}
-
-fn remove_if_exists(path: &Path) {
-    if let Err(e) = fs::remove_file(path) {
-        if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", path, e.kind());
-        }
-    }
 }
 
 fn current_username() -> Option<String> {
@@ -86,52 +74,17 @@ fn find_non_init_child_of_pid_zero() -> Option<u64> {
 
 #[test]
 fn ptree_shows_parent_and_child_with_arguments() {
-    let test_pid = std::process::id();
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_nanos();
-
-    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
-    let signal_file = Path::new(&signal_path);
-
-    let child_signal_path = format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique);
-    let child_signal_file = Path::new(&child_signal_path);
-
     let parent_arg = "P";
     let child_arg = "C";
 
-    remove_if_exists(signal_file);
-    remove_if_exists(child_signal_file);
-
-    let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
-        .arg(parent_arg)
-        .arg(child_arg)
-        .env("PTOOLS_TEST_READY_FILE", signal_file.to_str().unwrap())
-        .env(
-            "PTOOLS_TEST_READY_CHILD_FILE",
-            child_signal_file.to_str().unwrap(),
-        )
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .unwrap();
-
-    while !(signal_file.exists() && child_signal_file.exists()) {
-        if let Some(status) = examined_proc.try_wait().unwrap() {
-            panic!("Parent exited too soon with status {}", status);
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-
-    let output = Command::new(common::find_exec("ptree"))
-        .arg(examined_proc.id().to_string())
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-
-    examined_proc.kill().unwrap();
+    let output = common::run_ptool(
+        "ptree",
+        &[],
+        "examples/ptree_parent_child",
+        &[parent_arg, child_arg],
+        &[],
+        true,
+    );
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -168,9 +121,6 @@ fn ptree_shows_parent_and_child_with_arguments() {
         "Expected child line to be more indented than parent line:\n{}",
         stdout
     );
-
-    remove_if_exists(signal_file);
-    remove_if_exists(child_signal_file);
 }
 
 #[test]
@@ -235,54 +185,17 @@ fn ptree_accepts_username_operand() {
         return;
     };
 
-    let test_pid = std::process::id();
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_nanos();
-
-    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
-    let signal_file = Path::new(&signal_path);
-
-    let child_signal_path = format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique);
-    let child_signal_file = Path::new(&child_signal_path);
-
     let parent_arg = "PU";
     let child_arg = "CU";
 
-    remove_if_exists(signal_file);
-    remove_if_exists(child_signal_file);
-
-    let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
-        .arg(parent_arg)
-        .arg(child_arg)
-        .env("PTOOLS_TEST_READY_FILE", signal_file.to_str().unwrap())
-        .env(
-            "PTOOLS_TEST_READY_CHILD_FILE",
-            child_signal_file.to_str().unwrap(),
-        )
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .unwrap();
-
-    while !(signal_file.exists() && child_signal_file.exists()) {
-        if let Some(status) = examined_proc.try_wait().unwrap() {
-            panic!("Parent exited too soon with status {}", status);
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-
-    let output = Command::new(common::find_exec("ptree"))
-        .arg(username)
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-
-    examined_proc.kill().unwrap();
-    remove_if_exists(signal_file);
-    remove_if_exists(child_signal_file);
+    let output = common::run_ptool(
+        "ptree",
+        &[username.as_str(), "__NO_PID__"],
+        "examples/ptree_parent_child",
+        &[parent_arg, child_arg],
+        &[],
+        true,
+    );
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -305,55 +218,17 @@ fn ptree_accepts_mixed_pid_and_user_operands() {
         return;
     };
 
-    let test_pid = std::process::id();
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_nanos();
-
-    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
-    let signal_file = Path::new(&signal_path);
-
-    let child_signal_path = format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique);
-    let child_signal_file = Path::new(&child_signal_path);
-
     let parent_arg = "PM";
     let child_arg = "CM";
 
-    remove_if_exists(signal_file);
-    remove_if_exists(child_signal_file);
-
-    let mut examined_proc = Command::new(common::find_exec("examples/ptree_parent_child"))
-        .arg(parent_arg)
-        .arg(child_arg)
-        .env("PTOOLS_TEST_READY_FILE", signal_file.to_str().unwrap())
-        .env(
-            "PTOOLS_TEST_READY_CHILD_FILE",
-            child_signal_file.to_str().unwrap(),
-        )
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .unwrap();
-
-    while !(signal_file.exists() && child_signal_file.exists()) {
-        if let Some(status) = examined_proc.try_wait().unwrap() {
-            panic!("Parent exited too soon with status {}", status);
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-
-    let output = Command::new(common::find_exec("ptree"))
-        .arg(examined_proc.id().to_string())
-        .arg(username)
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-
-    examined_proc.kill().unwrap();
-    remove_if_exists(signal_file);
-    remove_if_exists(child_signal_file);
+    let output = common::run_ptool(
+        "ptree",
+        &["__PID__", username.as_str()],
+        "examples/ptree_parent_child",
+        &[parent_arg, child_arg],
+        &[],
+        true,
+    );
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
