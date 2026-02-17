@@ -12,6 +12,31 @@ fn assert_contains(output: &str, needle: &str) {
     );
 }
 
+fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
+    let lines: Vec<&str> = output.lines().collect();
+    for (idx, line) in lines.iter().enumerate() {
+        if line.contains(path) {
+            assert!(
+                idx > 0,
+                "Found path line without preceding output: {}",
+                line
+            );
+            let expected = format!("offset: {}", expected_offset);
+            assert!(
+                lines[idx - 1].contains(&expected),
+                "Expected line before {:?} to contain {:?}, got {:?}. Full output:\n{}",
+                path,
+                expected,
+                lines[idx - 1],
+                output
+            );
+            return;
+        }
+    }
+
+    panic!("Path {:?} not found in output:\n{}", path, output);
+}
+
 fn find_block_device_path() -> Option<String> {
     std::fs::read_dir("/dev").ok()?.flatten().find_map(|entry| {
         let path = entry.path();
@@ -103,6 +128,8 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     assert_contains(&stdout, "O_RDWR");
     assert_contains(&stdout, "O_CLOEXEC");
     assert_contains(&stdout, "O_NONBLOCK");
+
+    assert_offset_for_path(&stdout, "/tmp/ptools-pfiles-matrix-file", 3);
 }
 
 #[test]

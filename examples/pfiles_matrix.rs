@@ -4,7 +4,7 @@ use nix::sys::eventfd::{EfdFlags, EventFd};
 use nix::sys::stat::Mode;
 use nix::unistd::pipe2;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::os::fd::AsFd;
 use std::os::unix::fs::{symlink, FileTypeExt};
@@ -27,6 +27,7 @@ fn main() {
     let tmp_file_path = "/tmp/ptools-pfiles-matrix-file";
     let mut tmp_file = File::create(tmp_file_path).unwrap();
     writeln!(tmp_file, "ptools").unwrap();
+    tmp_file.seek(SeekFrom::Start(3)).unwrap();
 
     let symlink_path = "/tmp/ptools-pfiles-matrix-link";
     let _ = fs::remove_file(symlink_path);
