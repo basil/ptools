@@ -769,8 +769,8 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "examples/pfiles_matrix",
         &[],
         &[
-            ("PTOOLS_MATRIX_FILE_PATH", matrix_file_path.as_str()),
-            ("PTOOLS_MATRIX_LINK_PATH", matrix_link_path.as_str()),
+            ("PTOOLS_MATRIX_FILE_FILE", matrix_file_path.as_str()),
+            ("PTOOLS_MATRIX_LINK_FILE", matrix_link_path.as_str()),
         ],
     );
     let fd_map = parse_fd_map(&stdout);

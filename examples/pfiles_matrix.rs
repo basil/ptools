@@ -101,9 +101,9 @@ fn main() {
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
     let tmp_file_path =
-        env::var("PTOOLS_MATRIX_FILE_PATH").expect("PTOOLS_MATRIX_FILE_PATH must be set");
+        env::var("PTOOLS_MATRIX_FILE_FILE").expect("PTOOLS_MATRIX_FILE_FILE must be set");
     let symlink_path =
-        env::var("PTOOLS_MATRIX_LINK_PATH").expect("PTOOLS_MATRIX_LINK_PATH must be set");
+        env::var("PTOOLS_MATRIX_LINK_FILE").expect("PTOOLS_MATRIX_LINK_FILE must be set");
     let mut tmp_file = File::create(&tmp_file_path).unwrap();
     writeln!(tmp_file, "ptools").unwrap();
     tmp_file.seek(SeekFrom::Start(3)).unwrap();
