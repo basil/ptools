@@ -91,8 +91,10 @@ fn ptree_shows_parent_and_child_with_arguments() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
     let child_signal_path = format!("/tmp/ptools-test-child-ready-{}-{}", test_pid, unique);
     let child_signal_file = Path::new(&child_signal_path);
 
@@ -235,8 +237,10 @@ fn ptree_accepts_username_operand() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
     let child_signal_path = format!("/tmp/ptools-test-child-ready-{}-{}", test_pid, unique);
     let child_signal_file = Path::new(&child_signal_path);
 
@@ -300,8 +304,10 @@ fn ptree_accepts_mixed_pid_and_user_operands() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
     let child_signal_path = format!("/tmp/ptools-test-child-ready-{}-{}", test_pid, unique);
     let child_signal_file = Path::new(&child_signal_path);
 

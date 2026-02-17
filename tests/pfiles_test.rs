@@ -450,8 +450,10 @@ fn pfiles_prints_header_lines() {
         .expect("time went backwards")
         .as_nanos();
     let test_pid = std::process::id();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
@@ -591,8 +593,10 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
         .expect("time went backwards")
         .as_nanos();
     let test_pid = std::process::id();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
@@ -699,8 +703,10 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
         .expect("time went backwards")
         .as_nanos();
     let test_pid = std::process::id();
+
     let status_path = format!("/tmp/ptools-afalg-status-{}-{}", test_pid, unique);
     let status_file = Path::new(&status_path);
+
     if let Err(e) = fs::remove_file(status_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", status_file, e.kind())
@@ -748,16 +754,26 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
+
     let test_pid = std::process::id();
-    let matrix_prefix = format!("/tmp/ptools-pfiles-matrix-{}-{}", test_pid, unique);
-    let matrix_file_path = format!("{}-file", matrix_prefix);
-    let matrix_link_path = format!("{}-link", matrix_prefix);
+
+    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-{}-{}-file", test_pid, unique);
+    let matrix_file_file = Path::new(&matrix_file_path);
+
+    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-{}-{}-link", test_pid, unique);
+    let matrix_link_file = Path::new(&matrix_link_path);
+
     let stdout = common::run_ptool_with_options(
         "pfiles",
         &[],
         "examples/pfiles_matrix",
         &[],
-        &[("PTOOLS_MATRIX_PREFIX", matrix_prefix.as_str())],
+        &[(
+            "PTOOLS_MATRIX_PREFIX",
+            matrix_file_path
+                .strip_suffix("-file")
+                .expect("matrix file path should end in -file"),
+        )],
     );
     let fd_map = parse_fd_map(&stdout);
     let cwd = std::env::current_dir()
@@ -771,20 +787,34 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n       /dev/null\n       offset: 0"
     );
 
-    let reg_fd = find_fd_by_path(&fd_map, &matrix_file_path);
+    let reg_fd = find_fd_by_path(
+        &fd_map,
+        matrix_file_file
+            .to_str()
+            .expect("matrix file path should be valid utf-8"),
+    );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
         format!(
             "S_IFREG mode:0644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n       {}\n       offset: 3",
-            matrix_file_path
+            matrix_file_file
+                .to_str()
+                .expect("matrix file path should be valid utf-8")
         )
     );
-    let symlink_fd = find_fd_by_path(&fd_map, &matrix_link_path);
+    let symlink_fd = find_fd_by_path(
+        &fd_map,
+        matrix_link_file
+            .to_str()
+            .expect("matrix link path should be valid utf-8"),
+    );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
         format!(
             "S_IFLNK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n       {}\n       offset: 0",
-            matrix_link_path
+            matrix_link_file
+                .to_str()
+                .expect("matrix link path should be valid utf-8")
         )
     );
     let dir_fd = find_fd_by_path(&fd_map, &cwd);
@@ -962,7 +992,13 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv6 datagram socket block"
     );
 
-    assert_offset_for_path(&stdout, &matrix_file_path, 3);
+    assert_offset_for_path(
+        &stdout,
+        matrix_file_file
+            .to_str()
+            .expect("matrix file path should be valid utf-8"),
+        3,
+    );
 }
 
 #[test]
@@ -972,8 +1008,10 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
         .expect("time went backwards")
         .as_nanos();
     let test_pid = std::process::id();
+
     let sockopts_ready_path = format!("/tmp/ptools-sockopts-ready-{}-{}", test_pid, unique);
     let sockopts_ready_file = Path::new(&sockopts_ready_path);
+
     if let Err(e) = fs::remove_file(sockopts_ready_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())

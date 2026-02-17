@@ -73,12 +73,16 @@ pub fn run_ptool_with_options_and_capture(
         .expect("time went backwards")
         .as_nanos();
     let test_pid = std::process::id();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
-    let afalg_status_path = format!("/tmp/ptools-afalg-status-{}-{}", test_pid, unique);
-    let sockopts_ready_path = format!("/tmp/ptools-sockopts-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
+    let afalg_status_path = format!("/tmp/ptools-afalg-status-{}-{}", test_pid, unique);
     let afalg_status_file = Path::new(&afalg_status_path);
+
+    let sockopts_ready_path = format!("/tmp/ptools-sockopts-ready-{}-{}", test_pid, unique);
     let sockopts_ready_file = Path::new(&sockopts_ready_path);
+
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
