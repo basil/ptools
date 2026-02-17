@@ -4,7 +4,7 @@ use std::net::{TcpListener, UdpSocket};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 fn find_exec(name: &str) -> std::path::PathBuf {
     let this_exec = std::env::current_exe().expect("current exe");
@@ -17,7 +17,8 @@ fn find_exec(name: &str) -> std::path::PathBuf {
 }
 
 fn child_main() {
-    let ready_path = env::var("PTOOLS_TEST_READY_FILE").expect("ready path");
+    let ready_path =
+        env::var("PTOOLS_SOCKOPTS_READY_FILE").expect("PTOOLS_SOCKOPTS_READY_FILE must be set");
 
     let _tcp_listener = TcpListener::bind("127.0.0.1:0").expect("bind tcp listener");
     let _udp_socket = UdpSocket::bind("127.0.0.1:0").expect("bind udp socket");
@@ -30,19 +31,12 @@ fn child_main() {
 }
 
 fn parent_main() {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time")
-        .as_nanos();
-    let ready_path = format!(
-        "/tmp/ptools-sockopts-ready-{}-{}",
-        std::process::id(),
-        unique
-    );
+    let ready_path =
+        env::var("PTOOLS_SOCKOPTS_READY_FILE").expect("PTOOLS_SOCKOPTS_READY_FILE must be set");
 
     let mut child = Command::new(find_exec("examples/pfiles_sockopts_parent"))
         .env("PTOOLS_CHILD_MODE", "1")
-        .env("PTOOLS_TEST_READY_FILE", &ready_path)
+        .env("PTOOLS_SOCKOPTS_READY_FILE", &ready_path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

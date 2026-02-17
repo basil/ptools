@@ -415,18 +415,6 @@ fn count_normalized_exact_blocks(fd_map: &BTreeMap<u32, String>, expected: &str)
         .count()
 }
 
-fn unique_matrix_prefix() -> String {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_nanos();
-    format!(
-        "/tmp/ptools-pfiles-matrix-{}-{}",
-        std::process::id(),
-        unique
-    )
-}
-
 #[test]
 fn pfiles_rejects_missing_pid() {
     let output = Command::new(common::find_exec("pfiles"))
@@ -461,7 +449,8 @@ fn pfiles_prints_header_lines() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -601,7 +590,8 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", std::process::id(), unique);
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -708,7 +698,8 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards")
         .as_nanos();
-    let status_path = format!("/tmp/ptools-afalg-status-{}-{}", std::process::id(), unique);
+    let test_pid = std::process::id();
+    let status_path = format!("/tmp/ptools-afalg-status-{}-{}", test_pid, unique);
     let status_file = Path::new(&status_path);
     if let Err(e) = fs::remove_file(status_file) {
         if e.kind() != io::ErrorKind::NotFound {
@@ -753,7 +744,12 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
 
 #[test]
 fn pfiles_matrix_covers_file_types_and_socket_families() {
-    let matrix_prefix = unique_matrix_prefix();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let matrix_prefix = format!("/tmp/ptools-pfiles-matrix-{}-{}", test_pid, unique);
     let matrix_file_path = format!("{}-file", matrix_prefix);
     let matrix_link_path = format!("{}-link", matrix_prefix);
     let stdout = common::run_ptool_with_options(
@@ -971,10 +967,29 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
 
 #[test]
 fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let sockopts_ready_path = format!("/tmp/ptools-sockopts-ready-{}-{}", test_pid, unique);
+    let sockopts_ready_file = Path::new(&sockopts_ready_path);
+    if let Err(e) = fs::remove_file(sockopts_ready_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())
+        }
+    }
+
     let output = Command::new(common::find_exec("examples/pfiles_sockopts_parent"))
+        .env("PTOOLS_SOCKOPTS_READY_FILE", &sockopts_ready_path)
         .stdin(Stdio::null())
         .output()
         .expect("failed to run pfiles_sockopts_parent");
+    if let Err(e) = fs::remove_file(sockopts_ready_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())
+        }
+    }
 
     assert!(
         output.status.success(),
