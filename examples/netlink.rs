@@ -26,7 +26,7 @@ use std::time::Duration;
 
 fn main() {
     let signal_path =
-        env::var("PTOOLS_TEST_READY_FILE").unwrap_or_else(|_| "/tmp/ptools-test-ready".to_string());
+        env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
 
     let fd = socket(
         AddressFamily::Netlink,

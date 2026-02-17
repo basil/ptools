@@ -99,9 +99,8 @@ fn main() {
     allow_ptrace_for_tests();
 
     let signal_path =
-        env::var("PTOOLS_TEST_READY_FILE").unwrap_or_else(|_| "/tmp/ptools-test-ready".to_string());
-    let matrix_prefix = env::var("PTOOLS_MATRIX_PREFIX")
-        .unwrap_or_else(|_| "/tmp/ptools-pfiles-matrix".to_string());
+        env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
+    let matrix_prefix = env::var("PTOOLS_MATRIX_PREFIX").expect("PTOOLS_MATRIX_PREFIX must be set");
 
     let tmp_file_path = format!("{}-file", matrix_prefix);
     let mut tmp_file = File::create(&tmp_file_path).unwrap();
