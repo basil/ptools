@@ -128,7 +128,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     assert_contains(&stdout, "O_RDWR");
     assert_contains(&stdout, "O_CLOEXEC");
     assert_contains(&stdout, "O_NONBLOCK");
-  
+
     assert_offset_for_path(&stdout, "/tmp/ptools-pfiles-matrix-file", 3);
 }
 
