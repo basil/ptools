@@ -153,7 +153,7 @@ fn print_file_type(file_type: &FileType) -> String {
 }
 
 fn print_open_flags(flags: u64) {
-    let open_flags = vec![
+    let open_flags = [
         (OFlag::O_APPEND, "O_APPEND"),
         (OFlag::O_ASYNC, "O_ASYNC"),
         (OFlag::O_CLOEXEC, "O_CLOEXEC"),
@@ -186,9 +186,9 @@ fn print_open_flags(flags: u64) {
     // O_LARGEFILE == 0. Should that get printed everywhere?
     // probably yes, if we want to match illumos
 
-    for &(flag, _desc) in open_flags.iter() {
+    for &(flag, desc) in open_flags.iter() {
         if (flags as i32 & flag.bits()) != 0 {
-            print!("|{:?}", flag); // TODO don't use debug
+            print!("|{}", desc);
         }
     }
 
