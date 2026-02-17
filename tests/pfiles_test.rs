@@ -54,6 +54,7 @@ fn pfiles_reports_epoll_anon_inode() {
 
     assert_contains(&stdout, "anon_inode(epoll)");
     assert_contains(&stdout, "anon_inode:[eventpoll]");
+    assert_contains(&stdout, "epoll tfd: 3");
 }
 
 #[test]
