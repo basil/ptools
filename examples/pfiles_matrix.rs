@@ -65,7 +65,13 @@ fn main() {
     let _tcp_client = TcpStream::connect(tcp_addr).unwrap();
     let (_tcp_server_conn, _peer) = tcp_listener.accept().unwrap();
 
+    let tcp6_listener = TcpListener::bind("[::1]:0").unwrap();
+    let tcp6_addr = tcp6_listener.local_addr().unwrap();
+    let _tcp6_client = TcpStream::connect(tcp6_addr).unwrap();
+    let (_tcp6_server_conn, _peer6) = tcp6_listener.accept().unwrap();
+
     let _udp_socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let _udp6_socket = UdpSocket::bind("[::1]:0").unwrap();
 
     // Signal parent process (the test process) that this process is ready to be observed by the
     // ptool being tested.
@@ -83,6 +89,7 @@ fn main() {
         eventfd,
         unix_listener,
         tcp_listener,
+        tcp6_listener,
     );
 
     loop {

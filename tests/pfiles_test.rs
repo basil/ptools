@@ -517,10 +517,48 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> "
     );
 
-    let inet_dgram_fd = find_fd_containing(&fd_map, "SOCK_DGRAM");
+    let inet6_listen_fd = find_first_fd_matching(
+        &fd_map,
+        |block| {
+            block.contains("SOCK_STREAM")
+                && block.contains("sockname: AF_INET6")
+                && !block.contains("peername: AF_INET6")
+        },
+        "SOCK_STREAM + sockname: AF_INET6 without peername",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&inet6_listen_fd).expect("expected inet6 listen fd")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>"
+    );
+
+    let inet6_peer_fd = find_first_fd_matching(
+        &fd_map,
+        |block| block.contains("SOCK_STREAM") && block.contains("peername: AF_INET6"),
+        "SOCK_STREAM + peername: AF_INET6",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&inet6_peer_fd).expect("expected fd with inet6 peername")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> "
+    );
+
+    let inet_dgram_fd = find_first_fd_matching(
+        &fd_map,
+        |block| block.contains("SOCK_DGRAM") && block.contains("sockname: AF_INET "),
+        "SOCK_DGRAM + sockname: AF_INET",
+    );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet_dgram_fd).expect("expected inet dgram fd")),
         "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>"
+    );
+
+    let inet6_dgram_fd = find_first_fd_matching(
+        &fd_map,
+        |block| block.contains("SOCK_DGRAM") && block.contains("sockname: AF_INET6"),
+        "SOCK_DGRAM + sockname: AF_INET6",
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&inet6_dgram_fd).expect("expected inet6 dgram fd")),
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_DGRAM\n         sockname: AF_INET6 ::1  port: <dynamic>"
     );
 
     assert_offset_for_path(&stdout, "/tmp/ptools-pfiles-matrix-file", 3);

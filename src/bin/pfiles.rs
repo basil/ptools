@@ -24,12 +24,11 @@ use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::path::Path;
 use std::process::exit;
 
-// TODO Test pfiles against processes with IPv6 sockets
 // TODO llumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
 // TODO Finish pfiles (handle remaining file types)
 
@@ -330,17 +329,11 @@ fn print_sock_address(sock_info: &SockInfo) {
 
     // If we have some additional info to print about the remote side of this socket, print it here
 
-    // TODO check that addr is not 0.0.0.0 or :: (Actually, should we make it such that sockaddrs
-    // are none in these cases)?
     if let Some(addr) = sock_info.peer_addr {
-        if addr.ip() != IpAddr::from([0, 0, 0, 0])
-            && addr.ip() != IpAddr::from([0, 0, 0, 0, 0, 0, 0, 0])
-        {
-            println!(
-                "         peername: {} ",
-                inet_address_str(sock_info.family, Some(addr))
-            );
-        }
+        println!(
+            "         peername: {} ",
+            inet_address_str(sock_info.family, Some(addr))
+        );
     }
     // TODO for unix sockets, or for tcp connections connected to another process on this machine,
     // see if we can find and print the pid/comm of the other process
@@ -382,6 +375,44 @@ fn parse_ipv4_sock_addr(s: &str) -> Result<SocketAddr, ParseError> {
     let addr = Ipv4Addr::from(addr_native_endian.to_be());
 
     Ok(SocketAddr::new(IpAddr::V4(addr), port))
+}
+
+// Parse a socket address of the form "00000000000000000000000001000000:1538"
+// (i.e. ::1:5432)
+fn parse_ipv6_sock_addr(s: &str) -> Result<SocketAddr, ParseError> {
+    let mk_err = || {
+        ParseError::new(
+            "IPv6 address",
+            &format!(
+                "expected address in form '00000000000000000000000001000000:1538', got {}",
+                s
+            ),
+        )
+    };
+
+    let fields = s.split(':').collect::<Vec<_>>();
+    if fields.len() != 2 || fields[0].len() != 32 {
+        return Err(mk_err());
+    }
+
+    let port = u16::from_str_radix(fields[1], 16).map_err(|_| mk_err())?;
+
+    let mut octets = [0u8; 16];
+    for (i, chunk) in fields[0].as_bytes().chunks_exact(8).enumerate() {
+        let chunk = std::str::from_utf8(chunk).map_err(|_| mk_err())?;
+        let native = u32::from_str_radix(chunk, 16).map_err(|_| mk_err())?;
+        octets[i * 4..(i + 1) * 4].copy_from_slice(&native.to_be().to_be_bytes());
+    }
+
+    Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(octets)), port))
+}
+
+fn concrete_peer_addr(addr: SocketAddr) -> Option<SocketAddr> {
+    if addr.ip().is_unspecified() {
+        None
+    } else {
+        Some(addr)
+    }
 }
 
 // Turn a Result into an Option, printing an error message indicating the error and the file where
@@ -442,34 +473,69 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
         sockets.extend(netlink_sockets);
     }
 
-    // procfs entries for tcp, udp, and raw sockets all use same format
-    let mut parse_file = |filename, s_type| {
-        if let Some(file) = ptools::open_or_warn(&format!("/proc/{}/net/{}", pid, filename)) {
-            let additional_sockets = BufReader::new(file)
-                .lines()
-                .skip(1) // Header
-                .map(move |line| {
-                    let line = line?;
-                    let fields = line.split_whitespace().collect::<Vec<&str>>();
-                    let inode = fields[9].parse()?;
-                    let sock_info = SockInfo {
-                        family: AddressFamily::Inet,
-                        sock_type: s_type,
-                        local_addr: Some(parse_ipv4_sock_addr(fields[1])?),
-                        peer_addr: Some(parse_ipv4_sock_addr(fields[2])?),
-                        peer_pid: None,
-                        inode: inode,
-                    };
-                    Ok((inode, sock_info))
-                })
-                .filter_map(|sock_info| ok_or_eprint(sock_info, filename));
-            sockets.extend(additional_sockets);
-        }
-    };
+    // procfs entries for tcp/udp/raw sockets (both IPv4 and IPv6) all use same format
+    let mut parse_file =
+        |filename, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, ParseError>| {
+            if let Some(file) = ptools::open_or_warn(&format!("/proc/{}/net/{}", pid, filename)) {
+                let additional_sockets = BufReader::new(file)
+                    .lines()
+                    .skip(1) // Header
+                    .map(move |line| {
+                        let line = line?;
+                        let fields = line.split_whitespace().collect::<Vec<&str>>();
+                        let inode = fields[9].parse()?;
+                        let peer_addr = parse_addr(fields[2])?;
+                        let sock_info = SockInfo {
+                            family,
+                            sock_type: s_type,
+                            local_addr: Some(parse_addr(fields[1])?),
+                            peer_addr: concrete_peer_addr(peer_addr),
+                            peer_pid: None,
+                            inode: inode,
+                        };
+                        Ok((inode, sock_info))
+                    })
+                    .filter_map(|sock_info| ok_or_eprint(sock_info, filename));
+                sockets.extend(additional_sockets);
+            }
+        };
 
-    parse_file("tcp", SockType::Stream);
-    parse_file("udp", SockType::Datagram);
-    parse_file("raw", SockType::Raw);
+    parse_file(
+        "tcp",
+        SockType::Stream,
+        AddressFamily::Inet,
+        parse_ipv4_sock_addr,
+    );
+    parse_file(
+        "udp",
+        SockType::Datagram,
+        AddressFamily::Inet,
+        parse_ipv4_sock_addr,
+    );
+    parse_file(
+        "raw",
+        SockType::Raw,
+        AddressFamily::Inet,
+        parse_ipv4_sock_addr,
+    );
+    parse_file(
+        "tcp6",
+        SockType::Stream,
+        AddressFamily::Inet6,
+        parse_ipv6_sock_addr,
+    );
+    parse_file(
+        "udp6",
+        SockType::Datagram,
+        AddressFamily::Inet6,
+        parse_ipv6_sock_addr,
+    );
+    parse_file(
+        "raw6",
+        SockType::Raw,
+        AddressFamily::Inet6,
+        parse_ipv6_sock_addr,
+    );
 
     sockets
 }
@@ -546,7 +612,6 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
             // sockets. That way we can at least print the protocol even if we weren't able to find
             // any info for the socket in procfs.
             // TODO make sure we are displaying information that is for the correct namespace
-            // TODO handle IPv6
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 print_sock_type(&sock_info.sock_type);
