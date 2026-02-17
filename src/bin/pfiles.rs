@@ -16,10 +16,10 @@
 
 use clap::{command, value_parser, Arg};
 use nix::fcntl::OFlag;
-use nix::sys::socket::AddressFamily;
+use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
 use ptools::ParseError;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
 use std::fs::File;
@@ -28,6 +28,12 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::path::Path;
 use std::process::exit;
+
+#[derive(Clone)]
+struct PeerProcess {
+    pid: u64,
+    comm: String,
+}
 
 // TODO llumos pfiles prints socket options for sockets. Is there any way to read those on Linux?
 // TODO Finish pfiles (handle remaining file types)
@@ -422,8 +428,10 @@ fn inet_address_str(addr_fam: AddressFamily, addr: Option<SocketAddr>) -> String
     )
 }
 
-fn print_sock_address(sock_info: &SockInfo) {
-    if let Some(peer_pid) = sock_info.peer_pid {
+fn print_sock_address(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
+    if let Some(peer) = peer {
+        println!("         peer: {}[{}]", peer.comm, peer.pid);
+    } else if let Some(peer_pid) = sock_info.peer_pid {
         println!("         peerpid: {}", peer_pid);
     }
 
@@ -451,6 +459,154 @@ fn print_sock_address(sock_info: &SockInfo) {
 
     // TODO for unix sockets, or for tcp connections connected to another process on this machine,
     // see if we can find and print the pid/comm of the other process
+}
+
+fn read_comm(pid: u64) -> Option<String> {
+    fs::read_to_string(format!("/proc/{}/comm", pid))
+        .ok()
+        .map(|comm| comm.trim_end().to_string())
+}
+
+fn read_socket_inode(path: &Path) -> Option<u64> {
+    let link = fs::read_link(path).ok()?;
+    let text = link.to_str()?;
+    if !text.starts_with("socket:[") || !text.ends_with(']') {
+        return None;
+    }
+    text.trim_start_matches("socket:[")
+        .trim_end_matches(']')
+        .parse::<u64>()
+        .ok()
+}
+
+fn list_socket_owners() -> HashMap<u64, HashSet<u64>> {
+    let mut owners = HashMap::<u64, HashSet<u64>>::new();
+    let proc_entries = match fs::read_dir("/proc") {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!("failed to read /proc for socket ownership lookup: {}", e);
+            return owners;
+        }
+    };
+
+    for entry in proc_entries.flatten() {
+        let pid = match entry.file_name().to_string_lossy().parse::<u64>() {
+            Ok(pid) => pid,
+            Err(_) => continue,
+        };
+
+        let fd_dir = format!("/proc/{}/fd", pid);
+        let Ok(fd_entries) = fs::read_dir(fd_dir) else {
+            continue;
+        };
+
+        for fd_entry in fd_entries.flatten() {
+            if let Some(inode) = read_socket_inode(&fd_entry.path()) {
+                owners.entry(inode).or_default().insert(pid);
+            }
+        }
+    }
+
+    owners
+}
+
+fn local_tcp_peer_inodes(sockets: &HashMap<u64, SockInfo>) -> HashMap<u64, u64> {
+    let mut by_tuple = HashMap::<(AddressFamily, SocketAddr, SocketAddr), Vec<u64>>::new();
+    for sock in sockets.values() {
+        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
+            || !matches!(sock.sock_type, SockType::Stream)
+        {
+            continue;
+        }
+        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
+            continue;
+        };
+        by_tuple
+            .entry((sock.family, local_addr, peer_addr))
+            .or_default()
+            .push(sock.inode);
+    }
+
+    let mut peers = HashMap::new();
+    for sock in sockets.values() {
+        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
+            || !matches!(sock.sock_type, SockType::Stream)
+        {
+            continue;
+        }
+        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
+            continue;
+        };
+        if !(local_addr.ip().is_loopback() && peer_addr.ip().is_loopback()) {
+            continue;
+        }
+
+        if let Some(candidates) = by_tuple.get(&(sock.family, peer_addr, local_addr)) {
+            if let Some(peer_inode) = candidates
+                .iter()
+                .copied()
+                .find(|inode| *inode != sock.inode)
+            {
+                peers.insert(sock.inode, peer_inode);
+            }
+        }
+    }
+    peers
+}
+
+fn derive_peer_processes(
+    target_pid: u64,
+    sockets: &HashMap<u64, SockInfo>,
+) -> HashMap<u64, PeerProcess> {
+    let mut peers = HashMap::new();
+    let owners = list_socket_owners();
+    let mut comm_cache = HashMap::<u64, String>::new();
+
+    for (inode, peer_inode) in local_tcp_peer_inodes(sockets) {
+        let Some(pids) = owners.get(&peer_inode) else {
+            continue;
+        };
+
+        let chosen_pid = pids
+            .iter()
+            .copied()
+            .find(|pid| *pid != target_pid)
+            .or_else(|| pids.iter().copied().next());
+        let Some(chosen_pid) = chosen_pid else {
+            continue;
+        };
+
+        let comm = if let Some(comm) = comm_cache.get(&chosen_pid) {
+            comm.clone()
+        } else {
+            let Some(comm) = read_comm(chosen_pid) else {
+                continue;
+            };
+            comm_cache.insert(chosen_pid, comm.clone());
+            comm
+        };
+
+        peers.insert(
+            inode,
+            PeerProcess {
+                pid: chosen_pid,
+                comm,
+            },
+        );
+    }
+
+    peers
+}
+
+fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
+    let fd_file = File::open(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
+    let creds = getsockopt(&fd_file, sockopt::PeerCredentials).ok()?;
+    let peer_pid = creds.pid() as u64;
+    let comm = read_comm(peer_pid)?;
+    Some(PeerProcess {
+        pid: peer_pid,
+        comm,
+    })
 }
 
 fn parse_tcp_state(state_hex: &str) -> Result<TcpState, ParseIntError> {
@@ -723,7 +879,12 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
 //           SO_REUSEADDR,SO_SNDBUF(16777216),SO_RCVBUF(4194304)
 //           sockname: AF_INET6 ::  port: 8341
 
-fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
+fn print_file(
+    pid: u64,
+    fd: u64,
+    sockets: &HashMap<u64, SockInfo>,
+    peers: &HashMap<u64, PeerProcess>,
+) {
     let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
     let link_path = Path::new(&link_path_str);
     let stat_info = match stat(link_path) {
@@ -774,7 +935,15 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 print_sock_type(&sock_info.sock_type);
-                print_sock_address(&sock_info);
+                let peer =
+                    peers
+                        .get(&sock_info.inode)
+                        .cloned()
+                        .or_else(|| match sock_info.family {
+                            AddressFamily::Unix => unix_peer_process(pid, fd),
+                            _ => None,
+                        });
+                print_sock_address(&sock_info, peer.as_ref());
             } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
                 println!(
                     "         sockname: {}",
@@ -892,6 +1061,7 @@ fn print_files(pid: u64) -> bool {
     }
 
     let sockets = fetch_sock_info(pid);
+    let peers = derive_peer_processes(pid, &sockets);
 
     let fd_dir = format!("/proc/{}/fd/", pid);
     let readdir_res = fs::read_dir(&fd_dir).and_then(|entries| {
@@ -900,7 +1070,7 @@ fn print_files(pid: u64) -> bool {
             let filename = entry.file_name();
             let filename = filename.to_string_lossy();
             if let Ok(fd) = (&filename).parse::<u64>() {
-                print_file(pid, fd, &sockets);
+                print_file(pid, fd, &sockets, &peers);
             } else {
                 eprint!("Unexpected file /proc/[pid]/fd/{} found", &filename);
             }

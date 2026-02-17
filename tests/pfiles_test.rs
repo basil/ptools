@@ -69,6 +69,7 @@ fn normalize_line(line: &str) -> String {
     normalized = replace_pipe_inode(&normalized);
     normalized = replace_port(&normalized);
     normalized = replace_after_marker(&normalized, "epoll tfd: ", "<dynamic>");
+    normalized = replace_peer_pid(&normalized);
 
     normalized
 }
@@ -151,6 +152,25 @@ fn replace_port(line: &str) -> String {
     }
 
     format!("{}port: <dynamic>{}", &line[..start], &line[value_end..])
+}
+
+fn replace_peer_pid(line: &str) -> String {
+    let Some(start) = line.find("peer: ") else {
+        return line.to_string();
+    };
+    let Some(open_rel) = line[start..].find('[') else {
+        return line.to_string();
+    };
+    let open = start + open_rel;
+    let Some(close_rel) = line[open + 1..].find(']') else {
+        return line.to_string();
+    };
+    let close = open + 1 + close_rel;
+    if !line[open + 1..close].chars().all(|c| c.is_ascii_digit()) {
+        return line.to_string();
+    }
+
+    format!("{}[<dynamic>]{}", &line[..open], &line[close + 1..])
 }
 
 fn replace_after_marker(line: &str, marker: &str, replacement: &str) -> String {
@@ -678,7 +698,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet_peer_fd).expect("expected fd with peername")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         peer: pfiles_matrix[<dynamic>]\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED"
     );
 
     let inet6_listen_fd = find_first_fd_matching(
@@ -702,7 +722,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&inet6_peer_fd).expect("expected fd with inet6 peername")),
-        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED"
+        "S_IFSOCK mode:777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         offset: 0\n         SOCK_STREAM\n         peer: pfiles_matrix[<dynamic>]\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED"
     );
 
     let inet_dgram_fd = find_first_fd_matching(
