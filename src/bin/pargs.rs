@@ -15,7 +15,9 @@
 //
 
 use clap::{command, value_parser, Arg, ArgAction};
+use nix::libc;
 use std::io::Read;
+use std::mem::size_of;
 
 fn read_cmdline(pid: u64) -> Option<Vec<Vec<u8>>> {
     if let Some(mut file) = ptools::open_or_warn(&format!("/proc/{}/cmdline", pid)) {
@@ -49,6 +51,87 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
+const AUX_NAMES: &[(u64, &str)] = &[
+    (libc::AT_BASE as u64, "AT_BASE"),
+    (libc::AT_BASE_PLATFORM as u64, "AT_BASE_PLATFORM"),
+    (libc::AT_CLKTCK as u64, "AT_CLKTCK"),
+    (libc::AT_EGID as u64, "AT_EGID"),
+    (libc::AT_ENTRY as u64, "AT_ENTRY"),
+    (libc::AT_EUID as u64, "AT_EUID"),
+    (libc::AT_EXECFD as u64, "AT_EXECFD"),
+    (libc::AT_EXECFN as u64, "AT_EXECFN"),
+    (libc::AT_FLAGS as u64, "AT_FLAGS"),
+    (libc::AT_GID as u64, "AT_GID"),
+    (libc::AT_HWCAP2 as u64, "AT_HWCAP2"),
+    (libc::AT_HWCAP as u64, "AT_HWCAP"),
+    (libc::AT_IGNORE as u64, "AT_IGNORE"),
+    (libc::AT_MINSIGSTKSZ as u64, "AT_MINSIGSTKSZ"),
+    (libc::AT_NOTELF as u64, "AT_NOTELF"),
+    (libc::AT_NULL as u64, "AT_NULL"),
+    (libc::AT_PAGESZ as u64, "AT_PAGESZ"),
+    (libc::AT_PHDR as u64, "AT_PHDR"),
+    (libc::AT_PHENT as u64, "AT_PHENT"),
+    (libc::AT_PHNUM as u64, "AT_PHNUM"),
+    (libc::AT_PLATFORM as u64, "AT_PLATFORM"),
+    (libc::AT_RANDOM as u64, "AT_RANDOM"),
+    (libc::AT_SECURE as u64, "AT_SECURE"),
+    (libc::AT_SYSINFO_EHDR as u64, "AT_SYSINFO_EHDR"),
+    (libc::AT_UID as u64, "AT_UID"),
+];
+
+fn aux_key_name(key: u64) -> String {
+    AUX_NAMES
+        .iter()
+        .find_map(|(k, name)| (*k == key).then_some(*name))
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("AT_{}", key))
+}
+
+fn parse_native_word(chunk: &[u8]) -> u64 {
+    #[cfg(target_pointer_width = "64")]
+    {
+        let mut raw = [0u8; 8];
+        raw.copy_from_slice(chunk);
+        u64::from_ne_bytes(raw)
+    }
+    #[cfg(target_pointer_width = "32")]
+    {
+        let mut raw = [0u8; 4];
+        raw.copy_from_slice(chunk);
+        u32::from_ne_bytes(raw) as u64
+    }
+}
+
+fn read_auxv(pid: u64) -> Option<Vec<(u64, u64)>> {
+    if let Some(mut file) = ptools::open_or_warn(&format!("/proc/{}/auxv", pid)) {
+        let mut bytes = Vec::new();
+        if let Err(e) = file.read_to_end(&mut bytes) {
+            eprintln!("Error reading auxv: {}", e);
+            return None;
+        }
+
+        let word_size = size_of::<usize>();
+        let record_size = word_size * 2;
+        if record_size == 0 || bytes.len() % record_size != 0 {
+            eprintln!("Error parsing auxv: unexpected auxv size {}", bytes.len());
+            return None;
+        }
+
+        let mut result = Vec::new();
+        for chunk in bytes.chunks_exact(record_size) {
+            let key = parse_native_word(&chunk[..word_size]);
+            let value = parse_native_word(&chunk[word_size..record_size]);
+            if key == 0 {
+                break;
+            }
+            result.push((key, value));
+        }
+        Some(result)
+    } else {
+        None
+    }
+}
+
 fn print_args(pid: u64) {
     if let Some(args) = read_cmdline(pid) {
         ptools::print_proc_summary(pid);
@@ -66,6 +149,15 @@ fn print_cmdline(pid: u64) {
             .map(|arg| shell_quote(&String::from_utf8_lossy(arg)))
             .collect::<Vec<_>>();
         println!("{}", quoted.join(" "));
+    }
+}
+
+fn print_auxv(pid: u64) {
+    if let Some(auxv) = read_auxv(pid) {
+        ptools::print_proc_summary(pid);
+        for (key, value) in auxv {
+            println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+        }
     }
 }
 
@@ -95,6 +187,13 @@ fn main() {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("auxv")
+                .short('x')
+                .long("auxv")
+                .help("Print process auxiliary vector")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("pid")
                 .value_name("PID")
                 .help("Process ID (PID)")
@@ -106,8 +205,9 @@ fn main() {
 
     let do_print_args = matches.get_flag("args");
     let do_print_env = matches.get_flag("env");
+    let do_print_auxv = matches.get_flag("auxv");
     let do_print_line = matches.get_flag("line");
-    let want_args = do_print_args || !do_print_env;
+    let want_args = do_print_args || (!do_print_env && !do_print_auxv);
 
     for pid in matches.get_many::<u64>("pid").unwrap() {
         if want_args {
@@ -119,6 +219,9 @@ fn main() {
         }
         if do_print_env {
             ptools::print_env(*pid);
+        }
+        if do_print_auxv {
+            print_auxv(*pid);
         }
     }
 }

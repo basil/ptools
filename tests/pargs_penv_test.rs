@@ -148,3 +148,59 @@ fn pargs_e_alias_matches_started_process_environment() {
         }
     }
 }
+
+#[test]
+fn pargs_x_prints_auxv_entries() {
+    let stdout = common::run_ptool_with_options("pargs", &["-x"], "examples/args_env", &[], &[]);
+
+    assert!(
+        !stdout.contains("argv["),
+        "pargs -x should not print argv lines:\n\n{}\n\n",
+        stdout
+    );
+    assert!(
+        !stdout.contains("envp["),
+        "pargs -x should not print env lines:\n\n{}\n\n",
+        stdout
+    );
+
+    let mut saw_auxv_line = false;
+    for line in stdout.lines() {
+        if !line.starts_with("AT_") {
+            continue;
+        }
+        saw_auxv_line = true;
+        let mut parts = line.split_whitespace();
+        let _key = parts.next().unwrap();
+        let value = parts.next().unwrap_or("");
+        assert!(
+            value.starts_with("0x") && value.len() == 18,
+            "Expected auxv value to be fixed-width hex, got '{}' in line '{}'",
+            value,
+            line
+        );
+    }
+
+    assert!(
+        saw_auxv_line,
+        "Expected at least one auxv AT_* line:\n\n{}\n\n",
+        stdout
+    );
+    let pagesz_line = stdout
+        .lines()
+        .find(|line| line.starts_with("AT_PAGESZ"))
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ in pargs -x output:\n\n{}\n\n", stdout));
+    let pagesz_hex = pagesz_line
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ value in line '{}'", pagesz_line));
+    let pagesz = u64::from_str_radix(pagesz_hex.trim_start_matches("0x"), 16)
+        .unwrap_or_else(|_| panic!("Expected AT_PAGESZ hex value, got '{}'", pagesz_hex));
+    let allowed_page_sizes = [0x1000_u64, 0x4000_u64, 0x10000_u64];
+    assert!(
+        allowed_page_sizes.contains(&pagesz),
+        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?} for amd64/arm64",
+        pagesz,
+        allowed_page_sizes
+    );
+}
