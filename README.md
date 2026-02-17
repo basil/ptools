@@ -56,6 +56,13 @@ The integration tests in `tests/` execute ptools binaries via
 `tests/common::run_ptool`, so make sure the `target/debug/<tool>` binaries are
 instrumented (the `cargo build --bins` step above does that).
 
+`tests/pfiles_test::pfiles_resolves_socket_metadata_for_target_net_namespace` is an
+end-to-end regression check for socket resolution across network namespaces. It
+uses `unshare --net` to run an example process in a separate net namespace and
+verifies `pfiles` still resolves socket metadata via `/proc/<pid>/net/*`. In
+environments where unprivileged net namespace creation is blocked, the test
+self-skips and prints the reason.
+
 ## Why ptools?
 
 Linux already has a number of mechanisms which can be used to inspect the state

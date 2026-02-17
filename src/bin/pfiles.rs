@@ -486,6 +486,9 @@ fn ok_or_eprint<T>(r: Result<T, Box<dyn Error>>, filename: &str) -> Option<T> {
 // by inode
 fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
     let mut sockets = HashMap::new();
+    // Socket table data is namespace-scoped in procfs. Always read from
+    // /proc/<target-pid>/net/* so inode->socket metadata resolution is done in
+    // the target process's network namespace instead of our own.
     let filename = format!("/proc/{}/net/unix", pid);
     if let Some(file) = ptools::open_or_warn(&filename) {
         let unix_sockets = BufReader::new(file)
@@ -677,7 +680,8 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
             // TODO We should read the 'system.sockprotoname' xattr for /proc/[pid]/fd/[fd] for
             // sockets. That way we can at least print the protocol even if we weren't able to find
             // any info for the socket in procfs.
-            // TODO make sure we are displaying information that is for the correct namespace
+            // Socket metadata is resolved from /proc/<pid>/net/*, so inode lookups are
+            // evaluated in the target process's network namespace.
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 print_sock_type(&sock_info.sock_type);

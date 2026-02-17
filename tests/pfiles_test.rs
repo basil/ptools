@@ -7,6 +7,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn assert_contains(output: &str, needle: &str) {
     assert!(
@@ -300,7 +301,16 @@ fn pfiles_prints_current_nofile_rlimit() {
     const EXPECTED_SOFT: u64 = 123;
     const EXPECTED_HARD: u64 = 456;
 
-    let signal_file = Path::new("/tmp/ptools-test-ready");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let signal_path = format!(
+        "/tmp/ptools-test-ready-{}-{}",
+        std::process::id(),
+        unique
+    );
+    let signal_file = Path::new(&signal_path);
     if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
             panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
@@ -311,7 +321,8 @@ fn pfiles_prints_current_nofile_rlimit() {
     examined_proc
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
-        .stdout(Stdio::inherit());
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path);
 
     unsafe {
         examined_proc.pre_exec(|| {
@@ -343,6 +354,11 @@ fn pfiles_prints_current_nofile_rlimit() {
         .expect("failed to run pfiles");
 
     examined_proc.kill().expect("failed to kill child process");
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
 
     assert!(output.status.success());
 
@@ -378,6 +394,95 @@ fn pfiles_reports_epoll_anon_inode() {
         normalize_dynamic_fields(fd_map.get(&epoll_fd).expect("expected eventpoll fd")),
         "anon_inode(epoll) mode:600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         offset: 0\n       anon_inode:[eventpoll]\n       epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
     );
+}
+
+#[test]
+fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let signal_path = format!(
+        "/tmp/ptools-test-ready-{}-{}",
+        std::process::id(),
+        unique
+    );
+    let signal_file = Path::new(&signal_path);
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    let example = common::find_exec("examples/pfiles_matrix");
+    let mut unshare_cmd = Command::new("unshare");
+    unshare_cmd
+        .arg("--net")
+        .arg(example)
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let mut examined_proc = match unshare_cmd.spawn() {
+        Ok(child) => child,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("Skipping net namespace e2e test: unshare not installed");
+            return;
+        }
+        Err(e) => panic!("failed to launch unshare for pfiles_matrix: {}", e),
+    };
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc
+            .try_wait()
+            .expect("failed waiting for unshare child")
+        {
+            let stderr = examined_proc
+                .wait_with_output()
+                .expect("failed to collect unshare output")
+                .stderr;
+            let stderr = String::from_utf8_lossy(&stderr);
+            if status.code() == Some(1)
+                && (stderr.contains("Operation not permitted")
+                    || stderr.contains("unshare failed")
+                    || stderr.contains("Invalid argument"))
+            {
+                eprintln!(
+                    "Skipping net namespace e2e test: unshare unavailable in this environment: {}",
+                    stderr.trim()
+                );
+                return;
+            }
+            panic!(
+                "unshare child exited before readiness signal, status: {}, stderr: {}",
+                status, stderr
+            );
+        }
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run pfiles");
+
+    examined_proc.kill().expect("failed to kill unshare child");
+    if let Err(e) = fs::remove_file(signal_file) {
+        if e.kind() != io::ErrorKind::NotFound {
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
+        }
+    }
+
+    assert!(output.status.success(), "pfiles failed: {:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        !stdout.contains("ERROR: failed to find info for socket with inode num"),
+        "socket metadata lookup failed unexpectedly in target net namespace:
+{}",
+        stdout
+    );
+    assert_contains(&stdout, "sockname: AF_INET 127.0.0.1");
 }
 
 #[test]
