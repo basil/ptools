@@ -16,6 +16,21 @@
 
 mod common;
 
+fn shell_quote(arg: &str) -> String {
+    if arg.is_empty() {
+        return "''".to_string();
+    }
+
+    let is_shell_safe = arg
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b"_@%+=:,./-".contains(&b));
+    if is_shell_safe {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\"'\"'"))
+    }
+}
+
 #[test]
 fn pargs_matches_started_process_arguments() {
     let expected_args = [
@@ -48,6 +63,44 @@ fn pargs_matches_started_process_arguments() {
             );
         }
     }
+}
+
+#[test]
+fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
+    let expected_args = [
+        "simple",
+        "contains spaces",
+        "quote\"inside",
+        "unicode-✓",
+        "tabs\tinside",
+    ];
+
+    let regular_stdout =
+        common::run_ptool_with_options("pargs", &[], "examples/args_env", &expected_args, &[]);
+    let argv0 = regular_stdout
+        .lines()
+        .find(|line| line.starts_with("argv[0]: "))
+        .unwrap()
+        .trim_start_matches("argv[0]: ");
+
+    let stdout =
+        common::run_ptool_with_options("pargs", &["-l"], "examples/args_env", &expected_args, &[]);
+
+    let mut lines = stdout.lines();
+    let command_line = lines.next().unwrap_or("");
+    assert_eq!(
+        lines.next(),
+        None,
+        "Expected a single command-line output line, got:\n\n{}\n\n",
+        stdout
+    );
+
+    let expected_line = std::iter::once(argv0)
+        .chain(expected_args.iter().copied())
+        .map(shell_quote)
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(command_line, expected_line);
 }
 
 #[test]

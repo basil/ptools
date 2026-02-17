@@ -15,23 +15,57 @@
 //
 
 use clap::{command, value_parser, Arg, ArgAction};
-use std::io::{BufRead, BufReader};
+use std::io::Read;
+
+fn read_cmdline(pid: u64) -> Option<Vec<Vec<u8>>> {
+    if let Some(mut file) = ptools::open_or_warn(&format!("/proc/{}/cmdline", pid)) {
+        let mut bytes = Vec::new();
+        if let Err(e) = file.read_to_end(&mut bytes) {
+            eprintln!("Error reading args: {}", e);
+            return None;
+        }
+        let mut args: Vec<Vec<u8>> = bytes.split(|b| *b == b'\0').map(<[u8]>::to_vec).collect();
+        if args.last().is_some_and(|arg| arg.is_empty()) {
+            args.pop();
+        }
+        Some(args)
+    } else {
+        None
+    }
+}
+
+fn shell_quote(arg: &str) -> String {
+    if arg.is_empty() {
+        return "''".to_string();
+    }
+
+    let is_shell_safe = arg
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b"_@%+=:,./-".contains(&b));
+    if is_shell_safe {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\"'\"'"))
+    }
+}
 
 fn print_args(pid: u64) {
-    if let Some(file) = ptools::open_or_warn(&format!("/proc/{}/cmdline", pid)) {
+    if let Some(args) = read_cmdline(pid) {
         ptools::print_proc_summary(pid);
-
-        for (i, bytes) in BufReader::new(file).split('\0' as u8).enumerate() {
-            match &bytes {
-                Ok(bytes) => {
-                    let arg = String::from_utf8_lossy(bytes);
-                    println!("argv[{}]: {}", i, arg);
-                }
-                Err(e) => {
-                    eprint!("Error reading args: {}", e)
-                }
-            }
+        for (i, bytes) in args.iter().enumerate() {
+            let arg = String::from_utf8_lossy(bytes);
+            println!("argv[{}]: {}", i, arg);
         }
+    }
+}
+
+fn print_cmdline(pid: u64) {
+    if let Some(args) = read_cmdline(pid) {
+        let quoted = args
+            .iter()
+            .map(|arg| shell_quote(&String::from_utf8_lossy(arg)))
+            .collect::<Vec<_>>();
+        println!("{}", quoted.join(" "));
     }
 }
 
@@ -39,6 +73,12 @@ fn main() {
     let matches = command!()
         .about("Print process arguments")
         .trailing_var_arg(true)
+        .arg(
+            Arg::new("line")
+                .short('l')
+                .help("Display arguments as command line")
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new("args")
                 .short('a')
@@ -66,11 +106,16 @@ fn main() {
 
     let do_print_args = matches.get_flag("args");
     let do_print_env = matches.get_flag("env");
+    let do_print_line = matches.get_flag("line");
     let want_args = do_print_args || !do_print_env;
 
     for pid in matches.get_many::<u64>("pid").unwrap() {
         if want_args {
-            print_args(*pid);
+            if do_print_line {
+                print_cmdline(*pid);
+            } else {
+                print_args(*pid);
+            }
         }
         if do_print_env {
             ptools::print_env(*pid);
