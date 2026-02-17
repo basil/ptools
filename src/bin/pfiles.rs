@@ -538,7 +538,6 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
         Err(e) => eprintln!("failed to read fd offset: {}", e),
     }
 
-    // TODO we can print more specific information for epoll fds by looking at /proc/[pid]/fdinfo/[fd]
     match file_type {
         FileType::Posix(PosixFileType::Socket) => {
             // TODO We should read the 'system.sockprotoname' xattr for /proc/[pid]/fd/[fd] for
@@ -558,9 +557,70 @@ fn print_file(pid: u64, fd: u64, sockets: &HashMap<u64, SockInfo>) {
             }
         }
         _ => match fs::read_link(link_path) {
-            Ok(path) => println!("       {}", path.to_string_lossy()),
+            Ok(path) => {
+                println!("       {}", path.to_string_lossy());
+                if path == Path::new("anon_inode:[eventpoll]") {
+                    print_epoll_fdinfo(pid, fd);
+                }
+            }
             Err(e) => eprintln!("failed to readlink {}: {}", &link_path_str, e),
         },
+    }
+}
+
+fn print_epoll_fdinfo(pid: u64, fd: u64) {
+    let fdinfo_path = format!("/proc/{}/fdinfo/{}", pid, fd);
+    let fdinfo = match fs::read_to_string(&fdinfo_path) {
+        Ok(fdinfo) => fdinfo,
+        Err(e) => {
+            eprintln!("failed to read {}: {}", &fdinfo_path, e);
+            return;
+        }
+    };
+
+    for line in fdinfo.lines().filter(|line| line.starts_with("tfd:")) {
+        let mut parts = line.split_whitespace().peekable();
+        let mut tfd = None;
+        let mut events = None;
+        let mut data = None;
+        let mut ino = None;
+
+        while let Some(part) = parts.next() {
+            if let Some((key, value)) = part.split_once(':') {
+                if !value.is_empty() {
+                    match key {
+                        "pos" => {}
+                        "ino" => ino = Some(value),
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                if let Some(value) = parts.next() {
+                    match key {
+                        "tfd" => tfd = Some(value),
+                        "events" => events = Some(value),
+                        "data" => data = Some(value),
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        print!("       epoll");
+        if let Some(tfd) = tfd {
+            print!(" tfd: {}", tfd);
+        }
+        if let Some(events) = events {
+            print!(" events: {}", events);
+        }
+        if let Some(data) = data {
+            print!(" data: {}", data);
+        }
+        if let Some(ino) = ino {
+            print!(" ino: {}", ino);
+        }
+        println!();
     }
 }
 
