@@ -694,7 +694,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
             eprintln!("Skipping net namespace e2e test: unshare not installed");
             return;
         }
-        Err(e) => panic!("failed to launch unshare for pfiles_matrix: {}", e),
+        Err(e) => panic!("failed to launch unshare for pfiles_netlink: {}", e),
     };
 
     while !signal_file.exists() {
@@ -831,11 +831,11 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
     remove_if_exists(ready_file);
 
     let mut examined_proc = Command::new(common::find_exec("examples/pfiles_af_alg"))
+        .arg(&status_path)
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
         .env("PTOOLS_TEST_READY_FILE", &ready_path)
-        .env("PTOOLS_AFALG_STATUS_FILE", &status_path)
         .spawn()
         .unwrap();
 
@@ -891,12 +891,6 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
 
     let test_pid = std::process::id();
 
-    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-file-{}-{}", test_pid, unique);
-    let matrix_file_file = Path::new(&matrix_file_path);
-
-    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-link-{}-{}", test_pid, unique);
-    let matrix_link_file = Path::new(&matrix_link_path);
-
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
     remove_if_exists(signal_file);
@@ -905,8 +899,6 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
         .env("PTOOLS_TEST_READY_FILE", &signal_path)
-        .env("PTOOLS_MATRIX_FILE_FILE", matrix_file_path.as_str())
-        .env("PTOOLS_MATRIX_LINK_FILE", matrix_link_path.as_str())
         .spawn()
         .unwrap();
 
@@ -943,36 +935,6 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n       /dev/null\n       offset: 0"
     );
 
-    let reg_fd = find_fd_by_path(
-        &fd_map,
-        matrix_file_file
-            .to_str()
-            .expect("matrix file path should be valid utf-8"),
-    );
-    assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
-        format!(
-            "S_IFREG mode:0644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n       {}\n       offset: 3",
-            matrix_file_file
-                .to_str()
-                .expect("matrix file path should be valid utf-8")
-        )
-    );
-    let symlink_fd = find_fd_by_path(
-        &fd_map,
-        matrix_link_file
-            .to_str()
-            .expect("matrix link path should be valid utf-8"),
-    );
-    assert_eq!(
-        normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
-        format!(
-            "S_IFLNK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n       {}\n       offset: 0",
-            matrix_link_file
-                .to_str()
-                .expect("matrix link path should be valid utf-8")
-        )
-    );
     let dir_fd = find_fd_by_path(&fd_map, &cwd);
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&dir_fd).expect("expected cwd directory fd")),
@@ -1097,13 +1059,6 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         inotify_lines[4]
     );
 
-    let unix_stream_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_UNIX\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
-    assert_eq!(
-        count_normalized_exact_blocks(&fd_map, unix_stream_expected),
-        1,
-        "expected exactly one unix listener socket block"
-    );
-
     let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
     let inet_listen_without_congestion = drop_congestion_control_line(inet_listen_expected);
     let inet_listen_count = count_normalized_exact_blocks(&fd_map, inet_listen_expected)
@@ -1147,6 +1102,142 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         1,
         "expected exactly one IPv6 datagram socket block"
     );
+}
+
+#[test]
+fn pfiles_matrix_unix_socket() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+    remove_if_exists(signal_file);
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_matrix_unix_socket"))
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
+    let fd_map = parse_fd_map(&stdout);
+
+    let unix_stream_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_UNIX\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    assert_eq!(
+        count_normalized_exact_blocks(&fd_map, unix_stream_expected),
+        1,
+        "expected exactly one unix listener socket block"
+    );
+}
+
+#[test]
+fn pfiles_matrix_file_and_symlink_paths() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_nanos();
+    let test_pid = std::process::id();
+
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
+
+    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-file-{}-{}", test_pid, unique);
+    let matrix_file_file = Path::new(&matrix_file_path);
+
+    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-link-{}-{}", test_pid, unique);
+    let matrix_link_file = Path::new(&matrix_link_path);
+
+    remove_if_exists(matrix_file_file);
+    remove_if_exists(matrix_link_file);
+    remove_if_exists(signal_file);
+
+    let mut examined_proc = Command::new(common::find_exec("examples/pfiles_matrix_file_link"))
+        .arg(matrix_file_path.as_str())
+        .arg(matrix_link_path.as_str())
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
+        .spawn()
+        .unwrap();
+
+    while !signal_file.exists() {
+        if let Some(status) = examined_proc.try_wait().unwrap() {
+            panic!("Child exited too soon with status {}", status)
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let output = Command::new(common::find_exec("pfiles"))
+        .arg(examined_proc.id().to_string())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let _ = examined_proc.kill();
+    let _ = examined_proc.wait();
+    remove_if_exists(signal_file);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stderr, "");
+    assert!(output.status.success());
+    let stdout = stdout.into_owned();
+    let fd_map = parse_fd_map(&stdout);
+
+    let reg_fd = find_fd_by_path(
+        &fd_map,
+        matrix_file_file
+            .to_str()
+            .expect("matrix file path should be valid utf-8"),
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
+        format!(
+            "S_IFREG mode:0644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n       {}\n       offset: 3",
+            matrix_file_file
+                .to_str()
+                .expect("matrix file path should be valid utf-8")
+        )
+    );
+
+    let symlink_fd = find_fd_by_path(
+        &fd_map,
+        matrix_link_file
+            .to_str()
+            .expect("matrix link path should be valid utf-8"),
+    );
+    assert_eq!(
+        normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
+        format!(
+            "S_IFLNK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n       {}\n       offset: 0",
+            matrix_link_file
+                .to_str()
+                .expect("matrix link path should be valid utf-8")
+        )
+    );
 
     assert_offset_for_path(
         &stdout,
@@ -1155,6 +1246,9 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
             .expect("matrix file path should be valid utf-8"),
         3,
     );
+
+    remove_if_exists(matrix_file_file);
+    remove_if_exists(matrix_link_file);
 }
 
 #[test]
@@ -1165,23 +1259,23 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
         .as_nanos();
     let test_pid = std::process::id();
 
-    let sockopts_ready_path = format!("/tmp/ptools-sockopts-ready-{}-{}", test_pid, unique);
-    let sockopts_ready_file = Path::new(&sockopts_ready_path);
+    let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+    let signal_file = Path::new(&signal_path);
 
-    if let Err(e) = fs::remove_file(sockopts_ready_file) {
+    if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
         }
     }
 
     let output = Command::new(common::find_exec("examples/pfiles_sockopts_parent"))
-        .env("PTOOLS_SOCKOPTS_READY_FILE", &sockopts_ready_path)
+        .env("PTOOLS_TEST_READY_FILE", &signal_path)
         .stdin(Stdio::null())
         .output()
         .expect("failed to run pfiles_sockopts_parent");
-    if let Err(e) = fs::remove_file(sockopts_ready_file) {
+    if let Err(e) = fs::remove_file(signal_file) {
         if e.kind() != io::ErrorKind::NotFound {
-            panic!("Failed to remove {:?}: {:?}", sockopts_ready_file, e.kind())
+            panic!("Failed to remove {:?}: {:?}", signal_file, e.kind())
         }
     }
 
@@ -1240,8 +1334,10 @@ fn pfiles_exits_nonzero_when_any_pid_fails() {
         .expect("time went backwards")
         .as_nanos();
     let test_pid = std::process::id();
+
     let signal_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
     let signal_file = Path::new(&signal_path);
+
     remove_if_exists(signal_file);
     let mut examined_proc = Command::new(common::find_exec("examples/pargs_penv"))
         .stdin(Stdio::null())

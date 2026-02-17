@@ -6,10 +6,9 @@ use nix::unistd::pipe2;
 use std::env;
 use std::ffi::CString;
 use std::fs::{self, File};
-use std::io::{Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::os::fd::{AsFd, RawFd};
-use std::os::unix::fs::{symlink, FileTypeExt};
+use std::os::unix::fs::FileTypeExt;
 use std::thread;
 use std::time::Duration;
 
@@ -100,23 +99,6 @@ fn main() {
 
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
-    let tmp_file_path =
-        env::var("PTOOLS_MATRIX_FILE_FILE").expect("PTOOLS_MATRIX_FILE_FILE must be set");
-    let symlink_path =
-        env::var("PTOOLS_MATRIX_LINK_FILE").expect("PTOOLS_MATRIX_LINK_FILE must be set");
-    let mut tmp_file = File::create(&tmp_file_path).unwrap();
-    writeln!(tmp_file, "ptools").unwrap();
-    tmp_file.seek(SeekFrom::Start(3)).unwrap();
-
-    let _ = fs::remove_file(&symlink_path);
-    symlink(&tmp_file_path, &symlink_path).unwrap();
-    let symlink_fd = open(
-        &*symlink_path,
-        OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-        Mode::empty(),
-    )
-    .unwrap();
-
     let block_device = find_block_device_path().and_then(|path| {
         open(&*path, OFlag::O_PATH | OFlag::O_CLOEXEC, Mode::empty())
             .ok()
@@ -143,12 +125,6 @@ fn main() {
         }
     }
 
-    let unix_socket_path = format!("{}.sock", tmp_file_path);
-    let _ = std::fs::remove_file(&unix_socket_path);
-    let unix_listener = std::os::unix::net::UnixListener::bind(&unix_socket_path).unwrap();
-    let _unix_client = std::os::unix::net::UnixStream::connect(&unix_socket_path).unwrap();
-    let (_unix_server_conn, _unix_addr) = unix_listener.accept().unwrap();
-
     let tcp_listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let tcp_addr = tcp_listener.local_addr().unwrap();
     let _tcp_client = TcpStream::connect(tcp_addr).unwrap();
@@ -168,8 +144,6 @@ fn main() {
 
     // Keep all descriptors alive until killed by test harness.
     let _keep_alive = (
-        tmp_file,
-        symlink_fd,
         block_device,
         dirfd,
         pipe_read,
@@ -179,7 +153,6 @@ fn main() {
         signalfd,
         timerfd,
         inotify_fd,
-        unix_listener,
         tcp_listener,
         tcp6_listener,
     );
