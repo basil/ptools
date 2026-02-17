@@ -1,7 +1,7 @@
 mod common;
 
-use std::process::Command;
 use std::os::unix::fs::FileTypeExt;
+use std::process::Command;
 
 fn assert_contains(output: &str, needle: &str) {
     assert!(
@@ -11,7 +11,6 @@ fn assert_contains(output: &str, needle: &str) {
         output
     );
 }
-
 
 fn find_block_device_path() -> Option<String> {
     std::fs::read_dir("/dev").ok()?.flatten().find_map(|entry| {
@@ -119,5 +118,4 @@ fn pfiles_exits_nonzero_when_any_pid_fails() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_contains(&stderr, "No such directory /proc/999999999/");
-
 }

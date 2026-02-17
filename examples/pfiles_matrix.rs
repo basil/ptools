@@ -5,9 +5,9 @@ use nix::sys::stat::Mode;
 use nix::unistd::pipe2;
 use std::fs::{self, File};
 use std::io::Write;
-use std::os::unix::fs::{symlink, FileTypeExt};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::os::fd::AsFd;
+use std::os::unix::fs::{symlink, FileTypeExt};
 use std::thread;
 use std::time::Duration;
 
@@ -53,8 +53,10 @@ fn main() {
     epoll.add(eventfd.as_fd(), event).unwrap();
 
     let _ = std::fs::remove_file("/tmp/ptools-pfiles-matrix.sock");
-    let unix_listener = std::os::unix::net::UnixListener::bind("/tmp/ptools-pfiles-matrix.sock").unwrap();
-    let _unix_client = std::os::unix::net::UnixStream::connect("/tmp/ptools-pfiles-matrix.sock").unwrap();
+    let unix_listener =
+        std::os::unix::net::UnixListener::bind("/tmp/ptools-pfiles-matrix.sock").unwrap();
+    let _unix_client =
+        std::os::unix::net::UnixStream::connect("/tmp/ptools-pfiles-matrix.sock").unwrap();
     let (_unix_server_conn, _unix_addr) = unix_listener.accept().unwrap();
 
     let tcp_listener = TcpListener::bind("127.0.0.1:0").unwrap();

@@ -637,7 +637,10 @@ mod test {
         assert!(matches!(parse_sock_type("6").unwrap(), SockType::Dccp));
         assert!(matches!(parse_sock_type("10").unwrap(), SockType::Packet));
 
-        assert!(matches!(parse_sock_type("999").unwrap(), SockType::Unknown(999)));
+        assert!(matches!(
+            parse_sock_type("999").unwrap(),
+            SockType::Unknown(999)
+        ));
         assert!(parse_sock_type("abc").is_err());
     }
 
@@ -669,7 +672,10 @@ mod test {
         let dummy = Path::new("/proc/self/fd/0");
 
         let symlink_type = file_type(SFlag::S_IFLNK.bits(), dummy);
-        assert!(matches!(symlink_type, FileType::Posix(PosixFileType::SymLink)));
+        assert!(matches!(
+            symlink_type,
+            FileType::Posix(PosixFileType::SymLink)
+        ));
         assert_eq!(print_file_type(&symlink_type), "S_IFLNK");
 
         let block_device_type = file_type(SFlag::S_IFBLK.bits(), dummy);

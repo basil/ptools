@@ -43,7 +43,13 @@ pub fn run_ptool_with_options(
     test_proc_args: &[&str],
     test_proc_env: &[(&str, &str)],
 ) -> String {
-    let output = run_ptool_with_options_and_capture(tool, tool_args, test_proc, test_proc_args, test_proc_env);
+    let output = run_ptool_with_options_and_capture(
+        tool,
+        tool_args,
+        test_proc,
+        test_proc_args,
+        test_proc_env,
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stderr, "");
