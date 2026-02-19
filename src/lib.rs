@@ -22,7 +22,6 @@ use std::io::{BufRead, BufReader, Read};
 // TODO Add a type alias for Result<Foo, Box<Error>>
 // TODO Add support for handling core dumps
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
-// TODO Replace top-level .unwrap()s with nicer error messages
 // TODO Test against 32-bit processes
 
 // Error handling philosophy: in general these tools should try to recover from errors and continue
