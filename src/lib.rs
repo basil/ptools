@@ -145,11 +145,7 @@ impl ParseError {
     }
 }
 
-impl Error for ParseError {
-    fn description(&self) -> &str {
-        &self.reason
-    }
-}
+impl Error for ParseError {}
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
