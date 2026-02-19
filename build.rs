@@ -23,6 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     render_man_page(cli::PargsCli::command(), out_dir)?;
     render_man_page(cli::PenvCli::command(), out_dir)?;
     render_man_page(cli::PfilesCli::command(), out_dir)?;
+    render_man_page(cli::PflagsCli::command(), out_dir)?;
     render_man_page(cli::PsigCli::command(), out_dir)?;
     render_man_page(cli::PtreeCli::command(), out_dir)?;
 

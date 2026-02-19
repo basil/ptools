@@ -43,7 +43,7 @@ To generate man pages from the same Clap help definitions used by each binary:
 $ cargo run --bin gen-man-pages
 ```
 
-This writes `pargs.1`, `penv.1`, `pfiles.1`, `psig.1`, and `ptree.1` to `target/man/`.
+This writes `pargs.1`, `penv.1`, `pfiles.1`, `pflags.1`, `psig.1`, and `ptree.1` to `target/man/`.
 
 ## Why ptools?
 
@@ -62,9 +62,10 @@ make this same consistent debugging experience available on Linux.
 
 The following utilities are currently available:
 
-| Command     | Description                                                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------ |
+| Command     | Description                                                                                     |
+| ----------- | ----------------------------------------------------------------------------------------------- |
 | `pfiles(1)` | Show the open files and sockets of the process, as well as their corresponding file descriptors |
+| `pflags(1)` | Show process status flags, pending and held signals, and per-thread state                       |
 | `pargs(1)`  | Show the command line arguments passed to the process                                           |
 | `penv(1)`   | Show the environment of the process                                                             |
 | `psig(1)`   | Show process signal actions                                                                     |

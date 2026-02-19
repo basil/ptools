@@ -64,10 +64,10 @@ pub struct PenvCli {
     name = "pfiles",
     version,
     about = "Print information for all open files in each process",
-    long_about = "Report fstat(2) and fcntl(2) information for all open files in each process. \
+    long_about = "Print fstat(2) and fcntl(2) information for all open files in each process. \
 For network endpoints, provide local address information and peer address information when \
 connected. For sockets, provide the socket type, socket options, and send and receive buffer \
-sizes. Also report a path to the file when that information is available from /proc/pid/fd. \
+sizes. Also print a path to the file when that information is available from /proc/pid/fd. \
 Do not assume this is the same name used to open the file. See proc(5) for more information.",
     trailing_var_arg = true
 )]
@@ -91,8 +91,8 @@ pub struct PfilesCli {
 #[command(
     name = "psig",
     version,
-    about = "Report process signal actions",
-    long_about = "List the signal actions and handlers of each process.",
+    about = "Print process signal actions",
+    long_about = "Print the signal actions and handlers of each process.",
     trailing_var_arg = true
 )]
 pub struct PsigCli {
@@ -101,6 +101,25 @@ pub struct PsigCli {
     /// A list of process IDs (PIDs)
     #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..))]
     pub pid: Vec<u64>,
+}
+
+#[derive(Parser)]
+#[command(
+    name = "pflags",
+    version,
+    about = "Print process status flags",
+    long_about = "Print the process status flags, the pending and held signals, \
+and other status information for each process or specified threads in each process. \
+If a thread has a non-empty signal mask, it will be printed.",
+    trailing_var_arg = true
+)]
+pub struct PflagsCli {
+    /// Process ID, optionally with thread ID
+    ///
+    /// A list of process IDs, optionally qualified with a thread ID
+    /// (e.g. 1234 or 1234/5)
+    #[arg(value_name = "PID[/TID]", required = true, num_args = 1..)]
+    pub pid: Vec<String>,
 }
 
 #[derive(Parser)]
