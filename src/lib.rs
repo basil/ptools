@@ -42,6 +42,47 @@ use std::io::{BufRead, BufReader, Read};
 
 pub mod cli;
 
+/// A parsed PID with an optional thread (LWP) filter.
+pub struct PidSpec {
+    pub pid: u64,
+    pub tid: Option<u64>,
+}
+
+pub fn parse_pid_spec(s: &str) -> Result<PidSpec, String> {
+    if let Some((pid_str, tid_str)) = s.split_once('/') {
+        let pid = pid_str
+            .parse::<u64>()
+            .map_err(|e| format!("invalid PID '{}': {}", pid_str, e))?;
+        let tid = tid_str
+            .parse::<u64>()
+            .map_err(|e| format!("invalid thread ID '{}': {}", tid_str, e))?;
+        if pid == 0 {
+            return Err("PID must be >= 1".to_string());
+        }
+        Ok(PidSpec {
+            pid,
+            tid: Some(tid),
+        })
+    } else {
+        let pid = s
+            .parse::<u64>()
+            .map_err(|e| format!("invalid PID '{}': {}", s, e))?;
+        if pid == 0 {
+            return Err("PID must be >= 1".to_string());
+        }
+        Ok(PidSpec { pid, tid: None })
+    }
+}
+
+/// Read the state character from /proc/[pid]/stat.
+pub fn proc_state(pid: u64) -> Option<char> {
+    let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+    // Use rfind to handle comm fields containing parentheses, e.g. "(a)b)".
+    let after_comm = stat.rfind(')')? + 1;
+    let rest = stat[after_comm..].trim_start();
+    rest.chars().next()
+}
+
 pub fn open_or_warn(filename: &str) -> Option<File> {
     match File::open(filename) {
         Ok(file) => Some(file),

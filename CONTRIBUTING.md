@@ -23,11 +23,13 @@ $ llvm-profdata merge -sparse target/coverage/*.profraw -o target/coverage/ptool
 $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
   --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
-  --object target/debug/psig \
+  --object target/debug/pflags --object target/debug/prun \
+  --object target/debug/psig --object target/debug/pstop \
   --object target/debug/ptree
 $ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
-  --object target/debug/psig \
+  --object target/debug/pflags --object target/debug/prun \
+  --object target/debug/psig --object target/debug/pstop \
   --object target/debug/ptree > target/coverage/lcov.info
 ```
 

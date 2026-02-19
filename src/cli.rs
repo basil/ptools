@@ -124,6 +124,38 @@ pub struct PflagsCli {
 
 #[derive(Parser)]
 #[command(
+    name = "pstop",
+    version,
+    about = "Stop processes with SIGSTOP",
+    long_about = "Stop each process by sending SIGSTOP.",
+    trailing_var_arg = true
+)]
+pub struct PstopCli {
+    /// Process ID (PID)
+    ///
+    /// A list of process IDs (PIDs)
+    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..))]
+    pub pid: Vec<u64>,
+}
+
+#[derive(Parser)]
+#[command(
+    name = "prun",
+    version,
+    about = "Set stopped processes running with SIGCONT",
+    long_about = "Set running each process by sending SIGCONT (the inverse of pstop).",
+    trailing_var_arg = true
+)]
+pub struct PrunCli {
+    /// Process ID (PID)
+    ///
+    /// A list of process IDs (PIDs)
+    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..))]
+    pub pid: Vec<u64>,
+}
+
+#[derive(Parser)]
+#[command(
     name = "ptree",
     version,
     about = "Print process trees",

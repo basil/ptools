@@ -18,38 +18,7 @@ use std::fs::{self, File};
 use std::io::Read;
 
 use nix::libc;
-
-/// A parsed PID with an optional thread (LWP) filter.
-struct PidSpec {
-    pid: u64,
-    tid: Option<u64>,
-}
-
-fn parse_pid_spec(s: &str) -> Result<PidSpec, String> {
-    if let Some((pid_str, tid_str)) = s.split_once('/') {
-        let pid = pid_str
-            .parse::<u64>()
-            .map_err(|e| format!("invalid PID '{}': {}", pid_str, e))?;
-        let tid = tid_str
-            .parse::<u64>()
-            .map_err(|e| format!("invalid thread ID '{}': {}", tid_str, e))?;
-        if pid == 0 {
-            return Err("PID must be >= 1".to_string());
-        }
-        Ok(PidSpec {
-            pid,
-            tid: Some(tid),
-        })
-    } else {
-        let pid = s
-            .parse::<u64>()
-            .map_err(|e| format!("invalid PID '{}': {}", s, e))?;
-        if pid == 0 {
-            return Err("PID must be >= 1".to_string());
-        }
-        Ok(PidSpec { pid, tid: None })
-    }
-}
+use ptools::PidSpec;
 
 fn data_model(pid: u64) -> Option<&'static str> {
     let exe_path = fs::read_link(format!("/proc/{}/exe", pid)).ok()?;
@@ -152,7 +121,7 @@ fn thread_state_name(state: char) -> &'static str {
 fn parse_stat_flags(stat_line: &str) -> Option<u64> {
     // Fields in /proc/[pid]/stat are space-separated, but field 2 (comm) is in
     // parentheses and may contain spaces. Find the last ')' to skip past comm.
-    let after_comm = stat_line.find(')')? + 1;
+    let after_comm = stat_line.rfind(')')? + 1;
     let rest = stat_line[after_comm..].trim_start();
     // rest starts at field 3 (state). Fields: 3=state 4=ppid 5=pgrp 6=session
     // 7=tty_nr 8=tpgid 9=flags
@@ -166,7 +135,7 @@ fn parse_stat_flags(stat_line: &str) -> Option<u64> {
 
 /// Parse the state field (field 3) from /proc/[pid]/stat.
 fn parse_stat_state(stat_line: &str) -> Option<char> {
-    let after_comm = stat_line.find(')')? + 1;
+    let after_comm = stat_line.rfind(')')? + 1;
     let rest = stat_line[after_comm..].trim_start();
     rest.chars().next()
 }
@@ -609,7 +578,7 @@ fn main() {
     let cli = PflagsCli::parse();
 
     for arg in &cli.pid {
-        match parse_pid_spec(arg) {
+        match ptools::parse_pid_spec(arg) {
             Ok(spec) => print_flags(&spec),
             Err(e) => eprintln!("pflags: {}", e),
         }

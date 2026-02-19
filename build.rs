@@ -24,7 +24,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     render_man_page(cli::PenvCli::command(), out_dir)?;
     render_man_page(cli::PfilesCli::command(), out_dir)?;
     render_man_page(cli::PflagsCli::command(), out_dir)?;
+    render_man_page(cli::PrunCli::command(), out_dir)?;
     render_man_page(cli::PsigCli::command(), out_dir)?;
+    render_man_page(cli::PstopCli::command(), out_dir)?;
     render_man_page(cli::PtreeCli::command(), out_dir)?;
 
     println!("cargo:rerun-if-changed=src/cli.rs");
