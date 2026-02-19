@@ -156,7 +156,13 @@ fn main() {
     let want_args = args.args || (!args.env && !args.auxv);
 
     let mut error = false;
+    let mut first = true;
     for &pid in &args.pid {
+        if !first {
+            println!();
+        }
+        first = false;
+        let mut section = false;
         if want_args {
             if args.line {
                 if !print_cmdline(pid) {
@@ -167,13 +173,21 @@ fn main() {
                     error = true;
                 }
             }
+            section = true;
         }
         if args.env {
+            if section {
+                println!();
+            }
             if !ptools::print_env(pid) {
                 error = true;
             }
+            section = true;
         }
         if args.auxv {
+            if section {
+                println!();
+            }
             if !ptools::print_auxv(pid) {
                 error = true;
             }
