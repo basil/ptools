@@ -63,6 +63,7 @@ Solaris/illumos which have not been implemented here yet, perhaps most notably
 | Command        | Description                                           | Status                 |
 | -------------- | ----------------------------------------------------- | ---------------------- |
 | `pargs(1)`     | Print process arguments                               | ✅ Implemented         |
+| `pauxv(1)`     | Print process auxiliary vector                        | ✅ Implemented         |
 | `pcred(1)`     | Print or modify process credentials                   | 🔲 Not yet implemented |
 | `penv(1)`      | Print process environment variables                   | ✅ Implemented         |
 | `pfiles(1)`    | Print information for all open files in each process  | ✅ Implemented         |

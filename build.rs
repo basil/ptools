@@ -66,6 +66,15 @@ fn main() {
     );
 
     render_man_page(
+        "pauxv",
+        "Print process auxiliary vector",
+        "Examine a target process and print the auxiliary vector.",
+        "PID...",
+        &[],
+        out_dir,
+    );
+
+    render_man_page(
         "penv",
         "Print process environment variables",
         "Examine a target process and print environment variables and values.",

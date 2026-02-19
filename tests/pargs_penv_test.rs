@@ -185,6 +185,100 @@ fn pargs_e_alias_matches_started_process_environment() {
 }
 
 #[test]
+fn pauxv_prints_auxv_entries() {
+    let output = common::run_ptool("pauxv", &[], "examples/pargs_penv", &[], &[], false);
+    let stdout = common::assert_success_and_get_stdout(output);
+
+    assert!(
+        !stdout.contains("argv["),
+        "pauxv should not print argv lines:\n\n{}\n\n",
+        stdout
+    );
+    assert!(
+        !stdout.contains("envp["),
+        "pauxv should not print env lines:\n\n{}\n\n",
+        stdout
+    );
+
+    let mut saw_auxv_line = false;
+    for line in stdout.lines() {
+        if !line.starts_with("AT_") {
+            continue;
+        }
+        saw_auxv_line = true;
+        let mut parts = line.split_whitespace();
+        let _key = parts.next().unwrap();
+        let value = parts.next().unwrap_or("");
+        assert!(
+            value.starts_with("0x") && value.len() == 18,
+            "Expected auxv value to be fixed-width hex, got '{}' in line '{}'",
+            value,
+            line
+        );
+    }
+
+    assert!(
+        saw_auxv_line,
+        "Expected at least one auxv AT_* line:\n\n{}\n\n",
+        stdout
+    );
+    let pagesz_line = stdout
+        .lines()
+        .find(|line| line.starts_with("AT_PAGESZ"))
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ in pauxv output:\n\n{}\n\n", stdout));
+    let pagesz_hex = pagesz_line
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ value in line '{}'", pagesz_line));
+    let pagesz = u64::from_str_radix(pagesz_hex.trim_start_matches("0x"), 16)
+        .unwrap_or_else(|_| panic!("Expected AT_PAGESZ hex value, got '{}'", pagesz_hex));
+    let allowed_page_sizes = [0x1000_u64, 0x4000_u64, 0x10000_u64];
+    assert!(
+        allowed_page_sizes.contains(&pagesz),
+        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?} for amd64/arm64",
+        pagesz,
+        allowed_page_sizes
+    );
+}
+
+#[test]
+fn pargs_x_alias_matches_pauxv_output() {
+    let pauxv_output = common::run_ptool("pauxv", &[], "examples/pargs_penv", &[], &[], false);
+    let pauxv_stdout = common::assert_success_and_get_stdout(pauxv_output);
+
+    let pargs_output = common::run_ptool("pargs", &["-x"], "examples/pargs_penv", &[], &[], false);
+    let pargs_stdout = common::assert_success_and_get_stdout(pargs_output);
+
+    // Both should contain AT_PAGESZ
+    assert!(
+        pauxv_stdout.contains("AT_PAGESZ"),
+        "pauxv should contain AT_PAGESZ:\n\n{}\n\n",
+        pauxv_stdout
+    );
+    assert!(
+        pargs_stdout.contains("AT_PAGESZ"),
+        "pargs -x should contain AT_PAGESZ:\n\n{}\n\n",
+        pargs_stdout
+    );
+
+    // Both should have the same set of AT_* keys
+    let pauxv_keys: Vec<&str> = pauxv_stdout
+        .lines()
+        .filter(|line| line.starts_with("AT_"))
+        .map(|line| line.split_whitespace().next().unwrap())
+        .collect();
+    let pargs_keys: Vec<&str> = pargs_stdout
+        .lines()
+        .filter(|line| line.starts_with("AT_"))
+        .map(|line| line.split_whitespace().next().unwrap())
+        .collect();
+    assert_eq!(
+        pauxv_keys, pargs_keys,
+        "pauxv and pargs -x should produce the same AT_* keys"
+    );
+}
+
+#[test]
 fn pargs_x_prints_auxv_entries() {
     let output = common::run_ptool("pargs", &["-x"], "examples/pargs_penv", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);

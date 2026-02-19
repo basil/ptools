@@ -22,15 +22,17 @@ $ RUSTFLAGS='-C instrument-coverage' \
 $ llvm-profdata merge -sparse target/coverage/*.profraw -o target/coverage/ptools.profdata
 $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
   --instr-profile=target/coverage/ptools.profdata \
-  target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
-  --object target/debug/pflags --object target/debug/prun \
-  --object target/debug/psig --object target/debug/pstop \
-  --object target/debug/ptree --object target/debug/pwait
+  target/debug/pargs --object target/debug/pauxv --object target/debug/penv \
+  --object target/debug/pfiles --object target/debug/pflags \
+  --object target/debug/prun --object target/debug/psig \
+  --object target/debug/pstop --object target/debug/ptree \
+  --object target/debug/pwait
 $ llvm-cov export --format=lcov --instr-profile=target/coverage/ptools.profdata \
-  target/debug/pargs --object target/debug/penv --object target/debug/pfiles \
-  --object target/debug/pflags --object target/debug/prun \
-  --object target/debug/psig --object target/debug/pstop \
-  --object target/debug/ptree --object target/debug/pwait > target/coverage/lcov.info
+  target/debug/pargs --object target/debug/pauxv --object target/debug/penv \
+  --object target/debug/pfiles --object target/debug/pflags \
+  --object target/debug/prun --object target/debug/psig \
+  --object target/debug/pstop --object target/debug/ptree \
+  --object target/debug/pwait > target/coverage/lcov.info
 ```
 
 The integration tests in `tests/` execute ptools binaries via

@@ -1,0 +1,81 @@
+//
+//   Copyright 2026 Basil Crow
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+
+use std::process::exit;
+
+struct Args {
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: pauxv PID...");
+    eprintln!("Print process auxiliary vector.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args { pid: Vec::new() };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("pauxv: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("pauxv {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("pauxv: invalid PID '{s}'");
+                        exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("pauxv: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("pauxv: at least one PID required");
+        exit(2);
+    }
+    args
+}
+
+fn main() {
+    let args = parse_args();
+
+    for &pid in &args.pid {
+        ptools::print_auxv(pid);
+    }
+}
