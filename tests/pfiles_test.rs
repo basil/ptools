@@ -343,7 +343,7 @@ fn replace_tuple_value(line: &str, marker: &str, replacement: &str) -> String {
 fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
     let lines: Vec<&str> = output.lines().collect();
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains(path) {
+        if line.starts_with(' ') && line.contains(path) {
             assert!(
                 idx + 1 < lines.len(),
                 "Found path line without following output: {}",
