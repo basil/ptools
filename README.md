@@ -71,12 +71,16 @@ Solaris/illumos which have not been implemented here yet, perhaps most notably
 | `pgrep(1)`     | Find processes by name                                | ➡️ See `procps-ng`     |
 | `pkill(1)`     | Signal processes by name                              | ➡️ See `procps-ng`     |
 | `pldd(1)`      | Print process dynamic libraries                       | ➡️ See `glibc`         |
+| `plgrp(1)`     | Print or modify home lgroup and lgroup affinities     | 🔲 Not yet implemented |
 | `plimit(1)`    | Get or set process resource limits                    | 🔲 Not yet implemented |
 | `plockstat(1)` | Print lock statistics                                 | 🔲 Not yet implemented |
+| `pmadvise(1)`  | Apply advice about memory to a process                | 🔲 Not yet implemented |
 | `pmap(1)`      | Print process address maps                            | ➡️ See `procps-ng`     |
 | `ppgsz(1)`     | Set preferred page size                               | 🔲 Not yet implemented |
+| `ppriv(1)`     | Print or modify process privilege sets and attributes | 🔲 Not yet implemented |
 | `preap(1)`     | Force a defunct process to be reaped                  | 🔲 Not yet implemented |
 | `prun(1)`      | Set stopped processes running with SIGCONT            | ✅ Implemented         |
+| `psecflags(1)` | Print or modify process security flags                | 🔲 Not yet implemented |
 | `psig(1)`      | Print process signal actions                          | ✅ Implemented         |
 | `pstack(1)`    | Print process call stack                              | 🔲 Not yet implemented |
 | `pstop(1)`     | Stop processes with SIGSTOP                           | ✅ Implemented         |
