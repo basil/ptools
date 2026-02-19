@@ -511,7 +511,7 @@ fn print_thread(pid: u64, tid: u64) {
     }
 }
 
-fn print_flags(spec: &PidSpec) {
+fn print_flags(spec: &PidSpec) -> bool {
     let pid = spec.pid;
 
     // Read process-level stat for flags
@@ -519,7 +519,7 @@ fn print_flags(spec: &PidSpec) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Error reading /proc/{}/stat: {}", pid, e);
-            return;
+            return false;
         }
     };
 
@@ -569,6 +569,7 @@ fn print_flags(spec: &PidSpec) {
             }
         }
     }
+    true
 }
 
 use std::process::exit;
@@ -625,10 +626,21 @@ fn parse_args() -> Args {
 fn main() {
     let args = parse_args();
 
+    let mut error = false;
     for arg in &args.pid {
         match ptools::parse_pid_spec(arg) {
-            Ok(spec) => print_flags(&spec),
-            Err(e) => eprintln!("pflags: {}", e),
+            Ok(spec) => {
+                if !print_flags(&spec) {
+                    error = true;
+                }
+            }
+            Err(e) => {
+                eprintln!("pflags: {}", e);
+                error = true;
+            }
         }
+    }
+    if error {
+        exit(1);
     }
 }

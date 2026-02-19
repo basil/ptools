@@ -75,7 +75,13 @@ fn parse_args() -> Args {
 fn main() {
     let args = parse_args();
 
+    let mut error = false;
     for &pid in &args.pid {
-        ptools::print_env(pid);
+        if !ptools::print_env(pid) {
+            error = true;
+        }
+    }
+    if error {
+        exit(1);
     }
 }

@@ -87,7 +87,7 @@ pub fn open_or_warn(filename: &str) -> Option<File> {
     }
 }
 
-pub fn print_env(pid: u64) {
+pub fn print_env(pid: u64) -> bool {
     // This contains the environ as it was when the proc was started. To get the current
     // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
@@ -119,6 +119,9 @@ pub fn print_env(pid: u64) {
                 }
             }
         }
+        true
+    } else {
+        false
     }
 }
 
@@ -452,7 +455,7 @@ fn read_proc_string(pid: u64, addr: u64) -> Option<String> {
     String::from_utf8(buf[..end].to_vec()).ok()
 }
 
-pub fn print_auxv(pid: u64) {
+pub fn print_auxv(pid: u64) -> bool {
     if let Some(auxv) = read_auxv(pid) {
         print_proc_summary(pid);
         for (key, value) in auxv {
@@ -465,6 +468,9 @@ pub fn print_auxv(pid: u64) {
                 println!("{:<15} 0x{:016x}", aux_key_name(key), value);
             }
         }
+        true
+    } else {
+        false
     }
 }
 

@@ -199,18 +199,19 @@ fn print_tree(
     parent_map: &HashMap<u64, u64>,
     child_map: &HashMap<u64, Vec<u64>>,
     graph: Option<&GraphChars>,
-) {
+) -> bool {
     let mut cont = Vec::new();
     let indent_level = if pid == 1 {
         0
     } else {
         if !parent_map.contains_key(&pid) {
             eprintln!("No such pid {}", pid);
-            return;
+            return false;
         }
         print_parents(&parent_map, pid, graph, &mut cont)
     };
     print_children(&child_map, pid, indent_level, graph, &mut cont, true);
+    true
 }
 
 fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>, graph: Option<&GraphChars>) {
@@ -420,16 +421,20 @@ fn main() {
         None
     };
 
+    let mut error = false;
     if !args.target.is_empty() {
         let mut printed = HashSet::new();
         for target in &args.target {
             if let Ok(pid) = target.parse::<u64>() {
                 if pid == 0 {
                     eprintln!("PID must be > 0: {}", pid);
+                    error = true;
                     continue;
                 }
                 if printed.insert(pid) {
-                    print_tree(pid, &parent_map, &child_map, graph);
+                    if !print_tree(pid, &parent_map, &child_map, graph) {
+                        error = true;
+                    }
                 }
                 continue;
             }
@@ -438,16 +443,24 @@ fn main() {
                 Ok(pids) => {
                     for pid in pids {
                         if printed.insert(pid) {
-                            print_tree(pid, &parent_map, &child_map, graph);
+                            if !print_tree(pid, &parent_map, &child_map, graph) {
+                                error = true;
+                            }
                         }
                     }
                 }
-                Err(e) => eprintln!("{}", e),
+                Err(e) => {
+                    eprintln!("{}", e);
+                    error = true;
+                }
             }
         }
     } else if args.all {
         print_all_trees(&child_map, graph);
     } else {
         print_tree(1, &parent_map, &child_map, graph);
+    }
+    if error {
+        exit(1);
     }
 }

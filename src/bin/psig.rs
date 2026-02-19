@@ -205,11 +205,11 @@ fn action_text(action: SignalAction) -> &'static str {
     }
 }
 
-fn print_signal_actions(pid: u64) {
+fn print_signal_actions(pid: u64) -> bool {
     ptools::print_proc_summary(pid);
 
     let Some(masks) = parse_status_signal_masks(pid) else {
-        return;
+        return false;
     };
 
     let rtmin = libc::SIGRTMIN() as usize;
@@ -243,6 +243,7 @@ fn print_signal_actions(pid: u64) {
             println!("{:<10}{}\t{}", name, action_text(action), extra.join(","));
         }
     }
+    true
 }
 
 use std::process::exit;
@@ -306,7 +307,13 @@ fn parse_args() -> Args {
 fn main() {
     let args = parse_args();
 
+    let mut error = false;
     for &pid in &args.pid {
-        print_signal_actions(pid);
+        if !print_signal_actions(pid) {
+            error = true;
+        }
+    }
+    if error {
+        exit(1);
     }
 }

@@ -48,23 +48,29 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
-fn print_args(pid: u64) {
+fn print_args(pid: u64) -> bool {
     if let Some(args) = read_cmdline(pid) {
         ptools::print_proc_summary(pid);
         for (i, bytes) in args.iter().enumerate() {
             let arg = String::from_utf8_lossy(bytes);
             println!("argv[{}]: {}", i, arg);
         }
+        true
+    } else {
+        false
     }
 }
 
-fn print_cmdline(pid: u64) {
+fn print_cmdline(pid: u64) -> bool {
     if let Some(args) = read_cmdline(pid) {
         let quoted = args
             .iter()
             .map(|arg| shell_quote(&String::from_utf8_lossy(arg)))
             .collect::<Vec<_>>();
         println!("{}", quoted.join(" "));
+        true
+    } else {
+        false
     }
 }
 
@@ -149,19 +155,31 @@ fn main() {
 
     let want_args = args.args || (!args.env && !args.auxv);
 
+    let mut error = false;
     for &pid in &args.pid {
         if want_args {
             if args.line {
-                print_cmdline(pid);
+                if !print_cmdline(pid) {
+                    error = true;
+                }
             } else {
-                print_args(pid);
+                if !print_args(pid) {
+                    error = true;
+                }
             }
         }
         if args.env {
-            ptools::print_env(pid);
+            if !ptools::print_env(pid) {
+                error = true;
+            }
         }
         if args.auxv {
-            ptools::print_auxv(pid);
+            if !ptools::print_auxv(pid) {
+                error = true;
+            }
         }
+    }
+    if error {
+        exit(1);
     }
 }
