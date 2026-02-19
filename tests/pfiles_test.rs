@@ -872,7 +872,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv4 listening socket block"
     );
 
-    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED";
+    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet_peer_expected) >= 1,
         "expected at least one IPv4 established socket block"
@@ -887,7 +887,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv6 listening socket block"
     );
 
-    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED";
+    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET6 ::1  port: <dynamic> \n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet6_peer_expected) >= 1,
         "expected at least one IPv6 established socket block"

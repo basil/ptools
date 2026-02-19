@@ -613,8 +613,7 @@ fn print_tcp_info(sock_fd: &OwnedFd) {
     println!("         rcv_space: {}", info.tcpi_rcv_space);
 }
 
-fn print_sock_address(sock_fd: Option<&OwnedFd>, sock_info: &SockInfo, peer: Option<&PeerProcess>) {
-    // If we have some additional info to print about the remote side of this socket, print it here
+fn print_peername(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
     if let Some(peer) = peer {
         println!("         peer: {}[{}]", peer.comm, peer.pid);
     } else if let Some(peer_pid) = sock_info.peer_pid {
@@ -627,7 +626,9 @@ fn print_sock_address(sock_fd: Option<&OwnedFd>, sock_info: &SockInfo, peer: Opt
             inet_address_str(sock_info.family, Some(addr))
         );
     }
+}
 
+fn print_tcp_details(sock_fd: Option<&OwnedFd>, sock_info: &SockInfo) {
     if let Some(sock_fd) = sock_fd {
         if let Some(congestion_control) = tcp_congestion_control(sock_fd) {
             println!("         congestion control: {}", congestion_control);
@@ -1125,10 +1126,6 @@ fn print_file(
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                 let sock_fd = duplicate_target_fd(pid, fd);
                 print_sockname(sock_info);
-                print_sock_type(&sock_info.sock_type);
-                if let Some(ref sock_fd) = sock_fd {
-                    print_socket_options(sock_fd);
-                }
                 let peer =
                     peers
                         .get(&sock_info.inode)
@@ -1137,7 +1134,12 @@ fn print_file(
                             AddressFamily::Unix => unix_peer_process(pid, fd),
                             _ => None,
                         });
-                print_sock_address(sock_fd.as_ref(), &sock_info, peer.as_ref());
+                print_peername(sock_info, peer.as_ref());
+                print_sock_type(&sock_info.sock_type);
+                if let Some(ref sock_fd) = sock_fd {
+                    print_socket_options(sock_fd);
+                }
+                print_tcp_details(sock_fd.as_ref(), sock_info);
             } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
                 println!(
                     "         sockname: {}",
