@@ -445,6 +445,36 @@ fn decode_hwcap(_key: u64, _value: u64) -> Option<String> {
     None
 }
 
+fn is_uid_auxv_key(key: u64) -> bool {
+    key == libc::AT_UID as u64 || key == libc::AT_EUID as u64
+}
+
+fn is_gid_auxv_key(key: u64) -> bool {
+    key == libc::AT_GID as u64 || key == libc::AT_EGID as u64
+}
+
+fn resolve_uid(uid: u32) -> Option<String> {
+    // SAFETY: getpwuid returns a pointer to a static struct or null.
+    let pw = unsafe { libc::getpwuid(uid) };
+    if pw.is_null() {
+        return None;
+    }
+    // SAFETY: pw_name is a valid C string if pw is non-null.
+    let name = unsafe { std::ffi::CStr::from_ptr((*pw).pw_name) };
+    name.to_str().ok().map(str::to_string)
+}
+
+fn resolve_gid(gid: u32) -> Option<String> {
+    // SAFETY: getgrgid returns a pointer to a static struct or null.
+    let gr = unsafe { libc::getgrgid(gid) };
+    if gr.is_null() {
+        return None;
+    }
+    // SAFETY: gr_name is a valid C string if gr is non-null.
+    let name = unsafe { std::ffi::CStr::from_ptr((*gr).gr_name) };
+    name.to_str().ok().map(str::to_string)
+}
+
 fn read_proc_string(pid: u64, addr: u64) -> Option<String> {
     let mut file = File::open(format!("/proc/{}/mem", pid)).ok()?;
     file.seek(SeekFrom::Start(addr)).ok()?;
@@ -464,6 +494,30 @@ pub fn print_auxv(pid: u64) -> bool {
                 println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, s);
             } else if let Some(flags) = decode_hwcap(key, value) {
                 println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, flags);
+            } else if is_uid_auxv_key(key) {
+                if let Some(name) = resolve_uid(value as u32) {
+                    println!(
+                        "{:<15} 0x{:016x} {}({})",
+                        aux_key_name(key),
+                        value,
+                        value,
+                        name
+                    );
+                } else {
+                    println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+                }
+            } else if is_gid_auxv_key(key) {
+                if let Some(name) = resolve_gid(value as u32) {
+                    println!(
+                        "{:<15} 0x{:016x} {}({})",
+                        aux_key_name(key),
+                        value,
+                        value,
+                        name
+                    );
+                } else {
+                    println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+                }
             } else {
                 println!("{:<15} 0x{:016x}", aux_key_name(key), value);
             }
