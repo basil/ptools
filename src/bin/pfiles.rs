@@ -1402,11 +1402,17 @@ fn parse_args() -> Args {
 fn main() {
     let args = parse_args();
 
-    let error = args
-        .pid
-        .iter()
-        .copied()
-        .any(|pid| !print_files(pid, args.non_verbose));
+    let mut error = false;
+    let mut first = true;
+    for &pid in &args.pid {
+        if !first {
+            println!();
+        }
+        first = false;
+        if !print_files(pid, args.non_verbose) {
+            error = true;
+        }
+    }
 
     if error {
         exit(1);

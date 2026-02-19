@@ -361,7 +361,12 @@ fn main() {
     let args = parse_args();
 
     let mut error = false;
+    let mut first = true;
     for &pid in &args.pid {
+        if !first {
+            println!();
+        }
+        first = false;
         if !print_signal_actions(pid) {
             error = true;
         }

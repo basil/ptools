@@ -631,7 +631,12 @@ fn main() {
     let args = parse_args();
 
     let mut error = false;
+    let mut first = true;
     for arg in &args.pid {
+        if !first {
+            println!();
+        }
+        first = false;
         match ptools::parse_pid_spec(arg) {
             Ok(spec) => {
                 if !print_flags(&spec) {
