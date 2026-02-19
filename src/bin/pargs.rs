@@ -63,10 +63,22 @@ fn print_args(pid: u64) -> bool {
 
 fn print_cmdline(pid: u64) -> bool {
     if let Some(args) = read_cmdline(pid) {
-        let quoted = args
-            .iter()
-            .map(|arg| shell_quote(&String::from_utf8_lossy(arg)))
-            .collect::<Vec<_>>();
+        // Use /proc/[pid]/exe to resolve the real executable path instead of
+        // argv[0], which may be a relative path or a name set by the process.
+        let exe = std::fs::read_link(format!("/proc/{}/exe", pid)).ok();
+        let mut quoted = Vec::with_capacity(args.len());
+        for (i, bytes) in args.iter().enumerate() {
+            let display = if i == 0 {
+                if let Some(ref path) = exe {
+                    path.to_string_lossy().into_owned()
+                } else {
+                    String::from_utf8_lossy(bytes).into_owned()
+                }
+            } else {
+                String::from_utf8_lossy(bytes).into_owned()
+            };
+            quoted.push(shell_quote(&display));
+        }
         println!("{}", quoted.join(" "));
         true
     } else {

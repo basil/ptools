@@ -82,21 +82,6 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
         "tabs\tinside",
     ];
 
-    let regular_output = common::run_ptool(
-        "pargs",
-        &[],
-        "examples/pargs_penv",
-        &expected_args,
-        &[],
-        false,
-    );
-    let regular_stdout = common::assert_success_and_get_stdout(regular_output);
-    let argv0 = regular_stdout
-        .lines()
-        .find(|line| line.starts_with("argv[0]: "))
-        .unwrap()
-        .trim_start_matches("argv[0]: ");
-
     let output = common::run_ptool(
         "pargs",
         &["-l"],
@@ -116,7 +101,12 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
         stdout
     );
 
-    let expected_line = std::iter::once(argv0)
+    // pargs -l resolves argv[0] to the real executable path via /proc/[pid]/exe,
+    // so the first token should be the canonical path to the example binary.
+    let exe_path = common::find_exec("examples/pargs_penv")
+        .canonicalize()
+        .unwrap();
+    let expected_line = std::iter::once(exe_path.to_str().unwrap())
         .chain(expected_args.iter().copied())
         .map(shell_quote)
         .collect::<Vec<_>>()
