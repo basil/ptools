@@ -43,7 +43,7 @@ To generate man pages from the same Clap help definitions used by each binary:
 $ cargo run --bin gen-man-pages
 ```
 
-This writes `pargs.1`, `penv.1`, `pfiles.1`, `pflags.1`, `prun.1`, `psig.1`, `pstop.1`, and `ptree.1` to `target/man/`.
+This writes `pargs.1`, `penv.1`, `pfiles.1`, `pflags.1`, `prun.1`, `psig.1`, `pstop.1`, `ptree.1`, and `pwait.1` to `target/man/`.
 
 ## Why ptools?
 
@@ -72,6 +72,7 @@ The following utilities are currently available:
 | `psig(1)`   | Show process signal actions                                                                     |
 | `pstop(1)`  | Stop processes                                                                                  |
 | `ptree(1)`  | Show the process tree containing the process                                                    |
+| `pwait(1)`  | Wait for processes to terminate                                                                 |
 
 There are a number of other commands available on Solaris/illumos which have not
 been implemented here yet, perhaps most notably `pstack`. Also, support for

@@ -134,7 +134,7 @@ pub struct PstopCli {
     /// Process ID (PID)
     ///
     /// A list of process IDs (PIDs)
-    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..=i32::MAX as u64))]
     pub pid: Vec<u64>,
 }
 
@@ -150,7 +150,29 @@ pub struct PrunCli {
     /// Process ID (PID)
     ///
     /// A list of process IDs (PIDs)
-    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..=i32::MAX as u64))]
+    pub pid: Vec<u64>,
+}
+
+#[derive(Parser)]
+#[command(
+    name = "pwait",
+    version,
+    about = "Wait for processes to terminate",
+    long_about = "Wait for all of the specified processes to terminate.",
+    trailing_var_arg = true
+)]
+pub struct PwaitCli {
+    /// Verbose
+    ///
+    /// Reports terminations to standard output.
+    #[arg(short = 'v')]
+    pub verbose: bool,
+
+    /// Process ID (PID)
+    ///
+    /// A list of process IDs (PIDs)
+    #[arg(value_name = "PID", required = true, num_args = 1.., value_parser = clap::value_parser!(u64).range(1..=i32::MAX as u64))]
     pub pid: Vec<u64>,
 }
 
