@@ -17,7 +17,7 @@
 use nix::libc;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
 fn read_cmdline(pid: u64) -> Option<Vec<Vec<u8>>> {
@@ -52,6 +52,10 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
+// Not yet in the libc crate for Linux (only Android).
+const AT_RSEQ_FEATURE_SIZE: u64 = 27;
+const AT_RSEQ_ALIGN: u64 = 28;
+
 const AUX_NAMES: &[(u64, &str)] = &[
     (libc::AT_BASE as u64, "AT_BASE"),
     (libc::AT_BASE_PLATFORM as u64, "AT_BASE_PLATFORM"),
@@ -75,6 +79,8 @@ const AUX_NAMES: &[(u64, &str)] = &[
     (libc::AT_PHNUM as u64, "AT_PHNUM"),
     (libc::AT_PLATFORM as u64, "AT_PLATFORM"),
     (libc::AT_RANDOM as u64, "AT_RANDOM"),
+    (AT_RSEQ_FEATURE_SIZE, "AT_RSEQ_FEATURE_SIZE"),
+    (AT_RSEQ_ALIGN, "AT_RSEQ_ALIGN"),
     (libc::AT_SECURE as u64, "AT_SECURE"),
     (libc::AT_SYSINFO_EHDR as u64, "AT_SYSINFO_EHDR"),
     (libc::AT_UID as u64, "AT_UID"),
@@ -208,11 +214,98 @@ fn print_cmdline(pid: u64) {
     }
 }
 
+fn is_string_auxv_key(key: u64) -> bool {
+    key == libc::AT_EXECFN as u64
+        || key == libc::AT_PLATFORM as u64
+        || key == libc::AT_BASE_PLATFORM as u64
+}
+
+#[cfg(target_arch = "x86_64")]
+fn decode_hwcap(key: u64, value: u64) -> Option<String> {
+    // AT_HWCAP on x86_64: CPUID leaf 1 EDX register bits
+    const HWCAP_NAMES: &[(u32, &str)] = &[
+        (0, "FPU"),
+        (1, "VME"),
+        (2, "DE"),
+        (3, "PSE"),
+        (4, "TSC"),
+        (5, "MSR"),
+        (6, "PAE"),
+        (7, "MCE"),
+        (8, "CX8"),
+        (9, "APIC"),
+        (11, "SEP"),
+        (12, "MTRR"),
+        (13, "PGE"),
+        (14, "MCA"),
+        (15, "CMOV"),
+        (16, "PAT"),
+        (17, "PSE36"),
+        (18, "PSN"),
+        (19, "CLFSH"),
+        (21, "DS"),
+        (22, "ACPI"),
+        (23, "MMX"),
+        (24, "FXSR"),
+        (25, "SSE"),
+        (26, "SSE2"),
+        (27, "SS"),
+        (28, "HTT"),
+        (29, "TM"),
+        (31, "PBE"),
+    ];
+
+    // AT_HWCAP2 on x86_64: kernel-defined bits from asm/hwcap2.h
+    const HWCAP2_NAMES: &[(u32, &str)] = &[(0, "RING3MWAIT"), (1, "FSGSBASE")];
+
+    let table = if key == libc::AT_HWCAP as u64 {
+        HWCAP_NAMES
+    } else if key == libc::AT_HWCAP2 as u64 {
+        HWCAP2_NAMES
+    } else {
+        return None;
+    };
+
+    let names: Vec<&str> = table
+        .iter()
+        .filter(|(bit, _)| value & (1u64 << bit) != 0)
+        .map(|(_, name)| *name)
+        .collect();
+
+    if names.is_empty() {
+        None
+    } else {
+        Some(names.join(" | "))
+    }
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn decode_hwcap(_key: u64, _value: u64) -> Option<String> {
+    None
+}
+
+fn read_proc_string(pid: u64, addr: u64) -> Option<String> {
+    let mut file = File::open(format!("/proc/{}/mem", pid)).ok()?;
+    file.seek(SeekFrom::Start(addr)).ok()?;
+    let mut buf = vec![0u8; 256];
+    let n = file.read(&mut buf).ok()?;
+    buf.truncate(n);
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(n);
+    String::from_utf8(buf[..end].to_vec()).ok()
+}
+
 fn print_auxv(pid: u64) {
     if let Some(auxv) = read_auxv(pid) {
         ptools::print_proc_summary(pid);
         for (key, value) in auxv {
-            println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+            if is_string_auxv_key(key) {
+                let s = read_proc_string(pid, value).unwrap_or_default();
+                println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, s);
+            } else if let Some(flags) = decode_hwcap(key, value) {
+                println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, flags);
+            } else {
+                println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+            }
         }
     }
 }
