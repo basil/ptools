@@ -240,8 +240,9 @@ fn print_open_flags(flags: u64) {
         }
     );
 
-    // O_LARGEFILE == 0. Should that get printed everywhere?
-    // probably yes, if we want to match illumos
+    // O_LARGEFILE is 0 on some architectures but 0o100000 on x86_64.
+    // On illumos it is always printed; we skip it here since it is
+    // implicit on Linux (64-bit offsets are the default).
 
     let raw_flags = flags as i32;
     for &(flag, desc) in open_flags.iter() {
