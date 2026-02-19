@@ -258,7 +258,7 @@ fn main() {
         &ManPage {
             name: "prun",
             about: "set stopped processes running",
-            description: "Set running each process by sending SIGCONT (the inverse of pstop).",
+            description: "Set running each process by sending SIGCONT (the inverse of pstop(1)).",
             synopsis: "PID...",
             options: &[],
             examples: &[],
