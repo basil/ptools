@@ -155,6 +155,11 @@ fn parse_args() -> Args {
         }
     }
 
+    if args.line && (args.env || args.auxv) {
+        eprintln!("pargs: -l is incompatible with -e and -x");
+        exit(2);
+    }
+
     if args.pid.is_empty() {
         eprintln!("pargs: at least one PID required");
         exit(2);
