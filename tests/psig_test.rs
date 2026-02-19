@@ -42,4 +42,11 @@ fn psig_reports_default_ignored_and_caught_actions() {
         "Expected TERM to remain default:\n{}",
         stdout
     );
+
+    let hup = find_line_for_signal(&stdout, "HUP");
+    assert!(
+        hup.contains("blocked"),
+        "Expected HUP to be blocked:\n{}",
+        stdout
+    );
 }

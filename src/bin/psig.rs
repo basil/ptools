@@ -55,7 +55,15 @@ fn parse_signal_set(hex: &str) -> Result<Vec<bool>, String> {
     Ok(bits)
 }
 
-fn parse_status_signal_masks(pid: u64) -> Option<(Vec<bool>, Vec<bool>)> {
+struct SignalMasks {
+    sig_ign: Vec<bool>,
+    sig_cgt: Vec<bool>,
+    sig_blk: Vec<bool>,
+    sig_pnd: Vec<bool>,
+    shd_pnd: Vec<bool>,
+}
+
+fn parse_status_signal_masks(pid: u64) -> Option<SignalMasks> {
     let status = std::fs::read_to_string(format!("/proc/{}/status", pid))
         .map_err(|e| {
             eprintln!("Error reading /proc/{}/status: {}", pid, e);
@@ -65,6 +73,9 @@ fn parse_status_signal_masks(pid: u64) -> Option<(Vec<bool>, Vec<bool>)> {
 
     let mut sig_ign = None;
     let mut sig_cgt = None;
+    let mut sig_blk = None;
+    let mut sig_pnd = None;
+    let mut shd_pnd = None;
 
     for line in status.lines() {
         if let Some((key, value)) = line.split_once(':') {
@@ -72,6 +83,9 @@ fn parse_status_signal_masks(pid: u64) -> Option<(Vec<bool>, Vec<bool>)> {
             match key {
                 "SigIgn" => sig_ign = Some(value.to_string()),
                 "SigCgt" => sig_cgt = Some(value.to_string()),
+                "SigBlk" => sig_blk = Some(value.to_string()),
+                "SigPnd" => sig_pnd = Some(value.to_string()),
+                "ShdPnd" => shd_pnd = Some(value.to_string()),
                 _ => {}
             }
         }
@@ -92,20 +106,34 @@ fn parse_status_signal_masks(pid: u64) -> Option<(Vec<bool>, Vec<bool>)> {
         }
     };
 
-    let sig_ign = parse_signal_set(&sig_ign)
-        .map_err(|e| {
-            eprintln!("Error parsing /proc/{}/status SigIgn: {}", pid, e);
-            e
-        })
-        .ok()?;
-    let sig_cgt = parse_signal_set(&sig_cgt)
-        .map_err(|e| {
-            eprintln!("Error parsing /proc/{}/status SigCgt: {}", pid, e);
-            e
-        })
-        .ok()?;
+    let parse = |name: &str, hex: &str| -> Option<Vec<bool>> {
+        parse_signal_set(hex)
+            .map_err(|e| {
+                eprintln!("Error parsing /proc/{}/status {}: {}", pid, name, e);
+                e
+            })
+            .ok()
+    };
 
-    Some((sig_ign, sig_cgt))
+    let sig_ign = parse("SigIgn", &sig_ign)?;
+    let sig_cgt = parse("SigCgt", &sig_cgt)?;
+    let sig_blk = sig_blk
+        .and_then(|s| parse("SigBlk", &s))
+        .unwrap_or_default();
+    let sig_pnd = sig_pnd
+        .and_then(|s| parse("SigPnd", &s))
+        .unwrap_or_default();
+    let shd_pnd = shd_pnd
+        .and_then(|s| parse("ShdPnd", &s))
+        .unwrap_or_default();
+
+    Some(SignalMasks {
+        sig_ign,
+        sig_cgt,
+        sig_blk,
+        sig_pnd,
+        shd_pnd,
+    })
 }
 
 fn has_signal(m: &[bool], sig: usize) -> bool {
@@ -180,7 +208,7 @@ fn action_text(action: SignalAction) -> &'static str {
 fn print_signal_actions(pid: u64) {
     ptools::print_proc_summary(pid);
 
-    let Some((sig_ign, sig_cgt)) = parse_status_signal_masks(pid) else {
+    let Some(masks) = parse_status_signal_masks(pid) else {
         return;
     };
 
@@ -191,14 +219,29 @@ fn print_signal_actions(pid: u64) {
         64,
         std::cmp::max(
             rtmax,
-            std::cmp::max(sig_ign.len(), sig_cgt.len()).saturating_sub(1),
+            std::cmp::max(masks.sig_ign.len(), masks.sig_cgt.len()).saturating_sub(1),
         ),
     );
 
     for sig in 1..=max_sig {
         let name = signal_name(sig, rtmin, rtmax);
-        let action = action_for_signal(sig, &sig_ign, &sig_cgt);
-        println!("{:<10}{}", name, action_text(action));
+        let action = action_for_signal(sig, &masks.sig_ign, &masks.sig_cgt);
+        let blocked = has_signal(&masks.sig_blk, sig);
+        let pending = has_signal(&masks.sig_pnd, sig) || has_signal(&masks.shd_pnd, sig);
+
+        let mut extra = Vec::new();
+        if blocked {
+            extra.push("blocked");
+        }
+        if pending {
+            extra.push("pending");
+        }
+
+        if extra.is_empty() {
+            println!("{:<10}{}", name, action_text(action));
+        } else {
+            println!("{:<10}{}\t{}", name, action_text(action), extra.join(","));
+        }
     }
 }
 
