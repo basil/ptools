@@ -153,6 +153,19 @@ impl ProcStat {
     }
 }
 
+// Read the start time (field 22) from /proc/[pid]/stat.
+// Field 2 (comm) is wrapped in parens and may contain spaces or parens,
+// so we find the last ')' and parse fields after it.
+fn read_starttime(pid: u64) -> Option<u64> {
+    let data = fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+    let after_comm = &data[data.rfind(')')? + 2..];
+    // Fields after comm: state(1) ppid(2) pgrp(3) session(4) tty_nr(5) tpgid(6)
+    // flags(7) minflt(8) cminflt(9) majflt(10) cmajflt(11) utime(12) stime(13)
+    // cutime(14) cstime(15) priority(16) nice(17) num_threads(18) itrealvalue(19)
+    // starttime(20)
+    after_comm.split_whitespace().nth(19)?.parse().ok()
+}
+
 // Loop over all the processes listed in /proc/, find the parent of each one, and build a map from
 // child to parent and a map from parent to children. There doesn't seem to be a more efficient way
 // of doing this reliably.
@@ -161,6 +174,7 @@ fn build_proc_maps(
     let mut child_map = HashMap::new(); // Map of pid to pids of children
     let mut parent_map = HashMap::new(); // Map of pid to pid of parent
     let mut uid_map = HashMap::new(); // Map of pid to effective uid
+    let mut starttime_map: HashMap<u64, u64> = HashMap::new();
 
     for entry in fs::read_dir("/proc")? {
         let entry = entry?;
@@ -185,10 +199,20 @@ fn build_proc_maps(
                     continue;
                 }
             };
+            if let Some(st) = read_starttime(pid) {
+                starttime_map.insert(pid, st);
+            }
             child_map.entry(ppid).or_insert(vec![]).push(pid);
             parent_map.insert(pid, ppid);
             uid_map.insert(pid, euid);
         }
+    }
+
+    // Sort children by start time (ties broken by pid)
+    for children in child_map.values_mut() {
+        children.sort_unstable_by_key(|pid| {
+            (starttime_map.get(pid).copied().unwrap_or(u64::MAX), *pid)
+        });
     }
 
     Ok((parent_map, child_map, uid_map))
