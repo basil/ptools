@@ -14,12 +14,6 @@
 //   limitations under the License.
 //
 
-// Remove jemalloc and use the system allocator instead. Jemalloc accounts for ~300K in a stripped
-// binary, and isn't useful here because we will be doing minimal allocation.
-use std::alloc::System;
-#[global_allocator]
-static ALLOCATOR: System = System;
-
 use std::error::Error;
 use std::fs::File;
 use std::io::ErrorKind;
