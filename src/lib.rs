@@ -19,7 +19,6 @@ use std::fs::File;
 use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Read};
 
-// TODO May want to save space by removing regex crate
 // TODO Add a type alias for Result<Foo, Box<Error>>
 // TODO Add support for handling core dumps
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
