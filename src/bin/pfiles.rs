@@ -390,6 +390,8 @@ struct SockInfo {
     peer_addr: Option<SocketAddr>,  // Doesn't apply to unix sockets
     peer_pid: Option<u64>,          // If the peer is another process on this system
     tcp_state: Option<TcpState>,    // TCP only
+    tx_queue: Option<u32>,          // From /proc/net/tcp tx_queue field
+    rx_queue: Option<u32>,          // From /proc/net/tcp rx_queue field
 }
 
 fn print_sock_type(sock_type: &SockType) {
@@ -433,53 +435,48 @@ fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
     None
 }
 
-fn socket_options(pid: u64, fd: u64) -> Vec<String> {
-    let Some(duplicated_fd) = duplicate_target_fd(pid, fd) else {
-        return Vec::new();
-    };
-
+fn socket_options(sock_fd: &OwnedFd) -> Vec<String> {
     let mut options = Vec::new();
 
-    if matches!(getsockopt(&duplicated_fd, sockopt::AcceptConn), Ok(true)) {
+    if matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)) {
         options.push("SO_ACCEPTCONN".to_string());
     }
-    if matches!(getsockopt(&duplicated_fd, sockopt::Broadcast), Ok(true)) {
+    if matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)) {
         options.push("SO_BROADCAST".to_string());
     }
-    if matches!(getsockopt(&duplicated_fd, sockopt::KeepAlive), Ok(true)) {
+    if matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)) {
         options.push("SO_KEEPALIVE".to_string());
     }
-    if matches!(getsockopt(&duplicated_fd, sockopt::ReuseAddr), Ok(true)) {
+    if matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)) {
         options.push("SO_REUSEADDR".to_string());
     }
-    if matches!(getsockopt(&duplicated_fd, sockopt::OobInline), Ok(true)) {
+    if matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)) {
         options.push("SO_OOBINLINE".to_string());
     }
 
-    if let Ok(sndbuf) = getsockopt(&duplicated_fd, sockopt::SndBuf) {
+    if let Ok(sndbuf) = getsockopt(sock_fd, sockopt::SndBuf) {
         options.push(format!("SO_SNDBUF({})", sndbuf));
     }
-    if let Ok(rcvbuf) = getsockopt(&duplicated_fd, sockopt::RcvBuf) {
+    if let Ok(rcvbuf) = getsockopt(sock_fd, sockopt::RcvBuf) {
         options.push(format!("SO_RCVBUF({})", rcvbuf));
     }
 
     options
 }
 
-fn print_socket_options(pid: u64, fd: u64) {
-    let options = socket_options(pid, fd);
+fn print_socket_options(sock_fd: &OwnedFd) {
+    let options = socket_options(sock_fd);
     if !options.is_empty() {
         println!("         {}", options.join(","));
     }
 }
 
-fn tcp_congestion_control(pid: u64, fd: u64) -> Option<String> {
-    let duplicated_fd = duplicate_target_fd(pid, fd)?;
+fn tcp_congestion_control(sock_fd: &OwnedFd) -> Option<String> {
     let mut buf = [0u8; 64];
     let mut len = buf.len() as nix::libc::socklen_t;
     let rc = unsafe {
         nix::libc::getsockopt(
-            duplicated_fd.as_raw_fd(),
+            sock_fd.as_raw_fd(),
             nix::libc::IPPROTO_TCP,
             nix::libc::TCP_CONGESTION,
             buf.as_mut_ptr().cast::<nix::libc::c_void>(),
@@ -495,6 +492,24 @@ fn tcp_congestion_control(pid: u64, fd: u64) -> Option<String> {
     std::str::from_utf8(&buf[..end])
         .ok()
         .map(|name| name.to_string())
+}
+
+fn tcp_info(sock_fd: &OwnedFd) -> Option<nix::libc::tcp_info> {
+    let mut info: nix::libc::tcp_info = unsafe { std::mem::zeroed() };
+    let mut len = std::mem::size_of::<nix::libc::tcp_info>() as nix::libc::socklen_t;
+    let rc = unsafe {
+        nix::libc::getsockopt(
+            sock_fd.as_raw_fd(),
+            nix::libc::IPPROTO_TCP,
+            nix::libc::TCP_INFO,
+            (&raw mut info).cast::<nix::libc::c_void>(),
+            &raw mut len,
+        )
+    };
+    if rc != 0 {
+        return None;
+    }
+    Some(info)
 }
 
 fn address_family_str(addr_fam: AddressFamily) -> &'static str {
@@ -567,7 +582,38 @@ fn print_sockname(sock_info: &SockInfo) {
     );
 }
 
-fn print_sock_address(pid: u64, fd: u64, sock_info: &SockInfo, peer: Option<&PeerProcess>) {
+fn print_tcp_info(sock_fd: &OwnedFd) {
+    let Some(info) = tcp_info(sock_fd) else {
+        return;
+    };
+
+    let snd_wscale = info.tcpi_snd_rcv_wscale & 0x0f;
+    let rcv_wscale = (info.tcpi_snd_rcv_wscale >> 4) & 0x0f;
+    println!(
+        "         cwnd: {}  ssthresh: {}",
+        info.tcpi_snd_cwnd, info.tcpi_snd_ssthresh,
+    );
+    println!(
+        "         snd_wscale: {}  rcv_wscale: {}",
+        snd_wscale, rcv_wscale,
+    );
+
+    let rtt_ms = info.tcpi_rtt as f64 / 1000.0;
+    let rttvar_ms = info.tcpi_rttvar as f64 / 1000.0;
+    println!("         rtt: {:.3}ms  rttvar: {:.3}ms", rtt_ms, rttvar_ms,);
+
+    println!(
+        "         snd_mss: {}  rcv_mss: {}  advmss: {}  pmtu: {}",
+        info.tcpi_snd_mss, info.tcpi_rcv_mss, info.tcpi_advmss, info.tcpi_pmtu,
+    );
+    println!(
+        "         unacked: {}  retrans: {}/{}  lost: {}",
+        info.tcpi_unacked, info.tcpi_retrans, info.tcpi_total_retrans, info.tcpi_lost,
+    );
+    println!("         rcv_space: {}", info.tcpi_rcv_space);
+}
+
+fn print_sock_address(sock_fd: Option<&OwnedFd>, sock_info: &SockInfo, peer: Option<&PeerProcess>) {
     // If we have some additional info to print about the remote side of this socket, print it here
     if let Some(peer) = peer {
         println!("         peer: {}[{}]", peer.comm, peer.pid);
@@ -582,14 +628,26 @@ fn print_sock_address(pid: u64, fd: u64, sock_info: &SockInfo, peer: Option<&Pee
         );
     }
 
-    if matches!(sock_info.tcp_state, Some(TcpState::Listen)) {
-        if let Some(congestion_control) = tcp_congestion_control(pid, fd) {
+    if let Some(sock_fd) = sock_fd {
+        if let Some(congestion_control) = tcp_congestion_control(sock_fd) {
             println!("         congestion control: {}", congestion_control);
         }
     }
 
     if let Some(state) = sock_info.tcp_state {
         println!("         state: {}", tcp_state_str(state));
+    }
+
+    if let (Some(tx), Some(rx)) = (sock_info.tx_queue, sock_info.rx_queue) {
+        if tx > 0 || rx > 0 {
+            println!("         tx_queue: {}  rx_queue: {}", tx, rx);
+        }
+    }
+
+    if let Some(sock_fd) = sock_fd {
+        if sock_info.tcp_state.is_some() && !matches!(sock_info.tcp_state, Some(TcpState::Listen)) {
+            print_tcp_info(sock_fd);
+        }
     }
 
     // TODO Expand peer pid/comm resolution beyond current coverage (unix sockets and loopback TCP)
@@ -744,6 +802,17 @@ fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
     })
 }
 
+// Parse "HHHHHHHH:HHHHHHHH" tx_queue:rx_queue from /proc/net/tcp fields[4]
+fn parse_queue_sizes(s: &str) -> (u32, u32) {
+    if let Some((tx, rx)) = s.split_once(':') {
+        let tx = u32::from_str_radix(tx, 16).unwrap_or(0);
+        let rx = u32::from_str_radix(rx, 16).unwrap_or(0);
+        (tx, rx)
+    } else {
+        (0, 0)
+    }
+}
+
 fn parse_tcp_state(state_hex: &str) -> Result<TcpState, ParseIntError> {
     Ok(match u8::from_str_radix(state_hex, 16)? {
         0x01 => TcpState::Established,
@@ -889,6 +958,8 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                     peer_addr: None,
                     peer_pid: None,
                     tcp_state: None,
+                    tx_queue: None,
+                    rx_queue: None,
                 };
                 Ok((inode, sock_info))
             })
@@ -912,6 +983,8 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                     peer_addr: None,
                     peer_pid: None,
                     tcp_state: None,
+                    tx_queue: None,
+                    rx_queue: None,
                 };
                 Ok((inode, sock_info))
             })
@@ -932,6 +1005,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                         let fields = line.split_whitespace().collect::<Vec<&str>>();
                         let inode = fields[9].parse()?;
                         let peer_addr = parse_addr(fields[2])?;
+                        let (tx_queue, rx_queue) = parse_queue_sizes(fields[4]);
                         let sock_info = SockInfo {
                             family,
                             sock_type: s_type,
@@ -944,6 +1018,8 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                                 None
                             },
                             inode: inode,
+                            tx_queue: Some(tx_queue),
+                            rx_queue: Some(rx_queue),
                         };
                         Ok((inode, sock_info))
                     })
@@ -1047,9 +1123,12 @@ fn print_file(
             // evaluated in the target process's network namespace.
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
+                let sock_fd = duplicate_target_fd(pid, fd);
                 print_sockname(sock_info);
                 print_sock_type(&sock_info.sock_type);
-                print_socket_options(pid, fd);
+                if let Some(ref sock_fd) = sock_fd {
+                    print_socket_options(sock_fd);
+                }
                 let peer =
                     peers
                         .get(&sock_info.inode)
@@ -1058,7 +1137,7 @@ fn print_file(
                             AddressFamily::Unix => unix_peer_process(pid, fd),
                             _ => None,
                         });
-                print_sock_address(pid, fd, &sock_info, peer.as_ref());
+                print_sock_address(sock_fd.as_ref(), &sock_info, peer.as_ref());
             } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
                 println!(
                     "         sockname: {}",

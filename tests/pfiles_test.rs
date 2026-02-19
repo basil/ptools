@@ -85,6 +85,27 @@ fn drop_congestion_control_line(block: &str) -> String {
         .join("\n")
 }
 
+fn drop_tcp_detail_lines(block: &str) -> String {
+    let prefixes = [
+        "congestion control:",
+        "cwnd:",
+        "snd_wscale:",
+        "rtt:",
+        "snd_mss:",
+        "unacked:",
+        "rcv_space:",
+        "tx_queue:",
+    ];
+    block
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            !prefixes.iter().any(|p| trimmed.starts_with(p))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn normalize_line(line: &str) -> String {
     if line.trim_start().starts_with("SO_") {
         let normalized = replace_sockopt_value(line, "SO_SNDBUF(");
@@ -411,6 +432,18 @@ fn count_normalized_exact_blocks(fd_map: &BTreeMap<u32, String>, expected: &str)
         .values()
         .map(|block| normalize_dynamic_fields(block))
         .filter(|block| block == expected)
+        .count()
+}
+
+fn count_normalized_blocks_ignoring_tcp_details(
+    fd_map: &BTreeMap<u32, String>,
+    expected: &str,
+) -> usize {
+    let expected_stripped = drop_tcp_detail_lines(expected);
+    fd_map
+        .values()
+        .map(|block| drop_tcp_detail_lines(&normalize_dynamic_fields(block)))
+        .filter(|block| block == &expected_stripped)
         .count()
 }
 
@@ -841,7 +874,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
 
     let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         state: TCP_ESTABLISHED";
     assert!(
-        count_normalized_exact_blocks(&fd_map, inet_peer_expected) >= 1,
+        count_normalized_blocks_ignoring_tcp_details(&fd_map, inet_peer_expected) >= 1,
         "expected at least one IPv4 established socket block"
     );
 
@@ -856,7 +889,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
 
     let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET6 ::1  port: <dynamic> \n         state: TCP_ESTABLISHED";
     assert!(
-        count_normalized_exact_blocks(&fd_map, inet6_peer_expected) >= 1,
+        count_normalized_blocks_ignoring_tcp_details(&fd_map, inet6_peer_expected) >= 1,
         "expected at least one IPv6 established socket block"
     );
 
