@@ -99,8 +99,8 @@ fn main() {
             about: "print process arguments",
             description: "Examine a target process and print arguments, environment variables \
                           and values, or the process auxiliary vector. \
-                          The pauxv command is equivalent to running pargs with the -x option. \
-                          The penv command is equivalent to running pargs with the -e option.",
+                          The pauxv command is equivalent to running pargs(1) with the -x option. \
+                          The penv command is equivalent to running pargs(1) with the -e option.",
             synopsis: "[-l] [-a|--args] [-e|--env] [-x|--auxv] PID...",
             options: &[
                 (
@@ -136,7 +136,7 @@ fn main() {
             name: "pauxv",
             about: "print process auxiliary vector",
             description: "Examine a target process and print the auxiliary vector. \
-                          This command is equivalent to running pargs with the -x option.",
+                          This command is equivalent to running pargs(1) with the -x option.",
             synopsis: "PID...",
             options: &[],
             examples: &[],
@@ -153,7 +153,7 @@ fn main() {
             name: "penv",
             about: "print process environment variables",
             description: "Examine a target process and print environment variables and values. \
-                          This command is equivalent to running pargs with the -e option.",
+                          This command is equivalent to running pargs(1) with the -e option.",
             synopsis: "PID...",
             options: &[],
             examples: &[],
