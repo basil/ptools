@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+use nix::libc;
 use ptools::ParseError;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -336,22 +337,13 @@ fn print_ptree_line(
 }
 
 fn lookup_uid_by_username(username: &str) -> Result<Option<u32>, Box<dyn Error>> {
-    let passwd = fs::read_to_string("/etc/passwd")?;
-    for line in passwd.lines() {
-        if line.starts_with('#') || line.is_empty() {
-            continue;
-        }
-        let fields = line.split(':').collect::<Vec<&str>>();
-        if fields.len() < 3 {
-            continue;
-        }
-        if fields[0] != username {
-            continue;
-        }
-        let uid = fields[2].parse::<u32>()?;
-        return Ok(Some(uid));
+    let c_username = std::ffi::CString::new(username)?;
+    // SAFETY: getpwnam returns a pointer to a static struct or null.
+    let pw = unsafe { libc::getpwnam(c_username.as_ptr()) };
+    if pw.is_null() {
+        return Ok(None);
     }
-    Ok(None)
+    Ok(Some(unsafe { (*pw).pw_uid }))
 }
 
 fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>, Box<dyn Error>> {
