@@ -476,7 +476,7 @@ pub fn print_auxv(pid: u64) -> bool {
 
 // Print the pid and a summary of command line arguments on a single line.
 pub fn print_proc_summary(pid: u64) {
-    print!("{:8}", format!("{}:", pid));
+    print!("{}:\t", pid);
     print_cmd_summary(pid);
 }
 
@@ -510,23 +510,25 @@ impl std::fmt::Display for ParseError {
 pub fn print_cmd_summary(pid: u64) {
     match File::open(format!("/proc/{}/cmdline", pid)) {
         Ok(file) => {
-            let mut printed_anything = false;
-            for arg in BufReader::new(file).take(80).split('\0' as u8) {
+            let mut summary = String::new();
+            for arg in BufReader::new(file).split(b'\0') {
                 match arg {
                     Ok(arg) => {
                         if !arg.is_empty() {
-                            printed_anything = true;
-                            print!("{} ", String::from_utf8_lossy(&arg));
+                            if !summary.is_empty() {
+                                summary.push(' ');
+                            }
+                            summary.push_str(&String::from_utf8_lossy(&arg));
                         }
                     }
                     Err(e) => {
                         println!("<error reading cmdline>");
                         eprintln!("{}", e.to_string());
-                        break;
+                        return;
                     }
                 }
             }
-            if !printed_anything {
+            if summary.is_empty() {
                 match std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
                     Ok(comm) => {
                         let comm = comm.trim_end();
@@ -543,6 +545,8 @@ pub fn print_cmd_summary(pid: u64) {
                         print!("<unknown>");
                     }
                 }
+            } else {
+                print!("{}", summary);
             }
             print!("\n");
         }
