@@ -279,7 +279,115 @@ fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     }
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(target_arch = "aarch64")]
+fn decode_hwcap(key: u64, value: u64) -> Option<String> {
+    // AT_HWCAP on aarch64: bits from arch/arm64/include/uapi/asm/hwcap.h
+    const HWCAP_NAMES: &[(u32, &str)] = &[
+        (0, "FP"),
+        (1, "ASIMD"),
+        (2, "EVTSTRM"),
+        (3, "AES"),
+        (4, "PMULL"),
+        (5, "SHA1"),
+        (6, "SHA2"),
+        (7, "CRC32"),
+        (8, "ATOMICS"),
+        (9, "FPHP"),
+        (10, "ASIMDHP"),
+        (11, "CPUID"),
+        (12, "ASIMDRDM"),
+        (13, "JSCVT"),
+        (14, "FCMA"),
+        (15, "LRCPC"),
+        (16, "DCPOP"),
+        (17, "SHA3"),
+        (18, "SM3"),
+        (19, "SM4"),
+        (20, "ASIMDDP"),
+        (21, "SHA512"),
+        (22, "SVE"),
+        (23, "ASIMDFHM"),
+        (24, "DIT"),
+        (25, "USCAT"),
+        (26, "ILRCPC"),
+        (27, "FLAGM"),
+        (28, "SSBS"),
+        (29, "SB"),
+        (30, "PACA"),
+        (31, "PACG"),
+    ];
+
+    // AT_HWCAP2 on aarch64: bits from arch/arm64/include/uapi/asm/hwcap.h
+    const HWCAP2_NAMES: &[(u32, &str)] = &[
+        (0, "DCPODP"),
+        (1, "SVE2"),
+        (2, "SVEAES"),
+        (3, "SVEPMULL"),
+        (4, "SVEBITPERM"),
+        (5, "SVESHA3"),
+        (6, "SVESM4"),
+        (7, "FLAGM2"),
+        (8, "FRINT"),
+        (9, "SVEI8MM"),
+        (10, "SVEF32MM"),
+        (11, "SVEF64MM"),
+        (12, "SVEBF16"),
+        (13, "I8MM"),
+        (14, "BF16"),
+        (15, "DGH"),
+        (16, "RNG"),
+        (17, "BTI"),
+        (18, "MTE"),
+        (19, "ECV"),
+        (20, "AFP"),
+        (21, "RPRES"),
+        (22, "MTE3"),
+        (23, "SME"),
+        (24, "SME_I16I64"),
+        (25, "SME_F64F64"),
+        (26, "SME_I8I32"),
+        (27, "SME_F16F32"),
+        (28, "SME_B16F32"),
+        (29, "SME_F32F32"),
+        (30, "SME_FA64"),
+        (31, "WFXT"),
+        (32, "EBF16"),
+        (33, "SVE_EBF16"),
+        (34, "CSSC"),
+        (35, "RPRFM"),
+        (36, "SVE2P1"),
+        (37, "SME2"),
+        (38, "SME2P1"),
+        (39, "SME_I16I32"),
+        (40, "SME_BI32I32"),
+        (41, "SME_B16B16"),
+        (42, "SME_F16F16"),
+        (43, "MOPS"),
+        (44, "HBC"),
+    ];
+
+    let table = if key == libc::AT_HWCAP as u64 {
+        HWCAP_NAMES
+    } else if key == libc::AT_HWCAP2 as u64 {
+        HWCAP2_NAMES
+    } else {
+        return None;
+    };
+
+    let names: Vec<&str> = table
+        .iter()
+        .filter(|(bit, _)| value & (1u64 << bit) != 0)
+        .map(|(_, name)| *name)
+        .collect();
+
+    if names.is_empty() {
+        None
+    } else {
+        Some(names.join(" | "))
+    }
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn decode_hwcap(_key: u64, _value: u64) -> Option<String> {
     None
 }
