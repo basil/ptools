@@ -37,14 +37,6 @@ $ cargo generate-rpm
 $ sudo dnf install ./target/generate-rpm/ptools-*.rpm
 ```
 
-To generate man pages from the same Clap help definitions used by each binary:
-
-```shell
-$ cargo run --bin gen-man-pages
-```
-
-This writes `pargs.1`, `penv.1`, `pfiles.1`, `pflags.1`, `prun.1`, `psig.1`, `pstop.1`, `ptree.1`, and `pwait.1` to `target/man/`.
-
 ## Why ptools?
 
 Linux already has a number of mechanisms which can be used to inspect the state

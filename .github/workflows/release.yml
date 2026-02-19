@@ -70,9 +70,6 @@ jobs:
           cargo install cargo-deb --locked
           cargo install cargo-generate-rpm --locked
 
-      - name: Generate man pages
-        run: cargo run --bin gen-man-pages
-
       - name: Build Debian package
         run: cargo deb
 
