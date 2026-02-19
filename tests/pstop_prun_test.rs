@@ -9,7 +9,7 @@ use common::{find_exec, ReadySignal};
 /// Read the state character from /proc/[pid]/stat.
 fn proc_state(pid: u32) -> Option<char> {
     let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
-    let after_comm = stat.find(')')? + 1;
+    let after_comm = stat.rfind(')')? + 1;
     let rest = stat[after_comm..].trim_start();
     rest.chars().next()
 }
