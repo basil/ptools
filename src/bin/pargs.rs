@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg, ArgAction};
 use nix::libc;
 use std::collections::HashSet;
 use std::fs::File;
@@ -218,86 +217,27 @@ fn print_auxv(pid: u64) {
     }
 }
 
-pub fn build_cli() -> clap::Command {
-    command!()
-        .name("pargs")
-        .about("Print process arguments")
-        .long_about(
-            "Examine a target process and print arguments, environment variables and values, \
-or the process auxiliary vector.",
-        )
-        .trailing_var_arg(true)
-        .arg(
-            Arg::new("line")
-                .short('l')
-                .help("Display arguments as command line")
-                .long_help(
-                    "Display the arguments as a single command line. Print the command line in \
-a manner suitable for interpretation by /bin/sh.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("args")
-                .short('a')
-                .long("args")
-                .help("Print process arguments")
-                .long_help("Print process arguments as contained in /proc/pid/cmdline (default).")
-                .action(ArgAction::SetTrue),
-        )
-        // We have a separate penv command, but keep this option for compatibility with Solaris
-        .arg(
-            Arg::new("env")
-                .short('e')
-                .long("env")
-                .help("Print process environment variables")
-                .long_help(
-                    "Print process environment variables and values as contained in \
-/proc/pid/environ.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("auxv")
-                .short('x')
-                .long("auxv")
-                .help("Print process auxiliary vector")
-                .long_help("Print the process auxiliary vector as contained in /proc/pid/auxv.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("pid")
-                .value_name("PID")
-                .help("Process ID (PID)")
-                .long_help("A list of process IDs (PIDs)")
-                .num_args(1..)
-                .required(true)
-                .value_parser(value_parser!(u64).range(1..)),
-        )
-}
+use clap::Parser;
+use ptools::cli::PargsCli;
 
 fn main() {
-    let matches = build_cli().get_matches();
+    let cli = PargsCli::parse();
 
-    let do_print_args = matches.get_flag("args");
-    let do_print_env = matches.get_flag("env");
-    let do_print_auxv = matches.get_flag("auxv");
-    let do_print_line = matches.get_flag("line");
-    let want_args = do_print_args || (!do_print_env && !do_print_auxv);
+    let want_args = cli.args || (!cli.env && !cli.auxv);
 
-    for pid in matches.get_many::<u64>("pid").unwrap() {
+    for &pid in &cli.pid {
         if want_args {
-            if do_print_line {
-                print_cmdline(*pid);
+            if cli.line {
+                print_cmdline(pid);
             } else {
-                print_args(*pid);
+                print_args(pid);
             }
         }
-        if do_print_env {
-            ptools::print_env(*pid);
+        if cli.env {
+            ptools::print_env(pid);
         }
-        if do_print_auxv {
-            print_auxv(*pid);
+        if cli.auxv {
+            print_auxv(pid);
         }
     }
 }

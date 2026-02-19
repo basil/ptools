@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg};
 use nix::libc;
 
 #[derive(Copy, Clone)]
@@ -203,27 +202,13 @@ fn print_signal_actions(pid: u64) {
     }
 }
 
-pub fn build_cli() -> clap::Command {
-    command!()
-        .name("psig")
-        .about("Report process signal actions")
-        .long_about("List the signal actions and handlers of each process.")
-        .trailing_var_arg(true)
-        .arg(
-            Arg::new("pid")
-                .value_name("PID")
-                .help("Process ID (PID)")
-                .long_help("A list of process IDs (PIDs)")
-                .num_args(1..)
-                .required(true)
-                .value_parser(value_parser!(u64).range(1..)),
-        )
-}
+use clap::Parser;
+use ptools::cli::PsigCli;
 
 fn main() {
-    let matches = build_cli().get_matches();
+    let cli = PsigCli::parse();
 
-    for pid in matches.get_many::<u64>("pid").unwrap() {
-        print_signal_actions(*pid);
+    for &pid in &cli.pid {
+        print_signal_actions(pid);
     }
 }

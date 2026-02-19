@@ -40,6 +40,8 @@ use std::io::{BufRead, BufReader, Read};
 // and it doesn't, we shouldn't panic. On the other hand, we should feel free to assert that some
 // purely internal invariant holds, and panic if it doesn't.
 
+pub mod cli;
+
 pub fn open_or_warn(filename: &str) -> Option<File> {
     match File::open(filename) {
         Ok(file) => Some(file),

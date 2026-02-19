@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg, ArgAction};
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
@@ -1250,49 +1249,17 @@ fn print_files(pid: u64, non_verbose: bool) -> bool {
     return true;
 }
 
-pub fn build_cli() -> clap::Command {
-    command!()
-        .name("pfiles")
-        .about("Print information for all open files in each process")
-        .long_about(
-            "Report fstat(2) and fcntl(2) information for all open files in each process. \
-For network endpoints, provide local address information and peer address information when \
-connected. For sockets, provide the socket type, socket options, and send and receive buffer \
-sizes. Also report a path to the file when that information is available from /proc/pid/fd. \
-Do not assume this is the same name used to open the file. See proc(5) for more information.",
-        )
-        .trailing_var_arg(true)
-        .arg(
-            Arg::new("non-verbose")
-                .short('n')
-                .action(ArgAction::SetTrue)
-                .help("Set non-verbose mode")
-                .long_help(
-                    "Set non-verbose mode. Do not display verbose information for each file \
-descriptor. Instead, limit output to the information that the process would retrieve by \
-applying fstat(2) to each of its file descriptors.",
-                ),
-        )
-        .arg(
-            Arg::new("pid")
-                .value_name("PID")
-                .help("Process ID (PID)")
-                .long_help("A list of process IDs (PIDs)")
-                .num_args(1..)
-                .required(true)
-                .value_parser(value_parser!(u64).range(1..)),
-        )
-}
+use clap::Parser;
+use ptools::cli::PfilesCli;
 
 fn main() {
-    let matches = build_cli().get_matches();
+    let cli = PfilesCli::parse();
 
-    let non_verbose = matches.get_flag("non-verbose");
-    let error = matches
-        .get_many::<u64>("pid")
-        .unwrap()
+    let error = cli
+        .pid
+        .iter()
         .copied()
-        .any(|pid| !print_files(pid, non_verbose));
+        .any(|pid| !print_files(pid, cli.non_verbose));
 
     if error {
         exit(1);

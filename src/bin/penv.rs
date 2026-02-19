@@ -14,29 +14,13 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg};
-
-pub fn build_cli() -> clap::Command {
-    command!()
-        .name("penv")
-        .about("Print process environment variables")
-        .long_about("Examine a target process and print environment variables and values.")
-        .trailing_var_arg(true)
-        .arg(
-            Arg::new("pid")
-                .value_name("PID")
-                .help("Process ID (PID)")
-                .long_help("A list of process IDs (PIDs)")
-                .num_args(1..)
-                .required(true)
-                .value_parser(value_parser!(u64).range(1..)),
-        )
-}
+use clap::Parser;
+use ptools::cli::PenvCli;
 
 fn main() {
-    let matches = build_cli().get_matches();
+    let cli = PenvCli::parse();
 
-    for pid in matches.get_many::<u64>("pid").unwrap() {
-        ptools::print_env(*pid);
+    for &pid in &cli.pid {
+        ptools::print_env(pid);
     }
 }

@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-use clap::{command, value_parser, Arg, ArgAction};
 use ptools::ParseError;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
@@ -253,35 +252,11 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
     Ok(pids)
 }
 
-pub fn build_cli() -> clap::Command {
-    command!()
-        .name("ptree")
-        .about("Print process trees")
-        .long_about(
-            "Print process trees containing the specified pids or users, with child processes \
-indented from their respective parent processes. Treat an argument of all digits as a process \
-ID (PID); otherwise, treat it as a user login name. Default to all processes.",
-        )
-        .arg(
-            Arg::new("all")
-                .short('a')
-                .long("all")
-                .action(ArgAction::SetTrue)
-                .help("Include children of PID 0")
-                .long_help("All. Print all processes, including children of process ID 0."),
-        )
-        .arg(
-            Arg::new("target")
-                .value_name("pid|user")
-                .help("Process ID (PID) or username")
-                .long_help("A list of process IDs (PIDs) or usernames")
-                .num_args(0..)
-                .value_parser(value_parser!(String)),
-        )
-}
+use clap::Parser;
+use ptools::cli::PtreeCli;
 
 fn main() {
-    let matches = build_cli().get_matches();
+    let cli = PtreeCli::parse();
 
     let (parent_map, child_map, uid_map) = match build_proc_maps() {
         Ok(maps) => maps,
@@ -291,9 +266,9 @@ fn main() {
         }
     };
 
-    if let Some(targets) = matches.get_many::<String>("target") {
+    if !cli.target.is_empty() {
         let mut printed = HashSet::new();
-        for target in targets {
+        for target in &cli.target {
             if let Ok(pid) = target.parse::<u64>() {
                 if pid == 0 {
                     eprintln!("PID must be > 0: {}", pid);
@@ -316,7 +291,7 @@ fn main() {
                 Err(e) => eprintln!("{}", e),
             }
         }
-    } else if matches.get_flag("all") {
+    } else if cli.all {
         print_all_trees(&child_map);
     } else {
         print_tree(1, &parent_map, &child_map);

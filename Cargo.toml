@@ -11,9 +11,12 @@ keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
 [dependencies]
-clap = { version = "4.5", features = ["cargo"] }
-clap_mangen = "0.2.31"
+clap = { version = "4.5", features = ["derive"] }
 nix = { version = "0.31", features = ["event", "fs", "process", "signal", "socket"] }
+
+[build-dependencies]
+clap = { version = "4.5", features = ["derive"] }
+clap_mangen = "0.2.31"
 
 [profile.release]
 debug = true
