@@ -105,11 +105,20 @@ pub fn print_env(pid: u64) {
     if let Some(file) = open_or_warn(&format!("/proc/{}/environ", pid)) {
         print_proc_summary(pid);
 
-        for (i, bytes) in BufReader::new(file).split('\0' as u8).enumerate() {
+        let mut i = 0;
+        for bytes in BufReader::new(file).split('\0' as u8) {
             match &bytes {
                 Ok(bytes) => {
                     let arg = String::from_utf8_lossy(bytes);
-                    println!("envp[{}]: {}", i, arg);
+                    // Skip entries that aren't valid env vars (KEY=VALUE with non-empty KEY).
+                    // Processes like sshd overwrite their environ memory with status info,
+                    // leaving garbage and null bytes in /proc/[pid]/environ.
+                    if let Some(pos) = arg.find('=') {
+                        if pos > 0 {
+                            println!("envp[{}]: {}", i, arg);
+                            i += 1;
+                        }
+                    }
                 }
                 Err(e) => {
                     eprint!("Error reading environment: {}", e)
