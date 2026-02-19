@@ -63,6 +63,54 @@ struct SignalMasks {
     shd_pnd: Vec<bool>,
 }
 
+fn intersect_blocked_masks(masks: &[Vec<bool>]) -> Vec<bool> {
+    let Some(first) = masks.first() else {
+        return Vec::new();
+    };
+    let max_len = masks.iter().map(|m| m.len()).max().unwrap_or(0);
+    let mut result = vec![false; max_len];
+    for i in 0..max_len {
+        result[i] = masks.iter().all(|m| i < m.len() && m[i]);
+    }
+    // If there's only one thread, just return its mask directly.
+    if masks.len() == 1 {
+        return first.clone();
+    }
+    result
+}
+
+fn read_thread_blocked_masks(pid: u64) -> Option<Vec<Vec<bool>>> {
+    let task_dir = format!("/proc/{}/task", pid);
+    let entries = std::fs::read_dir(&task_dir).ok()?;
+    let mut tids: Vec<u64> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_str()?.parse::<u64>().ok())
+        .collect();
+    tids.sort();
+
+    let mut masks = Vec::new();
+    for tid in tids {
+        let status_path = format!("/proc/{}/task/{}/status", pid, tid);
+        let Ok(status) = std::fs::read_to_string(&status_path) else {
+            continue;
+        };
+        for line in status.lines() {
+            if let Some(hex) = line.strip_prefix("SigBlk:") {
+                if let Ok(mask) = parse_signal_set(hex) {
+                    masks.push(mask);
+                }
+                break;
+            }
+        }
+    }
+
+    if masks.is_empty() {
+        None
+    } else {
+        Some(masks)
+    }
+}
+
 fn parse_status_signal_masks(pid: u64) -> Option<SignalMasks> {
     let status = std::fs::read_to_string(format!("/proc/{}/status", pid))
         .map_err(|e| {
@@ -117,9 +165,14 @@ fn parse_status_signal_masks(pid: u64) -> Option<SignalMasks> {
 
     let sig_ign = parse("SigIgn", &sig_ign)?;
     let sig_cgt = parse("SigCgt", &sig_cgt)?;
-    let sig_blk = sig_blk
-        .and_then(|s| parse("SigBlk", &s))
+
+    // Compute blocked mask as intersection across all threads.
+    // Falls back to main thread's SigBlk if /proc/[pid]/task/ is unreadable.
+    let sig_blk = read_thread_blocked_masks(pid)
+        .map(|masks| intersect_blocked_masks(&masks))
+        .or_else(|| sig_blk.and_then(|s| parse("SigBlk", &s)))
         .unwrap_or_default();
+
     let sig_pnd = sig_pnd
         .and_then(|s| parse("SigPnd", &s))
         .unwrap_or_default();

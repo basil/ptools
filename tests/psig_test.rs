@@ -46,7 +46,14 @@ fn psig_reports_default_ignored_and_caught_actions() {
     let hup = find_line_for_signal(&stdout, "HUP");
     assert!(
         hup.contains("blocked"),
-        "Expected HUP to be blocked:\n{}",
+        "Expected HUP to be blocked (blocked in all threads):\n{}",
+        stdout
+    );
+
+    let winch = find_line_for_signal(&stdout, "WINCH");
+    assert!(
+        !winch.contains("blocked"),
+        "Expected WINCH to NOT be blocked (only blocked in main thread, not all threads):\n{}",
         stdout
     );
 }

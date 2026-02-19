@@ -29,12 +29,29 @@ fn main() {
         sigaction(Signal::SIGUSR2, &ignored).expect("ignore SIGUSR2");
     }
 
-    // Block SIGHUP so we can verify psig shows "blocked" for it.
+    // Block SIGHUP and SIGWINCH in the main thread.
     let mut block_set = SigSet::empty();
     block_set.add(Signal::SIGHUP);
-    pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&block_set), None).expect("block SIGHUP");
+    block_set.add(Signal::SIGWINCH);
+    pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&block_set), None).expect("block signals");
 
-    File::create(signal_path).unwrap();
+    // Spawn a thread that blocks SIGHUP but NOT SIGWINCH.
+    // The thread inherits the main thread's mask, so we must unblock SIGWINCH.
+    // This means the intersection is: SIGHUP blocked, SIGWINCH not blocked.
+    let ready_path = signal_path.clone();
+    thread::spawn(move || {
+        let mut unblock_set = SigSet::empty();
+        unblock_set.add(Signal::SIGWINCH);
+        pthread_sigmask(SigmaskHow::SIG_UNBLOCK, Some(&unblock_set), None)
+            .expect("unblock SIGWINCH in thread");
+
+        // Signal readiness after the thread's mask is set.
+        File::create(ready_path).unwrap();
+
+        loop {
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
 
     loop {
         thread::sleep(Duration::from_millis(100));
