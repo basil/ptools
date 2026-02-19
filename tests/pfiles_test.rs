@@ -807,7 +807,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     let eventfd_fd = find_fd_containing(&fd_map, "anon_inode:[eventfd]");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&eventfd_fd).expect("expected eventfd fd")),
-        "anon_inode(eventfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_NONBLOCK\n       anon_inode:[eventfd]\n       offset: 0\n       eventfd-count:                0"
+        "anon_inode(eventfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_NONBLOCK\n       anon_inode:[eventfd]\n       offset: 0\n       eventfd-count: 0"
     );
 
     let signalfd_expected =

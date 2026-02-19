@@ -205,7 +205,13 @@ fn print_matching_fdinfo_lines(pid: u64, fd: u64, prefixes: &[&str]) {
         .lines()
         .filter(|line| prefixes.iter().any(|prefix| line.starts_with(prefix)))
     {
-        println!("       {}", line);
+        // Normalize whitespace in key:value lines (kernel pads with many spaces)
+        let normalized = if let Some((key, val)) = line.split_once(':') {
+            format!("{}: {}", key, val.trim())
+        } else {
+            line.to_string()
+        };
+        println!("       {}", normalized);
     }
 }
 
