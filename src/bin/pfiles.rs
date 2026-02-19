@@ -211,7 +211,7 @@ fn print_matching_fdinfo_lines(pid: u64, fd: u64, prefixes: &[&str]) {
         } else {
             line.to_string()
         };
-        println!("       {}", normalized);
+        println!("      {}", normalized);
     }
 }
 
@@ -402,7 +402,7 @@ struct SockInfo {
 
 fn print_sock_type(sock_type: &SockType) {
     println!(
-        "         {}",
+        "        {}",
         match sock_type {
             SockType::Stream => "SOCK_STREAM".into(),
             SockType::Datagram => "SOCK_DGRAM".into(),
@@ -444,17 +444,17 @@ fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
 fn socket_options(sock_fd: &OwnedFd) -> Vec<String> {
     let mut options = Vec::new();
 
-    if matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)) {
-        options.push("SO_ACCEPTCONN".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)) {
-        options.push("SO_BROADCAST".to_string());
+    if matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)) {
+        options.push("SO_REUSEADDR".to_string());
     }
     if matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)) {
         options.push("SO_KEEPALIVE".to_string());
     }
-    if matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)) {
-        options.push("SO_REUSEADDR".to_string());
+    if matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)) {
+        options.push("SO_BROADCAST".to_string());
+    }
+    if matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)) {
+        options.push("SO_ACCEPTCONN".to_string());
     }
     if matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)) {
         options.push("SO_OOBINLINE".to_string());
@@ -473,7 +473,7 @@ fn socket_options(sock_fd: &OwnedFd) -> Vec<String> {
 fn print_socket_options(sock_fd: &OwnedFd) {
     let options = socket_options(sock_fd);
     if !options.is_empty() {
-        println!("         {}", options.join(","));
+        println!("        {}", options.join(","));
     }
 }
 
@@ -579,7 +579,7 @@ fn inet_address_str(addr_fam: AddressFamily, addr: Option<SocketAddr>) -> String
 
 fn print_sockname(sock_info: &SockInfo) {
     println!(
-        "         sockname: {}",
+        "        sockname: {}",
         match sock_info.family {
             AddressFamily::Inet => inet_address_str(sock_info.family, sock_info.local_addr),
             AddressFamily::Inet6 => inet_address_str(sock_info.family, sock_info.local_addr),
@@ -596,39 +596,39 @@ fn print_tcp_info(sock_fd: &OwnedFd) {
     let snd_wscale = info.tcpi_snd_rcv_wscale & 0x0f;
     let rcv_wscale = (info.tcpi_snd_rcv_wscale >> 4) & 0x0f;
     println!(
-        "         cwnd: {}  ssthresh: {}",
+        "        cwnd: {}  ssthresh: {}",
         info.tcpi_snd_cwnd, info.tcpi_snd_ssthresh,
     );
     println!(
-        "         snd_wscale: {}  rcv_wscale: {}",
+        "        snd_wscale: {}  rcv_wscale: {}",
         snd_wscale, rcv_wscale,
     );
 
     let rtt_ms = info.tcpi_rtt as f64 / 1000.0;
     let rttvar_ms = info.tcpi_rttvar as f64 / 1000.0;
-    println!("         rtt: {:.3}ms  rttvar: {:.3}ms", rtt_ms, rttvar_ms,);
+    println!("        rtt: {:.3}ms  rttvar: {:.3}ms", rtt_ms, rttvar_ms,);
 
     println!(
-        "         snd_mss: {}  rcv_mss: {}  advmss: {}  pmtu: {}",
+        "        snd_mss: {}  rcv_mss: {}  advmss: {}  pmtu: {}",
         info.tcpi_snd_mss, info.tcpi_rcv_mss, info.tcpi_advmss, info.tcpi_pmtu,
     );
     println!(
-        "         unacked: {}  retrans: {}/{}  lost: {}",
+        "        unacked: {}  retrans: {}/{}  lost: {}",
         info.tcpi_unacked, info.tcpi_retrans, info.tcpi_total_retrans, info.tcpi_lost,
     );
-    println!("         rcv_space: {}", info.tcpi_rcv_space);
+    println!("        rcv_space: {}", info.tcpi_rcv_space);
 }
 
 fn print_peername(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
     if let Some(peer) = peer {
-        println!("         peer: {}[{}]", peer.comm, peer.pid);
+        println!("        peer: {}[{}]", peer.comm, peer.pid);
     } else if let Some(peer_pid) = sock_info.peer_pid {
-        println!("         peerpid: {}", peer_pid);
+        println!("        peerpid: {}", peer_pid);
     }
 
     if let Some(addr) = sock_info.peer_addr {
         println!(
-            "         peername: {} ",
+            "        peername: {}",
             inet_address_str(sock_info.family, Some(addr))
         );
     }
@@ -637,17 +637,17 @@ fn print_peername(sock_info: &SockInfo, peer: Option<&PeerProcess>) {
 fn print_tcp_details(sock_fd: Option<&OwnedFd>, sock_info: &SockInfo) {
     if let Some(sock_fd) = sock_fd {
         if let Some(congestion_control) = tcp_congestion_control(sock_fd) {
-            println!("         congestion control: {}", congestion_control);
+            println!("        congestion control: {}", congestion_control);
         }
     }
 
     if let Some(state) = sock_info.tcp_state {
-        println!("         state: {}", tcp_state_str(state));
+        println!("        state: {}", tcp_state_str(state));
     }
 
     if let (Some(tx), Some(rx)) = (sock_info.tx_queue, sock_info.rx_queue) {
         if tx > 0 || rx > 0 {
-            println!("         tx_queue: {}  rx_queue: {}", tx, rx);
+            println!("        tx_queue: {}  rx_queue: {}", tx, rx);
         }
     }
 
@@ -1095,7 +1095,7 @@ fn print_file(
     let file_type = file_type(stat_info.st_mode, &link_path);
 
     print!(
-        " {: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
+        "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
         fd,
         print_file_type(&file_type),
         stat_info.st_mode & 0o7777,
@@ -1118,7 +1118,7 @@ fn print_file(
         return;
     }
 
-    print!("       ");
+    print!("      ");
     match get_flags(pid, fd) {
         Ok(flags) => print_open_flags(flags),
         Err(e) => eprintln!("failed to read fd flags: {}", e),
@@ -1148,21 +1148,21 @@ fn print_file(
                 print_tcp_details(sock_fd.as_ref(), sock_info);
             } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
                 println!(
-                    "         sockname: {}",
+                    "        sockname: {}",
                     sockname_from_sockprotoname(&sockprotoname)
                 );
             } else {
                 print!(
-                    "       ERROR: failed to find info for socket with inode num {}\n",
+                    "      ERROR: failed to find info for socket with inode num {}\n",
                     stat_info.st_ino
                 );
             }
         }
         _ => match fs::read_link(link_path) {
             Ok(path) => {
-                println!("       {}", path.to_string_lossy());
+                println!("      {}", path.to_string_lossy());
                 match get_offset(pid, fd) {
-                    Ok(offset) => println!("       offset: {}", offset),
+                    Ok(offset) => println!("      offset: {}", offset),
                     Err(e) => eprintln!("failed to read fd offset: {}", e),
                 }
                 match path.as_os_str().to_string_lossy().as_ref() {
@@ -1232,7 +1232,7 @@ fn print_epoll_fdinfo(pid: u64, fd: u64) {
             }
         }
 
-        print!("       epoll");
+        print!("      epoll");
         if let Some(tfd) = tfd {
             print!(" tfd: {}", tfd);
         }

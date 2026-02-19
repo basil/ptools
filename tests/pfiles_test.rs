@@ -530,12 +530,12 @@ fn pfiles_reports_epoll_anon_inode() {
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&null_fd).expect("expected /dev/null fd")),
-        "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n       /dev/null\n       offset: 0"
+        "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n      O_RDONLY\n      /dev/null\n      offset: 0"
     );
     let epoll_fd = find_fd_containing(&fd_map, "anon_inode:[eventpoll]");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&epoll_fd).expect("expected eventpoll fd")),
-        "anon_inode(epoll) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n       anon_inode:[eventpoll]\n       offset: 0\n       epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
+        "anon_inode(epoll) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR\n      anon_inode:[eventpoll]\n      offset: 0\n      epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
     );
 }
 
@@ -655,12 +655,12 @@ fn pfiles_reports_netlink_socket() {
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&null_fd).expect("expected /dev/null fd")),
-        "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n       /dev/null\n       offset: 0"
+        "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n      O_RDONLY\n      /dev/null\n      offset: 0"
     );
     let netlink_fd = find_fd_containing(&fd_map, "sockname: AF_NETLINK");
     let normalized =
         normalize_dynamic_fields(fd_map.get(&netlink_fd).expect("expected netlink fd"));
-    let expected_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         sockname: AF_NETLINK\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let expected_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR\n        sockname: AF_NETLINK\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
     let expected_without_sockopts = drop_sockopts_line(expected_with_sockopts);
     assert!(
         normalized == expected_with_sockopts || normalized == expected_without_sockopts,
@@ -718,7 +718,7 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
                 .get(&alg_fd)
                 .expect("missing fd block for AF_ALG socket"),
         ),
-        "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n         sockname: AF_ALG"
+        "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR\n        sockname: AF_ALG"
     );
 }
 
@@ -736,14 +736,14 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     let null_fd = find_fd_by_path(&fd_map, "/dev/null");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&null_fd).expect("expected /dev/null fd")),
-        "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n       O_RDONLY\n       /dev/null\n       offset: 0"
+        "S_IFCHR mode:0666 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> rdev:1,3\n      O_RDONLY\n      /dev/null\n      offset: 0"
     );
 
     let dir_fd = find_fd_by_path(&fd_map, &cwd);
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&dir_fd).expect("expected cwd directory fd")),
         format!(
-            "S_IFDIR mode:0755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_DIRECTORY\n       {}\n       offset: 0",
+            "S_IFDIR mode:0755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDONLY|O_DIRECTORY\n      {}\n      offset: 0",
             cwd
         )
     );
@@ -767,51 +767,51 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
             "Unexpected S_IFBLK block: {}",
             block_device
         );
-        assert_eq!(lines[1], "       O_RDONLY|O_CLOEXEC|O_PATH");
+        assert_eq!(lines[1], "      O_RDONLY|O_CLOEXEC|O_PATH");
         assert!(lines[2].trim_start().starts_with("/dev/"));
-        assert_eq!(lines[3], "       offset: 0");
+        assert_eq!(lines[3], "      offset: 0");
     }
 
     let rd_pipe_fd = find_first_fd_matching(
         &fd_map,
         |block| {
             block.contains("O_RDONLY|O_CLOEXEC")
-                && block.contains("\n       pipe:[")
-                && block.contains("\n       offset: 0")
+                && block.contains("\n      pipe:[")
+                && block.contains("\n      offset: 0")
         },
         "read pipe block",
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&rd_pipe_fd).expect("expected read pipe fd")),
-        "S_IFIFO mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC\n       pipe:[<dynamic>]\n       offset: 0"
+        "S_IFIFO mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDONLY|O_CLOEXEC\n      pipe:[<dynamic>]\n      offset: 0"
     );
     let wr_pipe_fd = find_first_fd_matching(
         &fd_map,
         |block| {
             block.contains("O_WRONLY|O_CLOEXEC")
-                && block.contains("\n       pipe:[")
-                && block.contains("\n       offset: 0")
+                && block.contains("\n      pipe:[")
+                && block.contains("\n      offset: 0")
         },
         "write pipe block",
     );
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&wr_pipe_fd).expect("expected write pipe fd")),
-        "S_IFIFO mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n       pipe:[<dynamic>]\n       offset: 0"
+        "S_IFIFO mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_WRONLY|O_CLOEXEC\n      pipe:[<dynamic>]\n      offset: 0"
     );
 
     let epoll_fd = find_fd_containing(&fd_map, "anon_inode:[eventpoll]");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&epoll_fd).expect("expected eventpoll fd")),
-        "anon_inode(epoll) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR\n       anon_inode:[eventpoll]\n       offset: 0\n       epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
+        "anon_inode(epoll) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR\n      anon_inode:[eventpoll]\n      offset: 0\n      epoll tfd: <dynamic> events: 19 data: 0 ino: <dynamic>"
     );
     let eventfd_fd = find_fd_containing(&fd_map, "anon_inode:[eventfd]");
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&eventfd_fd).expect("expected eventfd fd")),
-        "anon_inode(eventfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_NONBLOCK\n       anon_inode:[eventfd]\n       offset: 0\n       eventfd-count: 0"
+        "anon_inode(eventfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_NONBLOCK\n      anon_inode:[eventfd]\n      offset: 0\n      eventfd-count: 0"
     );
 
     let signalfd_expected =
-        "anon_inode(signalfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC|O_NONBLOCK\n       anon_inode:[signalfd]\n       offset: 0\n       sigmask: <dynamic>";
+        "anon_inode(signalfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC|O_NONBLOCK\n      anon_inode:[signalfd]\n      offset: 0\n      sigmask: <dynamic>";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, signalfd_expected),
         1,
@@ -819,7 +819,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     );
 
     let timerfd_expected =
-        "anon_inode(timerfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC|O_NONBLOCK\n       anon_inode:[timerfd]\n       offset: 0\n       clockid: <dynamic>\n       ticks: <dynamic>\n       settime flags: <dynamic>\n       it_value: <dynamic>\n       it_interval: <dynamic>";
+        "anon_inode(timerfd) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC|O_NONBLOCK\n      anon_inode:[timerfd]\n      offset: 0\n      clockid: <dynamic>\n      ticks: <dynamic>\n      settime flags: <dynamic>\n      it_value: <dynamic>\n      it_interval: <dynamic>";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, timerfd_expected),
         1,
@@ -849,21 +849,21 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         inotify_lines[0],
         "anon_inode(inotify) mode:0600 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>"
     );
-    assert_eq!(inotify_lines[1], "       O_RDONLY|O_CLOEXEC|O_NONBLOCK");
+    assert_eq!(inotify_lines[1], "      O_RDONLY|O_CLOEXEC|O_NONBLOCK");
     assert!(
-        inotify_lines[2] == "       anon_inode:inotify"
-            || inotify_lines[2] == "       anon_inode:[inotify]",
+        inotify_lines[2] == "      anon_inode:inotify"
+            || inotify_lines[2] == "      anon_inode:[inotify]",
         "unexpected inotify path line: {}",
         inotify_lines[2]
     );
-    assert_eq!(inotify_lines[3], "       offset: 0");
+    assert_eq!(inotify_lines[3], "      offset: 0");
     assert!(
-        inotify_lines[4] == "       inotify <dynamic>",
+        inotify_lines[4] == "      inotify <dynamic>",
         "unexpected inotify fdinfo line: {}",
         inotify_lines[4]
     );
 
-    let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
+    let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
     let inet_listen_without_congestion = drop_congestion_control_line(inet_listen_expected);
     let inet_listen_count = count_normalized_exact_blocks(&fd_map, inet_listen_expected)
         + count_normalized_exact_blocks(&fd_map, &inet_listen_without_congestion);
@@ -872,13 +872,13 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv4 listening socket block"
     );
 
-    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET 127.0.0.1  port: <dynamic> \n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_ESTABLISHED";
+    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet_peer_expected) >= 1,
         "expected at least one IPv4 established socket block"
     );
 
-    let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
+    let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET6 ::1  port: <dynamic>\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
     let inet6_listen_without_congestion = drop_congestion_control_line(inet6_listen_expected);
     let inet6_listen_count = count_normalized_exact_blocks(&fd_map, inet6_listen_expected)
         + count_normalized_exact_blocks(&fd_map, &inet6_listen_without_congestion);
@@ -887,20 +887,20 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv6 listening socket block"
     );
 
-    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         peer: pfiles_matrix[<dynamic>]\n         peername: AF_INET6 ::1  port: <dynamic> \n         SOCK_STREAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         state: TCP_ESTABLISHED";
+    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET6 ::1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET6 ::1  port: <dynamic>\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet6_peer_expected) >= 1,
         "expected at least one IPv6 established socket block"
     );
 
-    let inet_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let inet_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, inet_dgram_expected),
         1,
         "expected exactly one IPv4 datagram socket block"
     );
 
-    let inet6_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET6 ::1  port: <dynamic>\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let inet6_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET6 ::1  port: <dynamic>\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, inet6_dgram_expected),
         1,
@@ -968,7 +968,7 @@ fn pfiles_matrix_file_and_symlink_paths() {
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&reg_fd).expect("expected regular-file fd")),
         format!(
-            "S_IFREG mode:0644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_WRONLY|O_CLOEXEC\n       {}\n       offset: 3",
+            "S_IFREG mode:0644 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_WRONLY|O_CLOEXEC\n      {}\n      offset: 3",
             matrix_file_file
                 .to_str()
                 .expect("matrix file path should be valid utf-8")
@@ -984,7 +984,7 @@ fn pfiles_matrix_file_and_symlink_paths() {
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&symlink_fd).expect("expected symlink fd")),
         format!(
-            "S_IFLNK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n       {}\n       offset: 0",
+            "S_IFLNK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_PATH\n      {}\n      offset: 0",
             matrix_link_file
                 .to_str()
                 .expect("matrix link path should be valid utf-8")
@@ -1033,7 +1033,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
             .get(&listen_fd)
             .expect("expected listening socket fd"),
     );
-    let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_STREAM\n         SO_ACCEPTCONN,SO_REUSEADDR,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n         congestion control: <dynamic>\n         state: TCP_LISTEN";
+    let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
     let listen_without_sockopts = drop_sockopts_line(listen_with_sockopts);
     let listen_without_congestion = drop_congestion_control_line(listen_with_sockopts);
     let listen_minimal = drop_congestion_control_line(&listen_without_sockopts);
@@ -1053,7 +1053,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
     );
     let dgram_normalized =
         normalize_dynamic_fields(fd_map.get(&dgram_fd).expect("expected udp socket fd"));
-    let dgram_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n       O_RDWR|O_CLOEXEC\n         sockname: AF_INET 127.0.0.1  port: <dynamic>\n         SOCK_DGRAM\n         SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let dgram_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
     let dgram_without_sockopts = drop_sockopts_line(dgram_with_sockopts);
     assert!(
         dgram_normalized == dgram_with_sockopts || dgram_normalized == dgram_without_sockopts,
