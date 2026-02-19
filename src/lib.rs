@@ -529,6 +529,7 @@ pub fn print_cmd_summary(pid: u64) {
                 }
             }
             if summary.is_empty() {
+                let is_zombie = proc_state(pid) == Some('Z');
                 match std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
                     Ok(comm) => {
                         let comm = comm.trim_end();
@@ -536,6 +537,9 @@ pub fn print_cmd_summary(pid: u64) {
                             print!("<unknown>");
                         } else {
                             print!("{}", comm);
+                        }
+                        if is_zombie {
+                            print!(" <defunct>");
                         }
                     }
                     Err(ref e) if e.kind() == ErrorKind::NotFound => {
