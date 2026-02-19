@@ -60,23 +60,34 @@ make this same consistent debugging experience available on Linux.
 
 ## Current State
 
-The following utilities are currently available:
+The following table lists all Solaris/illumos ptools and their status in this
+project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps) or
+[glibc](https://www.gnu.org/software/libc/) are not reimplemented here, as these
+packages are widely available on Linux distributions and already provide
+equivalent functionality. There are a number of commands available on
+Solaris/illumos which have not been implemented here yet, perhaps most notably
+`pstack`. Also, support for examining core dumps has not yet been implemented.
 
-| Command     | Description                                                                                     |
-| ----------- | ----------------------------------------------------------------------------------------------- |
-| `pfiles(1)` | Show the open files and sockets of the process, as well as their corresponding file descriptors |
-| `pflags(1)` | Show process status flags, pending and held signals, and per-thread state                       |
-| `pargs(1)`  | Show the command line arguments passed to the process                                           |
-| `penv(1)`   | Show the environment of the process                                                             |
-| `prun(1)`   | Set stopped processes running                                                                   |
-| `psig(1)`   | Show process signal actions                                                                     |
-| `pstop(1)`  | Stop processes                                                                                  |
-| `ptree(1)`  | Show the process tree containing the process                                                    |
-| `pwait(1)`  | Wait for processes to terminate                                                                 |
-
-There are a number of other commands available on Solaris/illumos which have not
-been implemented here yet, perhaps most notably `pstack`. Also, support for
-examining core dumps has not yet been implemented.
+| Command        | Description                                           | Status                 |
+| -------------- | ----------------------------------------------------- | ---------------------- |
+| `pargs(1)`     | Print process arguments                               | ✅ Implemented         |
+| `pcred(1)`     | Print or modify process credentials                   | 🔲 Not yet implemented |
+| `penv(1)`      | Print process environment variables                   | ✅ Implemented         |
+| `pfiles(1)`    | Print information for all open files in each process  | ✅ Implemented         |
+| `pflags(1)`    | Print process status flags                            | ✅ Implemented         |
+| `pgrep(1)`     | Find processes by name                                | ➡️ See `procps-ng`     |
+| `pkill(1)`     | Signal processes by name                              | ➡️ See `procps-ng`     |
+| `pldd(1)`      | Print process dynamic libraries                       | ➡️ See `glibc`         |
+| `plockstat(1)` | Print lock statistics                                 | 🔲 Not yet implemented |
+| `pmap(1)`      | Print process address maps                            | ➡️ See `procps-ng`     |
+| `prun(1)`      | Set stopped processes running with SIGCONT            | ✅ Implemented         |
+| `psig(1)`      | Print process signal actions                          | ✅ Implemented         |
+| `pstack(1)`    | Print process call stack                              | 🔲 Not yet implemented |
+| `pstop(1)`     | Stop processes with SIGSTOP                           | ✅ Implemented         |
+| `ptime(1)`     | Time a process using microstate accounting            | 🔲 Not yet implemented |
+| `ptree(1)`     | Print process trees                                   | ✅ Implemented         |
+| `pwait(1)`     | Wait for processes to terminate                       | ✅ Implemented         |
+| `pwdx(1)`      | Print the current working directory of the process    | ➡️ See `procps-ng`     |
 
 ## Contributing
 
