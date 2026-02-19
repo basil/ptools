@@ -2,12 +2,19 @@ use roff::{bold, roman, Roff};
 use std::fs;
 use std::path::Path;
 
+struct Example<'a> {
+    title: &'a str,
+    description: &'a str,
+    code: &'a str,
+}
+
 struct ManPage<'a> {
     name: &'a str,
     about: &'a str,
     description: &'a str,
     synopsis: &'a str,
     options: &'a [(&'a str, &'a str)],
+    examples: &'a [Example<'a>],
     exit_status: &'a str,
     files: &'a str,
     see_also: &'a str,
@@ -38,6 +45,21 @@ fn render_man_page(page: &ManPage, out_dir: &Path) {
             roff.control("TP", []);
             roff.text([bold(*flag)]);
             roff.text([roman(*help)]);
+        }
+    }
+    if !page.examples.is_empty() {
+        roff.control("SH", ["EXAMPLES"]);
+        for example in page.examples {
+            roff.text([bold(example.title)]);
+            roff.text([roman(example.description)]);
+            roff.control("sp", [] as [&str; 0]);
+            roff.control("nf", [] as [&str; 0]);
+            roff.control("RS", ["4"]);
+            for line in example.code.lines() {
+                roff.text([roman(line)]);
+            }
+            roff.control("RE", [] as [&str; 0]);
+            roff.control("fi", [] as [&str; 0]);
         }
     }
     if !page.exit_status.is_empty() {
@@ -100,6 +122,7 @@ fn main() {
                     "Print the process auxiliary vector as contained in /proc/pid/auxv.",
                 ),
             ],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "pauxv(1), penv(1), pflags(1), proc(5)",
@@ -116,6 +139,7 @@ fn main() {
                           This command is equivalent to running pargs with the -x option.",
             synopsis: "PID...",
             options: &[],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "pargs(1), penv(1), proc(5)",
@@ -132,6 +156,7 @@ fn main() {
                           This command is equivalent to running pargs with the -e option.",
             synopsis: "PID...",
             options: &[],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "pargs(1), pauxv(1), environ(7), proc(5)",
@@ -159,6 +184,7 @@ fn main() {
                  descriptor. Instead, limit output to the information that the process \
                  would retrieve by applying fstat(2) to each of its file descriptors.",
             )],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "fstat(2), fcntl(2), proc(5)",
@@ -179,6 +205,7 @@ fn main() {
                           and signal masks.",
             synopsis: "PID...",
             options: &[],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "kill(1), pflags(1), signal(7), proc(5)",
@@ -198,6 +225,7 @@ fn main() {
                           mask, it will be printed.",
             synopsis: "PID[/TID]...",
             options: &[],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "psig(1), proc(5)",
@@ -213,6 +241,7 @@ fn main() {
             description: "Stop each process by sending SIGSTOP.",
             synopsis: "PID...",
             options: &[],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "prun(1), kill(1), proc(5)",
@@ -232,6 +261,7 @@ fn main() {
             description: "Set running each process by sending SIGCONT (the inverse of pstop).",
             synopsis: "PID...",
             options: &[],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "pstop(1), kill(1), proc(5)",
@@ -254,6 +284,7 @@ fn main() {
                  process is a child of the calling process, the wait status is also \
                  displayed.",
             )],
+            examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "wait(1), proc(5)",
@@ -270,11 +301,54 @@ fn main() {
                           child processes indented from their respective parent processes. An \
                           argument of all digits is taken to be a process ID; otherwise it is \
                           assumed to be a user login name. The default is all processes.",
-            synopsis: "[-a|--all] [pid|user]...",
-            options: &[(
-                "-a, --all",
-                "All. Print all processes, including children of process ID 0.",
-            )],
+            synopsis: "[-ag] [pid|user]...",
+            options: &[
+                (
+                    "-a, --all",
+                    "All. Print all processes, including children of process ID 0.",
+                ),
+                (
+                    "-g, --graph",
+                    "Use line drawing characters. If the current locale is a UTF-8 \
+                     locale, the UTF-8 line drawing characters are used, otherwise \
+                     ASCII line drawing characters are used.",
+                ),
+            ],
+            examples: &[
+                Example {
+                    title: "Example 1 Using ptree",
+                    description: "The following example prints the process tree \
+                                  (including children of process 0) for processes \
+                                  which match the command name ssh:",
+                    code: "\
+$ ptree -a `pgrep ssh`
+        1  /sbin/init
+          100909  /usr/bin/sshd
+            569150  /usr/bin/sshd
+              569157  /usr/bin/sshd
+                569159  -bash
+                  569171  bash
+                    569173  /usr/bin/bash
+                      569193  bash",
+                },
+                Example {
+                    title: "Example 2",
+                    description: "The following example prints the process tree \
+                                  (including children of process 0) for processes \
+                                  which match the command name ssh with ASCII line \
+                                  drawing characters:",
+                    code: "\
+$ ptree -ag `pgrep ssh`
+        1  /sbin/init
+        `-100909  /usr/bin/sshd
+          `-569150  /usr/bin/sshd
+            `-569157  /usr/bin/sshd
+              `-569159  -bash
+                `-569171  bash
+                  `-569173  /usr/bin/bash
+                    `-569193  bash",
+                },
+            ],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
             see_also: "pargs(1), pgrep(1), ps(1), proc(5)",

@@ -22,6 +22,47 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::process::exit;
 
+struct GraphChars {
+    last: &'static str,
+    non_last: &'static str,
+    pipe: &'static str,
+    space: &'static str,
+}
+
+const UTF8_GRAPH: GraphChars = GraphChars {
+    last: "└─",
+    non_last: "├─",
+    pipe: "│ ",
+    space: "  ",
+};
+
+const ASCII_GRAPH: GraphChars = GraphChars {
+    last: "`-",
+    non_last: "|-",
+    pipe: "| ",
+    space: "  ",
+};
+
+fn is_utf8_locale() -> bool {
+    for var in &["LC_ALL", "LC_CTYPE", "LANG"] {
+        if let Ok(val) = std::env::var(var) {
+            if !val.is_empty() {
+                return val.to_ascii_lowercase().contains("utf-8")
+                    || val.to_ascii_lowercase().contains("utf8");
+            }
+        }
+    }
+    false
+}
+
+fn graph_chars() -> &'static GraphChars {
+    if is_utf8_locale() {
+        &UTF8_GRAPH
+    } else {
+        &ASCII_GRAPH
+    }
+}
+
 // Info parsed from /proc/[pid]/status
 struct ProcStat {
     pid: u64,
@@ -153,7 +194,13 @@ fn build_proc_maps(
     Ok((parent_map, child_map, uid_map))
 }
 
-fn print_tree(pid: u64, parent_map: &HashMap<u64, u64>, child_map: &HashMap<u64, Vec<u64>>) {
+fn print_tree(
+    pid: u64,
+    parent_map: &HashMap<u64, u64>,
+    child_map: &HashMap<u64, Vec<u64>>,
+    graph: Option<&GraphChars>,
+) {
+    let mut cont = Vec::new();
     let indent_level = if pid == 1 {
         0
     } else {
@@ -161,21 +208,27 @@ fn print_tree(pid: u64, parent_map: &HashMap<u64, u64>, child_map: &HashMap<u64,
             eprintln!("No such pid {}", pid);
             return;
         }
-        print_parents(&parent_map, pid)
+        print_parents(&parent_map, pid, graph, &mut cont)
     };
-    print_children(&child_map, pid, indent_level);
+    print_children(&child_map, pid, indent_level, graph, &mut cont, true);
 }
 
-fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>) {
+fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>, graph: Option<&GraphChars>) {
     if let Some(root_children) = child_map.get(&0) {
         for pid in root_children {
-            print_children(child_map, *pid, 0);
+            let mut cont = Vec::new();
+            print_children(child_map, *pid, 0, graph, &mut cont, true);
         }
     }
 }
 
 // Returns the current indentation level
-fn print_parents(parent_map: &HashMap<u64, u64>, pid: u64) -> u64 {
+fn print_parents(
+    parent_map: &HashMap<u64, u64>,
+    pid: u64,
+    graph: Option<&GraphChars>,
+    cont: &mut Vec<bool>,
+) -> u64 {
     let ppid = match parent_map.get(&pid) {
         Some(ppid) => *ppid,
         // Some child process listed 'pid' as its parent, but 'pid' exited before we could read its
@@ -192,23 +245,66 @@ fn print_parents(parent_map: &HashMap<u64, u64>, pid: u64) -> u64 {
         return 0;
     }
 
-    let indent_level = print_parents(parent_map, ppid);
-    print_ptree_line(ppid, indent_level);
+    let indent_level = print_parents(parent_map, ppid, graph, cont);
+    print_ptree_line(ppid, indent_level, graph, cont, true);
+    // Ancestor path is a single chain, no siblings to continue
+    cont.push(false);
     return indent_level + 1;
 }
 
-fn print_children(child_map: &HashMap<u64, Vec<u64>>, pid: u64, indent_level: u64) {
-    print_ptree_line(pid, indent_level);
+fn print_children(
+    child_map: &HashMap<u64, Vec<u64>>,
+    pid: u64,
+    indent_level: u64,
+    graph: Option<&GraphChars>,
+    cont: &mut Vec<bool>,
+    is_last: bool,
+) {
+    print_ptree_line(pid, indent_level, graph, cont, is_last);
     if let Some(children) = child_map.get(&pid) {
-        for child in children.iter() {
-            print_children(child_map, *child, indent_level + 1);
+        for (i, child) in children.iter().enumerate() {
+            let child_is_last = i == children.len() - 1;
+            cont.push(!child_is_last);
+            print_children(
+                child_map,
+                *child,
+                indent_level + 1,
+                graph,
+                cont,
+                child_is_last,
+            );
+            cont.pop();
         }
     }
 }
 
-fn print_ptree_line(pid: u64, indent_level: u64) {
-    for _ in 0..indent_level {
-        print!("  ");
+fn print_ptree_line(
+    pid: u64,
+    indent_level: u64,
+    graph: Option<&GraphChars>,
+    cont: &[bool],
+    is_last: bool,
+) {
+    match graph {
+        Some(g) if indent_level > 0 => {
+            for i in 0..(indent_level as usize - 1) {
+                if cont[i] {
+                    print!("{}", g.pipe);
+                } else {
+                    print!("{}", g.space);
+                }
+            }
+            if is_last {
+                print!("{}", g.last);
+            } else {
+                print!("{}", g.non_last);
+            }
+        }
+        _ => {
+            for _ in 0..indent_level {
+                print!("  ");
+            }
+        }
     }
     print!("{}  ", pid);
     ptools::print_cmd_summary(pid);
@@ -254,15 +350,17 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
 
 struct Args {
     all: bool,
+    graph: bool,
     target: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: ptree [-a|--all] [pid|user]...");
+    eprintln!("Usage: ptree [-ag] [pid|user]...");
     eprintln!("Print process trees.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -a, --all        Include children of PID 0");
+    eprintln!("  -g, --graph      Use line drawing characters");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
@@ -272,6 +370,7 @@ fn parse_args() -> Args {
 
     let mut args = Args {
         all: false,
+        graph: false,
         target: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
@@ -290,6 +389,7 @@ fn parse_args() -> Args {
                 exit(0);
             }
             Short('a') | Long("all") => args.all = true,
+            Short('g') | Long("graph") => args.graph = true,
             Value(val) => {
                 args.target.push(val.to_string_lossy().into_owned());
             }
@@ -314,6 +414,12 @@ fn main() {
         }
     };
 
+    let graph = if args.graph {
+        Some(graph_chars())
+    } else {
+        None
+    };
+
     if !args.target.is_empty() {
         let mut printed = HashSet::new();
         for target in &args.target {
@@ -323,7 +429,7 @@ fn main() {
                     continue;
                 }
                 if printed.insert(pid) {
-                    print_tree(pid, &parent_map, &child_map);
+                    print_tree(pid, &parent_map, &child_map, graph);
                 }
                 continue;
             }
@@ -332,7 +438,7 @@ fn main() {
                 Ok(pids) => {
                     for pid in pids {
                         if printed.insert(pid) {
-                            print_tree(pid, &parent_map, &child_map);
+                            print_tree(pid, &parent_map, &child_map, graph);
                         }
                     }
                 }
@@ -340,8 +446,8 @@ fn main() {
             }
         }
     } else if args.all {
-        print_all_trees(&child_map);
+        print_all_trees(&child_map, graph);
     } else {
-        print_tree(1, &parent_map, &child_map);
+        print_tree(1, &parent_map, &child_map, graph);
     }
 }
