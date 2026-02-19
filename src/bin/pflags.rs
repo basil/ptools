@@ -528,11 +528,15 @@ fn print_flags(spec: &PidSpec) -> bool {
     // Data model and process flags
     let model = data_model(pid).unwrap_or("unknown");
     let proc_flags = parse_stat_flags(&stat_line).unwrap_or(0);
-    println!(
-        "\tdata model = {}\tflags = {}",
-        model,
-        format_proc_flags(proc_flags)
-    );
+    if proc_flags != 0 {
+        println!(
+            "\tdata model = {}\tflags = {}",
+            model,
+            format_proc_flags(proc_flags)
+        );
+    } else {
+        println!("\tdata model = {}", model);
+    }
 
     // Read process-level pending signals (shared pending)
     if let Ok(status) = fs::read_to_string(format!("/proc/{}/status", pid)) {
