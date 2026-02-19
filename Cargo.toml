@@ -19,9 +19,12 @@ clap = { version = "4.5", features = ["derive"] }
 clap_mangen = "0.2.31"
 
 [profile.release]
-debug = true
-lto = true
-panic = "abort" # Save size. We don't need unwinding anyway.
+opt-level = "z" # favors smaller codegen than the default (3)
+lto = true # tends to produce the smallest binaries (tradeoff: slower builds)
+codegen-units = 1 # tends to produce the smallest binaries (tradeoff: slower builds)
+panic = "abort" # removes unwinding; for a CLI this is usually fine
+debug = 1 # keeps line-tables-only debuginfo, making backtraces/profiles meaningful without the full size hit
+strip = "symbols" # strips symbol table to reduce size, while still leaving enough info for basic stack traces with debug = 1
 # TODO is there any way to remove the ability to display backtraces? This would
 # likely shave another 50K or so off the binary size, and may not be necessary
 # if systems are typically configured to dump core on SIGABRT
