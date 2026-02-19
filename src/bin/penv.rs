@@ -14,13 +14,68 @@
 //   limitations under the License.
 //
 
-use clap::Parser;
-use ptools::cli::PenvCli;
+use std::process::exit;
+
+struct Args {
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: penv PID...");
+    eprintln!("Print process environment variables.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args { pid: Vec::new() };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("penv: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("penv {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("penv: invalid PID '{s}'");
+                        exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("penv: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("penv: at least one PID required");
+        exit(2);
+    }
+    args
+}
 
 fn main() {
-    let cli = PenvCli::parse();
+    let args = parse_args();
 
-    for &pid in &cli.pid {
+    for &pid in &args.pid {
         ptools::print_env(pid);
     }
 }

@@ -19,9 +19,6 @@ use std::process;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
-use clap::Parser;
-use ptools::cli::PrunCli;
-
 fn run_process(pid: u64) -> bool {
     let nix_pid = Pid::from_raw(pid as i32);
 
@@ -56,11 +53,67 @@ fn run_process(pid: u64) -> bool {
     true
 }
 
+struct Args {
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: prun PID...");
+    eprintln!("Set stopped processes running with SIGCONT.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args { pid: Vec::new() };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("prun: {e}");
+        process::exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                process::exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("prun {}", env!("CARGO_PKG_VERSION"));
+                process::exit(0);
+            }
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("prun: invalid PID '{s}'");
+                        process::exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("prun: unexpected argument: {arg:?}");
+                process::exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("prun: at least one PID required");
+        process::exit(2);
+    }
+    args
+}
+
 fn main() {
-    let cli = PrunCli::parse();
+    let args = parse_args();
     let mut failed = false;
 
-    for &pid in &cli.pid {
+    for &pid in &args.pid {
         if !run_process(pid) {
             failed = true;
         }

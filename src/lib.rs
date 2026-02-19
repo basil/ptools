@@ -32,8 +32,6 @@ use std::io::{BufRead, BufReader, Read};
 // and it doesn't, we shouldn't panic. On the other hand, we should feel free to assert that some
 // purely internal invariant holds, and panic if it doesn't.
 
-pub mod cli;
-
 /// A parsed PID with an optional thread (LWP) filter.
 pub struct PidSpec {
     pub pid: u64,

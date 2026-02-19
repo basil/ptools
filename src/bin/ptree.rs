@@ -252,11 +252,59 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
     Ok(pids)
 }
 
-use clap::Parser;
-use ptools::cli::PtreeCli;
+struct Args {
+    all: bool,
+    target: Vec<String>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: ptree [-a|--all] [pid|user]...");
+    eprintln!("Print process trees.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -a, --all        Include children of PID 0");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args {
+        all: false,
+        target: Vec::new(),
+    };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("ptree: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("ptree {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Short('a') | Long("all") => args.all = true,
+            Value(val) => {
+                args.target.push(val.to_string_lossy().into_owned());
+            }
+            _ => {
+                eprintln!("ptree: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    args
+}
 
 fn main() {
-    let cli = PtreeCli::parse();
+    let args = parse_args();
 
     let (parent_map, child_map, uid_map) = match build_proc_maps() {
         Ok(maps) => maps,
@@ -266,9 +314,9 @@ fn main() {
         }
     };
 
-    if !cli.target.is_empty() {
+    if !args.target.is_empty() {
         let mut printed = HashSet::new();
-        for target in &cli.target {
+        for target in &args.target {
             if let Ok(pid) = target.parse::<u64>() {
                 if pid == 0 {
                     eprintln!("PID must be > 0: {}", pid);
@@ -291,7 +339,7 @@ fn main() {
                 Err(e) => eprintln!("{}", e),
             }
         }
-    } else if cli.all {
+    } else if args.all {
         print_all_trees(&child_map);
     } else {
         print_tree(1, &parent_map, &child_map);

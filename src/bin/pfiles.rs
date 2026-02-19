@@ -1250,17 +1250,76 @@ fn print_files(pid: u64, non_verbose: bool) -> bool {
     return true;
 }
 
-use clap::Parser;
-use ptools::cli::PfilesCli;
+struct Args {
+    non_verbose: bool,
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: pfiles [-n] PID...");
+    eprintln!("Print information for all open files in each process.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -n               Set non-verbose mode");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args {
+        non_verbose: false,
+        pid: Vec::new(),
+    };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("pfiles: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("pfiles {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Short('n') => args.non_verbose = true,
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("pfiles: invalid PID '{s}'");
+                        exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("pfiles: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("pfiles: at least one PID required");
+        exit(2);
+    }
+    args
+}
 
 fn main() {
-    let cli = PfilesCli::parse();
+    let args = parse_args();
 
-    let error = cli
+    let error = args
         .pid
         .iter()
         .copied()
-        .any(|pid| !print_files(pid, cli.non_verbose));
+        .any(|pid| !print_files(pid, args.non_verbose));
 
     if error {
         exit(1);

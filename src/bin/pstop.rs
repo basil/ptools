@@ -21,9 +21,6 @@ use std::time::Duration;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
-use clap::Parser;
-use ptools::cli::PstopCli;
-
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
 fn verify_stopped(pid: u64) -> bool {
@@ -73,11 +70,67 @@ fn stop_process(pid: u64) -> bool {
     verify_stopped(pid)
 }
 
+struct Args {
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: pstop PID...");
+    eprintln!("Stop processes with SIGSTOP.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args { pid: Vec::new() };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("pstop: {e}");
+        process::exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                process::exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("pstop {}", env!("CARGO_PKG_VERSION"));
+                process::exit(0);
+            }
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("pstop: invalid PID '{s}'");
+                        process::exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("pstop: unexpected argument: {arg:?}");
+                process::exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("pstop: at least one PID required");
+        process::exit(2);
+    }
+    args
+}
+
 fn main() {
-    let cli = PstopCli::parse();
+    let args = parse_args();
     let mut failed = false;
 
-    for &pid in &cli.pid {
+    for &pid in &args.pid {
         if !stop_process(pid) {
             failed = true;
         }

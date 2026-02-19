@@ -422,7 +422,6 @@ fn pfiles_rejects_missing_pid() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_contains(&stderr, "Usage:");
     assert_contains(&stderr, "PID");
 }
 
@@ -435,7 +434,7 @@ fn pfiles_rejects_pid_zero() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_contains(&stderr, "invalid value");
+    assert_contains(&stderr, "invalid PID");
 }
 
 #[test]

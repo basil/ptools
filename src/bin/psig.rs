@@ -245,13 +245,68 @@ fn print_signal_actions(pid: u64) {
     }
 }
 
-use clap::Parser;
-use ptools::cli::PsigCli;
+use std::process::exit;
+
+struct Args {
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: psig PID...");
+    eprintln!("Print process signal actions.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args { pid: Vec::new() };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("psig: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("psig {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("psig: invalid PID '{s}'");
+                        exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("psig: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("psig: at least one PID required");
+        exit(2);
+    }
+    args
+}
 
 fn main() {
-    let cli = PsigCli::parse();
+    let args = parse_args();
 
-    for &pid in &cli.pid {
+    for &pid in &args.pid {
         print_signal_actions(pid);
     }
 }

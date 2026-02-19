@@ -571,13 +571,61 @@ fn print_flags(spec: &PidSpec) {
     }
 }
 
-use clap::Parser;
-use ptools::cli::PflagsCli;
+use std::process::exit;
+
+struct Args {
+    pid: Vec<String>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: pflags PID[/TID]...");
+    eprintln!("Print process status flags.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args { pid: Vec::new() };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("pflags: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("pflags {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Value(val) => {
+                args.pid.push(val.to_string_lossy().into_owned());
+            }
+            _ => {
+                eprintln!("pflags: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("pflags: at least one PID required");
+        exit(2);
+    }
+    args
+}
 
 fn main() {
-    let cli = PflagsCli::parse();
+    let args = parse_args();
 
-    for arg in &cli.pid {
+    for arg in &args.pid {
         match ptools::parse_pid_spec(arg) {
             Ok(spec) => print_flags(&spec),
             Err(e) => eprintln!("pflags: {}", e),

@@ -11,12 +11,11 @@ keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
+lexopt = "0.3.1"
 nix = { version = "0.31", features = ["event", "fs", "process", "signal", "socket"] }
 
 [build-dependencies]
-clap = { version = "4.5", features = ["derive"] }
-clap_mangen = "0.2.31"
+roff = "1.0.0"
 
 [profile.release]
 opt-level = "s" # Optimize for binary size.
@@ -25,6 +24,7 @@ codegen-units = 1 # Tends to produce the smallest binaries (tradeoff: slower bui
 panic = "abort" # Save size. We don't need unwinding anyway.
 debug = "limited" # Debug info without type or variable-level information, making backtraces meaningful without the full size hit.
 strip = "symbols" # Strips symbol table to reduce size, while still leaving enough info for backtraces.
+
 # TODO is there any way to remove the ability to display backtraces? This would
 # likely shave another 50K or so off the binary size, and may not be necessary
 # if systems are typically configured to dump core on SIGABRT

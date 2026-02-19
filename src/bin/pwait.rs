@@ -23,9 +23,6 @@ use nix::errno::Errno;
 use nix::libc;
 use nix::poll::{self, PollFd, PollFlags, PollTimeout};
 
-use clap::Parser;
-use ptools::cli::PwaitCli;
-
 /// Open a pidfd for the given PID via the pidfd_open(2) syscall.
 fn pidfd_open(pid: libc::pid_t) -> io::Result<OwnedFd> {
     let ret = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0_u32) };
@@ -63,13 +60,75 @@ fn pidfd_wait_status(raw_fd: i32) -> Result<i32, Errno> {
     Ok(wait_status)
 }
 
+struct Args {
+    verbose: bool,
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: pwait [-v] PID...");
+    eprintln!("Wait for processes to terminate.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -v               Report terminations to standard output");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args {
+        verbose: false,
+        pid: Vec::new(),
+    };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("pwait: {e}");
+        process::exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                process::exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("pwait {}", env!("CARGO_PKG_VERSION"));
+                process::exit(0);
+            }
+            Short('v') => args.verbose = true,
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("pwait: invalid PID '{s}'");
+                        process::exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("pwait: unexpected argument: {arg:?}");
+                process::exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("pwait: at least one PID required");
+        process::exit(2);
+    }
+    args
+}
+
 fn main() {
-    let cli = PwaitCli::parse();
+    let args = parse_args();
     let mut failed = false;
 
     // Deduplicate PIDs while preserving order.
     let mut seen = HashSet::new();
-    let pids: Vec<u64> = cli.pid.into_iter().filter(|p| seen.insert(*p)).collect();
+    let pids: Vec<u64> = args.pid.into_iter().filter(|p| seen.insert(*p)).collect();
 
     // Map raw fd -> (OwnedFd, pid) for O(1) lookup.
     let mut entries: HashMap<i32, (OwnedFd, u64)> = HashMap::new();
@@ -126,7 +185,7 @@ fn main() {
         for &raw_fd in &ready_fds {
             let (_, pid) = &entries[&raw_fd];
 
-            if cli.verbose {
+            if args.verbose {
                 // waitid(P_PIDFD) only works for child processes; for
                 // non-children it returns ECHILD, and we simply omit the
                 // wait status in that case.

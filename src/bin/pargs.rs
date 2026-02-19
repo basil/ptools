@@ -418,26 +418,99 @@ fn print_auxv(pid: u64) {
     }
 }
 
-use clap::Parser;
-use ptools::cli::PargsCli;
+use std::process::exit;
+
+struct Args {
+    line: bool,
+    args: bool,
+    env: bool,
+    auxv: bool,
+    pid: Vec<u64>,
+}
+
+fn print_usage() {
+    eprintln!("Usage: pargs [-l] [-a|--args] [-e|--env] [-x|--auxv] PID...");
+    eprintln!("Print process arguments.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -l               Display arguments as a single command line");
+    eprintln!("  -a, --args       Print process arguments (default)");
+    eprintln!("  -e, --env        Print process environment variables");
+    eprintln!("  -x, --auxv       Print process auxiliary vector");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut args = Args {
+        line: false,
+        args: false,
+        env: false,
+        auxv: false,
+        pid: Vec::new(),
+    };
+    let mut parser = lexopt::Parser::from_env();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("pargs: {e}");
+        exit(2);
+    }) {
+        match arg {
+            Short('h') | Long("help") => {
+                print_usage();
+                exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("pargs {}", env!("CARGO_PKG_VERSION"));
+                exit(0);
+            }
+            Short('l') => args.line = true,
+            Short('a') | Long("args") => args.args = true,
+            Short('e') | Long("env") => args.env = true,
+            Short('x') | Long("auxv") => args.auxv = true,
+            Value(val) => {
+                let s = val.to_string_lossy();
+                match s.parse::<u64>() {
+                    Ok(pid) if pid >= 1 => args.pid.push(pid),
+                    _ => {
+                        eprintln!("pargs: invalid PID '{s}'");
+                        exit(2);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("pargs: unexpected argument: {arg:?}");
+                exit(2);
+            }
+        }
+    }
+
+    if args.pid.is_empty() {
+        eprintln!("pargs: at least one PID required");
+        exit(2);
+    }
+    args
+}
 
 fn main() {
-    let cli = PargsCli::parse();
+    let args = parse_args();
 
-    let want_args = cli.args || (!cli.env && !cli.auxv);
+    let want_args = args.args || (!args.env && !args.auxv);
 
-    for &pid in &cli.pid {
+    for &pid in &args.pid {
         if want_args {
-            if cli.line {
+            if args.line {
                 print_cmdline(pid);
             } else {
                 print_args(pid);
             }
         }
-        if cli.env {
+        if args.env {
             ptools::print_env(pid);
         }
-        if cli.auxv {
+        if args.auxv {
             print_auxv(pid);
         }
     }
