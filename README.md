@@ -9,32 +9,32 @@ To build `ptools`, run the following commands on an Ubuntu 24.04 or newer
 system:
 
 ```shell
-$ git clone https://github.com/basil/ptools.git
-$ cd ptools/
-$ curl https://sh.rustup.rs -sSf | sh
-$ cargo build
+git clone https://github.com/basil/ptools.git
+cd ptools/
+curl https://sh.rustup.rs -sSf | sh
+cargo build
 ```
 
 You can run the utilities from the `target/debug` directory, for example:
 
 ```shell
-$ ./target/debug/ptree 1
+./target/debug/ptree 1
 ```
 
 To install `ptools` system-wide on Debian/Ubuntu:
 
 ```shell
-$ cargo install cargo-deb
-$ cargo deb
-$ sudo apt install ./target/debian/ptools_*.deb
+cargo install cargo-deb
+cargo deb
+sudo apt install ./target/debian/ptools_*.deb
 ```
 
 To install `ptools` system-wide on RPM-based distributions:
 
 ```shell
-$ cargo install cargo-generate-rpm
-$ cargo generate-rpm
-$ sudo dnf install ./target/generate-rpm/ptools-*.rpm
+cargo install cargo-generate-rpm
+cargo generate-rpm
+sudo dnf install ./target/generate-rpm/ptools-*.rpm
 ```
 
 ## Why ptools?
