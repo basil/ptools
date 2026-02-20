@@ -62,7 +62,7 @@ dependencies = [
 
 [[package]]
 name = "ptools"
-version = "0.2.10"
+version = "0.2.11"
 dependencies = [
  "lexopt",
  "nix",
