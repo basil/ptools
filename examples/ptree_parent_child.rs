@@ -9,11 +9,12 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.get(1).map(String::as_str) == Some("--child") {
+        let original_ppid = getppid();
         let ready_child_file = env::var("PTOOLS_TEST_READY_CHILD_FILE")
             .expect("PTOOLS_TEST_READY_CHILD_FILE must be set");
         File::create(ready_child_file).expect("failed to create ready child file");
 
-        while getppid().as_raw() != 1 {
+        while getppid() == original_ppid {
             thread::sleep(Duration::from_millis(100));
         }
         return;
