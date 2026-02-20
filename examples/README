@@ -1,8 +1,0 @@
-These files are compiled into the binaries that we then use as the processes for
-ptools to inspect in our tests.
-
-These binaries are intended to be started by the test process. The typical
-structure for these programs will be
- - Set up some state
- - Signal to test that it is ready to be inspected by the ptool being tested
- - Wait for the ptool to be run and then to be killed by the test process
