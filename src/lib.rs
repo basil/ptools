@@ -417,9 +417,9 @@ fn decode_hwcap(key: u64, value: u64) -> Option<String> {
         (44, "HBC"),
     ];
 
-    let table = if key == libc::AT_HWCAP as u64 {
+    let table = if key == libc::AT_HWCAP {
         HWCAP_NAMES
-    } else if key == libc::AT_HWCAP2 as u64 {
+    } else if key == libc::AT_HWCAP2 {
         HWCAP2_NAMES
     } else {
         return None;
