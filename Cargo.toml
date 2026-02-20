@@ -38,7 +38,6 @@ extended-description = """\
 A collection of utilities for inspecting the state of processes, modeled \
 after the tools by the same name which exist on Solaris/illumos."""
 
-separate-debug-symbols = true
 assets = [
   # List files we want explicitly so that we don't get the binaries intended for
   # testing.
