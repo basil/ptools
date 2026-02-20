@@ -16,6 +16,8 @@
 
 use std::process::exit;
 
+use ptools::{resolve_gid, resolve_uid};
+
 struct Args {
     all: bool,
     pid: Vec<u64>,
@@ -162,30 +164,52 @@ fn read_cred(pid: u64) -> Option<Cred> {
     })
 }
 
+fn fmt_uid(uid: u32) -> String {
+    match resolve_uid(uid) {
+        Some(name) => format!("{}({})", uid, name),
+        None => uid.to_string(),
+    }
+}
+
+fn fmt_gid(gid: u32) -> String {
+    match resolve_gid(gid) {
+        Some(name) => format!("{}({})", gid, name),
+        None => gid.to_string(),
+    }
+}
+
 fn print_cred(pid: u64, all: bool) -> bool {
     let Some(cred) = read_cred(pid) else {
         return false;
     };
 
     if !all && cred.euid == cred.ruid && cred.ruid == cred.suid {
-        print!("{}:\te/r/suid={}  ", pid, cred.euid);
+        print!("{}:\te/r/suid={}  ", pid, fmt_uid(cred.euid));
     } else {
         print!(
             "{}:\teuid={} ruid={} suid={}  ",
-            pid, cred.euid, cred.ruid, cred.suid
+            pid,
+            fmt_uid(cred.euid),
+            fmt_uid(cred.ruid),
+            fmt_uid(cred.suid)
         );
     }
 
     if !all && cred.egid == cred.rgid && cred.rgid == cred.sgid {
-        println!("e/r/sgid={}", cred.egid);
+        println!("e/r/sgid={}", fmt_gid(cred.egid));
     } else {
-        println!("egid={} rgid={} sgid={}", cred.egid, cred.rgid, cred.sgid);
+        println!(
+            "egid={} rgid={} sgid={}",
+            fmt_gid(cred.egid),
+            fmt_gid(cred.rgid),
+            fmt_gid(cred.sgid)
+        );
     }
 
     if !cred.groups.is_empty() && (all || cred.groups.len() != 1 || cred.groups[0] != cred.rgid) {
         print!("\tgroups:");
         for gid in &cred.groups {
-            print!(" {}", gid);
+            print!(" {}", fmt_gid(*gid));
         }
         println!();
     }

@@ -453,7 +453,7 @@ fn is_gid_auxv_key(key: u64) -> bool {
     key == libc::AT_GID as u64 || key == libc::AT_EGID as u64
 }
 
-fn resolve_uid(uid: u32) -> Option<String> {
+pub fn resolve_uid(uid: u32) -> Option<String> {
     // SAFETY: getpwuid returns a pointer to a static struct or null.
     let pw = unsafe { libc::getpwuid(uid) };
     if pw.is_null() {
@@ -464,7 +464,7 @@ fn resolve_uid(uid: u32) -> Option<String> {
     name.to_str().ok().map(str::to_string)
 }
 
-fn resolve_gid(gid: u32) -> Option<String> {
+pub fn resolve_gid(gid: u32) -> Option<String> {
     // SAFETY: getgrgid returns a pointer to a static struct or null.
     let gr = unsafe { libc::getgrgid(gid) };
     if gr.is_null() {
