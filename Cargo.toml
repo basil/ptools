@@ -1,6 +1,6 @@
 [package]
 name = "ptools"
-version = "0.2.9"
+version = "0.2.10"
 edition = "2021"
 description = "Utilities for inspecting Linux processes"
 readme = "README.md"
