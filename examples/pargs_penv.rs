@@ -26,7 +26,7 @@ fn apply_test_overrides_from_env() {
         _ => panic!("both NOFILE soft/hard overrides must be set together"),
     }
 
-    if let Some(umask) = env::var("PTOOLS_TEST_SET_UMASK").ok() {
+    if let Ok(umask) = env::var("PTOOLS_TEST_SET_UMASK") {
         let umask =
             u32::from_str_radix(&umask, 8).expect("invalid umask override (expected octal)");
         unsafe {

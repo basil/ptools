@@ -185,10 +185,8 @@ fn main() {
                 if !print_cmdline(pid) {
                     error = true;
                 }
-            } else {
-                if !print_args(pid) {
-                    error = true;
-                }
+            } else if !print_args(pid) {
+                error = true;
             }
             section = true;
         }

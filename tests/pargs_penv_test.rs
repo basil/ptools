@@ -52,7 +52,7 @@ fn pargs_matches_started_process_arguments() {
     let stdout = common::assert_success_and_get_stdout(output);
 
     for arg in expected_args {
-        let expected_line = format!("{}", arg);
+        let expected_line = arg.to_string();
         if !stdout.contains(&expected_line) {
             panic!(
                 "Argument '{}' not found in pargs output:\n\n{}\n\n",

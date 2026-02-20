@@ -26,7 +26,8 @@ fn main() {
     let ready_child_file =
         env::var("PTOOLS_TEST_READY_CHILD_FILE").expect("PTOOLS_TEST_READY_CHILD_FILE must be set");
 
-    Command::new(&args[0])
+    #[allow(clippy::zombie_processes)]
+    let _child = Command::new(&args[0])
         .arg("--child")
         .arg(child_arg)
         .env("PTOOLS_TEST_READY_FILE", ready_file.as_str())

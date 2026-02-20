@@ -9,6 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
 
 concurrency:
   group: release
@@ -33,6 +34,9 @@ jobs:
 
       - name: Check Markdown
         uses: DavidAnson/markdownlint-cli2-action@v22
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features
 
       - name: Build
         run: cargo build --verbose

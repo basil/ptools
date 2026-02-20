@@ -108,10 +108,7 @@ impl ProcStat {
             })
             .collect::<Result<HashMap<String, String>, Box<dyn Error>>>()?;
 
-        Ok(ProcStat {
-            pid: pid,
-            fields: fields,
-        })
+        Ok(ProcStat { pid, fields })
     }
 
     fn status_file(pid: u64) -> String {
@@ -170,8 +167,9 @@ fn read_starttime(pid: u64) -> Option<u64> {
 // Loop over all the processes listed in /proc/, find the parent of each one, and build a map from
 // child to parent and a map from parent to children. There doesn't seem to be a more efficient way
 // of doing this reliably.
-fn build_proc_maps(
-) -> Result<(HashMap<u64, u64>, HashMap<u64, Vec<u64>>, HashMap<u64, u32>), Box<dyn Error>> {
+type ProcMaps = (HashMap<u64, u64>, HashMap<u64, Vec<u64>>, HashMap<u64, u32>);
+
+fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
     let mut child_map = HashMap::new(); // Map of pid to pids of children
     let mut parent_map = HashMap::new(); // Map of pid to pid of parent
     let mut uid_map = HashMap::new(); // Map of pid to effective uid
@@ -189,14 +187,14 @@ fn build_proc_maps(
             let ppid = match proc_stat.ppid() {
                 Ok(ppid) => ppid,
                 Err(e) => {
-                    eprintln!("{}", e.to_string());
+                    eprintln!("{}", e);
                     continue;
                 }
             };
             let euid = match proc_stat.euid() {
                 Ok(euid) => euid,
                 Err(e) => {
-                    eprintln!("{}", e.to_string());
+                    eprintln!("{}", e);
                     continue;
                 }
             };
@@ -233,9 +231,9 @@ fn print_tree(
             eprintln!("No such pid {}", pid);
             return false;
         }
-        print_parents(&parent_map, pid, graph, &mut cont)
+        print_parents(parent_map, pid, graph, &mut cont)
     };
-    print_children(&child_map, pid, indent_level, graph, &mut cont, true);
+    print_children(child_map, pid, indent_level, graph, &mut cont, true);
     true
 }
 
@@ -275,7 +273,7 @@ fn print_parents(
     print_ptree_line(ppid, indent_level, graph, cont, true);
     // Ancestor path is a single chain, no siblings to continue
     cont.push(false);
-    return indent_level + 1;
+    indent_level + 1
 }
 
 fn print_children(
@@ -313,8 +311,8 @@ fn print_ptree_line(
 ) {
     match graph {
         Some(g) if indent_level > 0 => {
-            for i in 0..(indent_level as usize - 1) {
-                if cont[i] {
+            for c in cont.iter().take(indent_level as usize - 1) {
+                if *c {
                     print!("{}", g.pipe);
                 } else {
                     print!("{}", g.space);
@@ -447,10 +445,8 @@ fn main() {
                     error = true;
                     continue;
                 }
-                if printed.insert(pid) {
-                    if !print_tree(pid, &parent_map, &child_map, graph) {
-                        error = true;
-                    }
+                if printed.insert(pid) && !print_tree(pid, &parent_map, &child_map, graph) {
+                    error = true;
                 }
                 continue;
             }
@@ -458,10 +454,8 @@ fn main() {
             match pids_for_user(target, &uid_map) {
                 Ok(pids) => {
                     for pid in pids {
-                        if printed.insert(pid) {
-                            if !print_tree(pid, &parent_map, &child_map, graph) {
-                                error = true;
-                            }
+                        if printed.insert(pid) && !print_tree(pid, &parent_map, &child_map, graph) {
+                            error = true;
                         }
                     }
                 }

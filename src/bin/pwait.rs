@@ -175,7 +175,7 @@ fn main() {
             .iter()
             .zip(raw_fds.iter())
             .filter(|(pfd, _)| {
-                pfd.revents().map_or(false, |r| {
+                pfd.revents().is_some_and(|r| {
                     r.intersects(PollFlags::POLLIN | PollFlags::POLLHUP | PollFlags::POLLERR)
                 })
             })

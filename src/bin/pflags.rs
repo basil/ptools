@@ -443,7 +443,7 @@ fn signal_name(sig: usize) -> String {
 fn format_signal_set(bits: &[bool]) -> String {
     let names: Vec<String> = (1..bits.len())
         .filter(|&sig| bits[sig])
-        .map(|sig| signal_name(sig))
+        .map(signal_name)
         .collect();
     names.join(" ")
 }

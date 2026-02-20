@@ -262,7 +262,7 @@ fn print_open_flags(flags: u64) {
     // fcntl(F_GETFD)), not an open-file status flag (F_GETFL). Linux exposes the CLOEXEC bit in
     // /proc/[pid]/fdinfo flags, so we keep it in this compact flag list.
 
-    print!("\n");
+    println!();
 }
 
 fn get_fdinfo_field(pid: u64, fd: u64, field: &str) -> Result<String, Box<dyn Error>> {
@@ -333,7 +333,7 @@ fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
             return None;
         }
 
-        return String::from_utf8(buf).ok();
+        String::from_utf8(buf).ok()
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -960,7 +960,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                 let sock_info = SockInfo {
                     family: AddressFamily::Unix,
                     sock_type: parse_sock_type(fields[4])?,
-                    inode: inode,
+                    inode,
                     local_addr: None,
                     peer_addr: None,
                     peer_pid: None,
@@ -985,7 +985,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                 let sock_info = SockInfo {
                     family: AddressFamily::Netlink,
                     sock_type: SockType::Datagram,
-                    inode: inode,
+                    inode,
                     local_addr: None,
                     peer_addr: None,
                     peer_pid: None,
@@ -1024,7 +1024,7 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                             } else {
                                 None
                             },
-                            inode: inode,
+                            inode,
                             tx_queue: Some(tx_queue),
                             rx_queue: Some(rx_queue),
                         };
@@ -1092,7 +1092,7 @@ fn print_file(
         Ok(stat_info) => stat_info,
     };
 
-    let file_type = file_type(stat_info.st_mode, &link_path);
+    let file_type = file_type(stat_info.st_mode, link_path);
 
     print!(
         "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
@@ -1109,9 +1109,9 @@ fn print_file(
     let rdev_major = major(stat_info.st_rdev);
     let rdev_minor = minor(stat_info.st_rdev);
     if rdev_major == 0 && rdev_minor == 0 {
-        print!(" size:{}\n", stat_info.st_size)
+        println!(" size:{}", stat_info.st_size)
     } else {
-        print!(" rdev:{},{}\n", rdev_major, rdev_minor);
+        println!(" rdev:{},{}", rdev_major, rdev_minor);
     }
 
     if non_verbose {
@@ -1152,8 +1152,8 @@ fn print_file(
                     sockname_from_sockprotoname(&sockprotoname)
                 );
             } else {
-                print!(
-                    "      ERROR: failed to find info for socket with inode num {}\n",
+                println!(
+                    "      ERROR: failed to find info for socket with inode num {}",
                     stat_info.st_ino
                 );
             }
@@ -1320,7 +1320,7 @@ fn print_files(pid: u64, non_verbose: bool) -> bool {
             let entry = entry?;
             let filename = entry.file_name();
             let filename = filename.to_string_lossy();
-            if let Ok(fd) = (&filename).parse::<u64>() {
+            if let Ok(fd) = filename.parse::<u64>() {
                 print_file(pid, fd, &sockets, &peers, non_verbose);
             } else {
                 eprint!("Unexpected file /proc/[pid]/fd/{} found", &filename);
@@ -1334,7 +1334,7 @@ fn print_files(pid: u64, non_verbose: bool) -> bool {
         return false;
     }
 
-    return true;
+    true
 }
 
 struct Args {

@@ -100,7 +100,7 @@ pub fn print_env(pid: u64) -> bool {
         print_proc_summary(pid);
 
         let mut i = 0;
-        for bytes in BufReader::new(file).split('\0' as u8) {
+        for bytes in BufReader::new(file).split(b'\0') {
             match &bytes {
                 Ok(bytes) => {
                     let arg = String::from_utf8_lossy(bytes);
@@ -130,33 +130,33 @@ const AT_RSEQ_FEATURE_SIZE: u64 = 27;
 const AT_RSEQ_ALIGN: u64 = 28;
 
 const AUX_NAMES: &[(u64, &str)] = &[
-    (libc::AT_BASE as u64, "AT_BASE"),
-    (libc::AT_BASE_PLATFORM as u64, "AT_BASE_PLATFORM"),
-    (libc::AT_CLKTCK as u64, "AT_CLKTCK"),
-    (libc::AT_EGID as u64, "AT_EGID"),
-    (libc::AT_ENTRY as u64, "AT_ENTRY"),
-    (libc::AT_EUID as u64, "AT_EUID"),
-    (libc::AT_EXECFD as u64, "AT_EXECFD"),
-    (libc::AT_EXECFN as u64, "AT_EXECFN"),
-    (libc::AT_FLAGS as u64, "AT_FLAGS"),
-    (libc::AT_GID as u64, "AT_GID"),
-    (libc::AT_HWCAP2 as u64, "AT_HWCAP2"),
-    (libc::AT_HWCAP as u64, "AT_HWCAP"),
-    (libc::AT_IGNORE as u64, "AT_IGNORE"),
-    (libc::AT_MINSIGSTKSZ as u64, "AT_MINSIGSTKSZ"),
-    (libc::AT_NOTELF as u64, "AT_NOTELF"),
-    (libc::AT_NULL as u64, "AT_NULL"),
-    (libc::AT_PAGESZ as u64, "AT_PAGESZ"),
-    (libc::AT_PHDR as u64, "AT_PHDR"),
-    (libc::AT_PHENT as u64, "AT_PHENT"),
-    (libc::AT_PHNUM as u64, "AT_PHNUM"),
-    (libc::AT_PLATFORM as u64, "AT_PLATFORM"),
-    (libc::AT_RANDOM as u64, "AT_RANDOM"),
+    (libc::AT_BASE, "AT_BASE"),
+    (libc::AT_BASE_PLATFORM, "AT_BASE_PLATFORM"),
+    (libc::AT_CLKTCK, "AT_CLKTCK"),
+    (libc::AT_EGID, "AT_EGID"),
+    (libc::AT_ENTRY, "AT_ENTRY"),
+    (libc::AT_EUID, "AT_EUID"),
+    (libc::AT_EXECFD, "AT_EXECFD"),
+    (libc::AT_EXECFN, "AT_EXECFN"),
+    (libc::AT_FLAGS, "AT_FLAGS"),
+    (libc::AT_GID, "AT_GID"),
+    (libc::AT_HWCAP2, "AT_HWCAP2"),
+    (libc::AT_HWCAP, "AT_HWCAP"),
+    (libc::AT_IGNORE, "AT_IGNORE"),
+    (libc::AT_MINSIGSTKSZ, "AT_MINSIGSTKSZ"),
+    (libc::AT_NOTELF, "AT_NOTELF"),
+    (libc::AT_NULL, "AT_NULL"),
+    (libc::AT_PAGESZ, "AT_PAGESZ"),
+    (libc::AT_PHDR, "AT_PHDR"),
+    (libc::AT_PHENT, "AT_PHENT"),
+    (libc::AT_PHNUM, "AT_PHNUM"),
+    (libc::AT_PLATFORM, "AT_PLATFORM"),
+    (libc::AT_RANDOM, "AT_RANDOM"),
     (AT_RSEQ_FEATURE_SIZE, "AT_RSEQ_FEATURE_SIZE"),
     (AT_RSEQ_ALIGN, "AT_RSEQ_ALIGN"),
-    (libc::AT_SECURE as u64, "AT_SECURE"),
-    (libc::AT_SYSINFO_EHDR as u64, "AT_SYSINFO_EHDR"),
-    (libc::AT_UID as u64, "AT_UID"),
+    (libc::AT_SECURE, "AT_SECURE"),
+    (libc::AT_SYSINFO_EHDR, "AT_SYSINFO_EHDR"),
+    (libc::AT_UID, "AT_UID"),
 ];
 
 fn aux_key_name(key: u64) -> String {
@@ -189,7 +189,7 @@ fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<(u64, u64)>,
     let record_size = word_size
         .checked_mul(2)
         .ok_or_else(|| "auxv record size overflow".to_string())?;
-    if record_size == 0 || bytes.len() % record_size != 0 {
+    if record_size == 0 || !bytes.len().is_multiple_of(record_size) {
         return Err(format!("unexpected auxv size {}", bytes.len()));
     }
 
@@ -268,9 +268,7 @@ fn read_auxv(pid: u64) -> Option<Vec<(u64, u64)>> {
 }
 
 fn is_string_auxv_key(key: u64) -> bool {
-    key == libc::AT_EXECFN as u64
-        || key == libc::AT_PLATFORM as u64
-        || key == libc::AT_BASE_PLATFORM as u64
+    key == libc::AT_EXECFN || key == libc::AT_PLATFORM || key == libc::AT_BASE_PLATFORM
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -311,9 +309,9 @@ fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     // AT_HWCAP2 on x86_64: kernel-defined bits from asm/hwcap2.h
     const HWCAP2_NAMES: &[(u32, &str)] = &[(0, "RING3MWAIT"), (1, "FSGSBASE")];
 
-    let table = if key == libc::AT_HWCAP as u64 {
+    let table = if key == libc::AT_HWCAP {
         HWCAP_NAMES
-    } else if key == libc::AT_HWCAP2 as u64 {
+    } else if key == libc::AT_HWCAP2 {
         HWCAP2_NAMES
     } else {
         return None;
@@ -446,11 +444,11 @@ fn decode_hwcap(_key: u64, _value: u64) -> Option<String> {
 }
 
 fn is_uid_auxv_key(key: u64) -> bool {
-    key == libc::AT_UID as u64 || key == libc::AT_EUID as u64
+    key == libc::AT_UID || key == libc::AT_EUID
 }
 
 fn is_gid_auxv_key(key: u64) -> bool {
-    key == libc::AT_GID as u64 || key == libc::AT_EGID as u64
+    key == libc::AT_GID || key == libc::AT_EGID
 }
 
 pub fn resolve_uid(uid: u32) -> Option<String> {
@@ -577,7 +575,7 @@ pub fn print_cmd_summary(pid: u64) {
                     }
                     Err(e) => {
                         println!("<error reading cmdline>");
-                        eprintln!("{}", e.to_string());
+                        eprintln!("{}", e);
                         return;
                     }
                 }
@@ -606,14 +604,14 @@ pub fn print_cmd_summary(pid: u64) {
             } else {
                 print!("{}", summary);
             }
-            print!("\n");
+            println!();
         }
         Err(ref e) if e.kind() == ErrorKind::NotFound => {
             println!("<exited>");
         }
         Err(e) => {
             println!("<error reading cmdline>");
-            eprintln!("{}", e.to_string());
+            eprintln!("{}", e);
         }
     }
 }

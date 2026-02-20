@@ -42,7 +42,7 @@ fn output_has_pid_line(output: &str, pid: u64) -> bool {
         .any(|line| line.trim_start().starts_with(&prefix))
 }
 
-fn line_for_pid<'a>(output: &'a str, pid: u64) -> Option<&'a str> {
+fn line_for_pid(output: &str, pid: u64) -> Option<&str> {
     let prefix = format!("{}  ", pid);
     output
         .lines()
@@ -94,18 +94,12 @@ fn ptree_shows_parent_and_child_with_arguments() {
     let parent_index = lines
         .iter()
         .position(|line| line.contains(parent_arg))
-        .expect(&format!(
-            "Did not find parent process line in output:\n{}",
-            stdout
-        ));
+        .unwrap_or_else(|| panic!("Did not find parent process line in output:\n{}", stdout));
 
     let child_index = lines
         .iter()
         .position(|line| line.contains("--ch"))
-        .expect(&format!(
-            "Did not find child process line in output:\n{}",
-            stdout
-        ));
+        .unwrap_or_else(|| panic!("Did not find child process line in output:\n{}", stdout));
 
     assert!(
         parent_index < child_index,
