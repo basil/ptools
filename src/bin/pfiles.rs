@@ -1427,8 +1427,15 @@ mod test {
 
     #[test]
     fn test_parse_ipv4_sock_addr() {
+        // The address format in /proc/net/tcp is native-endian, so the hex
+        // representation differs between little-endian and big-endian systems.
+        #[cfg(target_endian = "little")]
+        const LOCALHOST: &str = "0100007F:1538";
+        #[cfg(target_endian = "big")]
+        const LOCALHOST: &str = "7F000001:1538";
+
         assert_eq!(
-            parse_ipv4_sock_addr("0100007F:1538").unwrap(),
+            parse_ipv4_sock_addr(LOCALHOST).unwrap(),
             "127.0.0.1:5432".parse::<SocketAddr>().unwrap()
         );
         assert_eq!(
