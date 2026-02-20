@@ -167,6 +167,31 @@ fn main() {
 
     render_man_page(
         &ManPage {
+            name: "pcred",
+            about: "print process credentials",
+            description: "Print the credentials (effective, real, saved UIDs and GIDs) \
+                          of each process. By default, if the effective, real, and \
+                          saved-set user (group) IDs are identical, they are printed in \
+                          condensed form as e/r/suid (e/r/sgid); otherwise they are \
+                          printed individually. Supplementary groups are also displayed.",
+            synopsis: "[-a] PID...",
+            options: &[(
+                "-a, --all",
+                "Report all credential information separately. By default, if the \
+                 effective, real, and saved-set user (group) IDs are identical, they \
+                 are reported in condensed form.",
+            )],
+            examples: &[],
+            exit_status: DEFAULT_EXIT_STATUS,
+            files: DEFAULT_FILES,
+            see_also: "pfiles(1), pflags(1), proc(5), credentials(7)",
+            warnings: "",
+        },
+        out_dir,
+    );
+
+    render_man_page(
+        &ManPage {
             name: "pfiles",
             about: "report open file information",
             description: "Print fstat(2) and fcntl(2) information for all open files in each \
