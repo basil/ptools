@@ -218,6 +218,7 @@ fn print_cred(pid: u64, all: bool) -> bool {
 }
 
 fn main() {
+    ptools::reset_sigpipe();
     let args = parse_args();
 
     let mut error = false;

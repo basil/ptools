@@ -23,6 +23,17 @@ use std::mem::size_of;
 
 use nix::libc;
 
+/// Reset SIGPIPE to the default behavior (terminate the process) so that
+/// writing to a closed pipe exits silently instead of panicking.  Rust
+/// overrides the default to SIG_IGN, which causes `println!` to panic
+/// with "Broken pipe" when stdout is a pipe whose reader has closed.
+pub fn reset_sigpipe() {
+    // SAFETY: Restoring the default signal disposition is always safe.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
 // TODO Add a type alias for Result<Foo, Box<Error>>
 // TODO Add support for handling core dumps
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input

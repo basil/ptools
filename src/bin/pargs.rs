@@ -168,6 +168,7 @@ fn parse_args() -> Args {
 }
 
 fn main() {
+    ptools::reset_sigpipe();
     let args = parse_args();
 
     let want_args = args.args || (!args.env && !args.auxv);

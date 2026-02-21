@@ -226,6 +226,7 @@ fn print_thread(pid: u64, tid: u64, affinity_nodes: &Option<Vec<u32>>) -> bool {
 }
 
 fn main() {
+    ptools::reset_sigpipe();
     let args = parse_args();
 
     if args.affinity_nodes.is_some() {

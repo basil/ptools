@@ -419,6 +419,7 @@ fn parse_args() -> Args {
 }
 
 fn main() {
+    ptools::reset_sigpipe();
     let args = parse_args();
 
     let (parent_map, child_map, uid_map) = match build_proc_maps() {
