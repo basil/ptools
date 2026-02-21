@@ -15,6 +15,12 @@ Build all binaries and example applications:
 cargo build
 ```
 
+You can run the utilities from the `target/debug` directory, for example:
+
+```shell
+./target/debug/ptree 1
+```
+
 Run the tests:
 
 ```shell
@@ -26,6 +32,24 @@ directory as target processes for the ptools to inspect. These example binaries
 are compiled automatically by `cargo test`. Each example program sets up some
 state, signals to the test that it is ready to be inspected, and then waits to
 be killed by the test process.
+
+## Building Packages
+
+To build and install a `.deb` package on Debian/Ubuntu:
+
+```shell
+cargo install cargo-deb
+cargo deb
+sudo apt install ./target/debian/ptools_*.deb
+```
+
+To build and install an `.rpm` package on RPM-based distributions:
+
+```shell
+cargo install cargo-generate-rpm
+cargo generate-rpm
+sudo dnf install ./target/generate-rpm/ptools-*.rpm
+```
 
 ## Manual Pages
 

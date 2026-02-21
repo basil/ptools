@@ -5,36 +5,25 @@ state of processes, inspired by the tools of the same name on Solaris/illumos.
 
 ## Getting Started
 
-To build `ptools`, run the following commands on an Ubuntu 24.04 or newer
-system:
+Install from [crates.io](https://crates.io/crates/ptools):
 
 ```shell
-git clone https://github.com/basil/ptools.git
-cd ptools/
-curl https://sh.rustup.rs -sSf | sh
-cargo build
+cargo install ptools
 ```
 
-You can run the utilities from the `target/debug` directory, for example:
+Alternatively, download the latest `.deb` or `.rpm` package from the [GitHub
+Releases page](https://github.com/basil/ptools/releases).
+
+On Debian/Ubuntu:
 
 ```shell
-./target/debug/ptree 1
+sudo apt install ./ptools_*.deb
 ```
 
-To install `ptools` system-wide on Debian/Ubuntu:
+On Fedora and other RPM-based distributions:
 
 ```shell
-cargo install cargo-deb
-cargo deb
-sudo apt install ./target/debian/ptools_*.deb
-```
-
-To install `ptools` system-wide on RPM-based distributions:
-
-```shell
-cargo install cargo-generate-rpm
-cargo generate-rpm
-sudo dnf install ./target/generate-rpm/ptools-*.rpm
+sudo dnf install ./ptools-*.rpm
 ```
 
 ## Why ptools?
