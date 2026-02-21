@@ -44,7 +44,7 @@ Siebenmann’s [“In praise of Solaris’s pfiles command”](https://utcc.utor
 
 ```text
 $ pfiles $(pgrep example)
-2785:	sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+2785: sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
   Current soft rlimit: 1024 file descriptors
   Current hard rlimit: 524288 file descriptors
   Current umask: 022
@@ -97,7 +97,7 @@ $ ptree 1
 
 ```text
 $ pargs $(pgrep Xwayland)
-3866:	Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
+3866: Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
 argv[0]: Xwayland
 argv[1]: :0
 argv[2]: -rootless
@@ -116,7 +116,7 @@ argv[11]: 95
 
 ```text
 $ penv $(pgrep Xwayland)
-3866:	Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
+3866: Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
 envp[0]: SHELL=/bin/zsh
 envp[1]: GTK_IM_MODULE=wayland
 envp[2]: XDG_BACKEND=wayland
@@ -128,7 +128,7 @@ envp[4]: XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session1
 
 ```text
 $ pauxv $(pgrep sshd)
-2785:	sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+2785: sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
 AT_SYSINFO_EHDR 0x00007fa1fe8b7000
 AT_MINSIGSTKSZ  0x0000000000000d30
 AT_HWCAP        0x00000000178bfbff FPU | VME | DE | PSE | TSC | MSR | PAE | MCE | CX8 | APIC | SEP | MTRR | PGE | MCA | CMOV | PAT | PSE36 | CLFSH | MMX | FXSR | SSE | SSE2 | HTT
@@ -157,9 +157,9 @@ AT_RSEQ_ALIGN   0x0000000000000020
 
 ```text
 $ psig 1
-1:	/usr/lib/systemd/systemd --switched-root --system --deserialize=47
-HUP       default	blocked
-INT       default	blocked
+1: /usr/lib/systemd/systemd --switched-root --system --deserialize=47
+HUP       default blocked
+INT       default blocked
 QUIT      caught
 ILL       caught
 TRAP      default
@@ -167,12 +167,12 @@ ABRT      caught
 BUS       caught
 FPE       caught
 KILL      default
-USR1      default	blocked
+USR1      default blocked
 SEGV      caught
-USR2      default	blocked
+USR2      default blocked
 PIPE      ignored
 ALRM      default
-TERM      default	blocked
+TERM      default blocked
 ```
 
 ## Current State
