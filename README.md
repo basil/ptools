@@ -55,11 +55,12 @@ make this same consistent debugging experience available on Linux.
 The following table lists all Solaris/illumos ptools and their status in this
 project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps),
 [glibc](https://www.gnu.org/software/libc/), or
-[python-linux-procfs](python-linux-procfs) are not reimplemented here, as these
-packages are widely available on Linux distributions and already provide
-equivalent functionality. There are a number of commands available on
-Solaris/illumos which have not been implemented here yet, perhaps most notably
-`pstack`. Also, support for examining core dumps has not yet been implemented.
+[python-linux-procfs](https://git.kernel.org/pub/scm/libs/python/python-linux-procfs/python-linux-procfs.git/)
+are not reimplemented here, as these packages are widely available on Linux
+distributions and already provide equivalent functionality. There are a number
+of commands available on Solaris/illumos which have not
+been implemented here yet, perhaps most notably `pstack`. Also, support
+for examining core dumps has not yet been implemented.
 
 | Command        | Description                                           | Status                       |
 | -------------- | ----------------------------------------------------- | ---------------------------- |
