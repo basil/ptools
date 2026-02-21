@@ -10,8 +10,8 @@ processes, inspired by the tools of the same name on Solaris/illumos.
 ## Motivation
 
 Linux already has a number of mechanisms which can be used to inspect the state
-of processes (the `/proc` filesystem, `ps`, `lsof`, etc.). Why add a new set of
-tools?
+of processes (the `/proc` filesystem, `ps(1)`, `lsof(1)`, etc.). Why add
+a new set of tools?
 
 The main advantage of `ptools` is consistency. The utilities provided by `ptools`
 are consistently named and have a consistent interface. Also, significantly,
