@@ -81,11 +81,11 @@ for examining core dumps has not yet been implemented.
 | `ppgsz(1)`     | Set preferred page size                               | 🔲 Not yet implemented       |
 | `ppriv(1)`     | Print or modify process privilege sets and attributes | 🔲 Not yet implemented       |
 | `preap(1)`     | Force a defunct process to be reaped                  | 🔲 Not yet implemented       |
-| `prun(1)`      | Set stopped processes running with SIGCONT            | ✅ Implemented               |
+| `prun(1)`      | Set stopped processes running with `SIGCONT`          | ✅ Implemented               |
 | `psecflags(1)` | Print or modify process security flags                | 🔲 Not yet implemented       |
 | `psig(1)`      | Print process signal actions                          | ✅ Implemented               |
 | `pstack(1)`    | Print process call stack                              | 🔲 Not yet implemented       |
-| `pstop(1)`     | Stop processes with SIGSTOP                           | ✅ Implemented               |
+| `pstop(1)`     | Stop processes with `SIGSTOP`                         | ✅ Implemented               |
 | `ptime(1)`     | Time a process using microstate accounting            | 🔲 Not yet implemented       |
 | `ptree(1)`     | Print process trees                                   | ✅ Implemented               |
 | `pwait(1)`     | Wait for processes to terminate                       | ✅ Implemented               |
