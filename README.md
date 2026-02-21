@@ -4,8 +4,8 @@
 [![License](https://img.shields.io/crates/l/ptools)](LICENSE)
 [![Build](https://github.com/basil/ptools/actions/workflows/build.yml/badge.svg)](https://github.com/basil/ptools/actions/workflows/build.yml)
 
-This repository contains a collection of Linux utilities for inspecting the
-state of processes, inspired by the tools of the same name on Solaris/illumos.
+`ptools` is a a collection of Linux utilities for inspecting the state of
+processes, inspired by the tools of the same name on Solaris/illumos.
 
 ## Motivation
 
@@ -40,7 +40,7 @@ Releases page](https://github.com/basil/ptools/releases).
 `lsof`, but for a specific process). This includes details on regular files
 (including offset, which is great for checking on programs that scan through
 large files) and sockets. For more information about this use case, see Chris
-Siebenmann’s [“In praise of Solaris’s pfiles command”](https://utcc.utoronto.ca/~cks/space/blog/solaris/PfilesPraise).
+Siebenmann’s [“In praise of Solaris’s `pfiles` command”](https://utcc.utoronto.ca/~cks/space/blog/solaris/PfilesPraise).
 
 ```text
 $ pfiles $(pgrep example)
