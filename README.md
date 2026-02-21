@@ -34,16 +34,6 @@ cargo install ptools
 Alternatively, download the latest `.deb` or `.rpm` package from the [GitHub
 Releases page](https://github.com/basil/ptools/releases).
 
-On Debian/Ubuntu:
-
-```shell
-# Debian/Ubuntu
-sudo apt install ./ptools_*.deb
-
-# Fedora/RHEL
-sudo dnf install ./ptools-*.rpm
-```
-
 ## Examples
 
 `pfiles(1)` shows you every file descriptor a process has open (similar to
