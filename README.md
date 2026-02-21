@@ -43,7 +43,7 @@ Linux already has a number of mechanisms which can be used to inspect the state
 of processes (the `/proc` filesystem, `ps`, `lsof`, etc.). Why add a new set of
 tools?
 
-The main advantage of ptools is consistency. The utilities provided by ptools
+The main advantage of `ptools` is consistency. The utilities provided by `ptools`
 are consistently named and have a consistent interface. Also, significantly,
 they can be run against core dumps where applicable, providing a uniform way to
 examine live processes and core dumps. This is very useful for those who rely
