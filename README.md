@@ -39,8 +39,8 @@ Releases page](https://github.com/basil/ptools/releases).
 `pfiles(1)` shows you every file descriptor a process has open (similar to
 `lsof`, but for a specific process). This includes details on regular files
 (including offset, which is great for checking on programs that scan through
-large files) and sockets. For more information about this use case, see Chris
-Siebenmann’s [“In praise of Solaris’s `pfiles` command”](https://utcc.utoronto.ca/~cks/space/blog/solaris/PfilesPraise).
+large files) and sockets. For more information, see Chris Siebenmann’s article
+[“In praise of Solaris’s `pfiles` command”](https://utcc.utoronto.ca/~cks/space/blog/solaris/PfilesPraise).
 
 ```text
 $ pfiles $(pgrep example)
