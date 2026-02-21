@@ -73,7 +73,7 @@ for examining core dumps has not yet been implemented.
 | `pgrep(1)`     | Find processes by name                                | ➡️ See `procps-ng`           |
 | `pkill(1)`     | Signal processes by name                              | ➡️ See `procps-ng`           |
 | `pldd(1)`      | Print process dynamic libraries                       | ➡️ See `glibc`               |
-| `plgrp(1)`     | Print or modify home lgroup and lgroup affinities     | 🔲 Not yet implemented       |
+| `plgrp(1)`     | Display home NUMA node and thread affinities          | ✅ Implemented               |
 | `plimit(1)`    | Get or set process resource limits                    | 🔲 Not yet implemented       |
 | `plockstat(1)` | Print lock statistics                                 | 🔲 Not yet implemented       |
 | `pmadvise(1)`  | Apply advice about memory to a process                | 🔲 Not yet implemented       |

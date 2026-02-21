@@ -360,5 +360,52 @@ $ ptree -ag `pgrep ssh`
         out_dir,
     );
 
+    render_man_page(
+        &ManPage {
+            name: "plgrp",
+            about: "display home NUMA node and thread affinities",
+            description: "Display the home NUMA node for each thread in the specified \
+                          processes. The home node is the NUMA node of the CPU on which the \
+                          thread is currently running. With the -a option, also display \
+                          whether each thread's CPU affinity includes CPUs on the requested \
+                          nodes.",
+            synopsis: "[-a node_list] pid[/tid] ...",
+            options: &[(
+                "-a node_list",
+                "Display affinity information for the specified NUMA nodes. \
+                 The node_list is a comma-separated list of node IDs, ranges \
+                 (e.g. 0-3), or the keywords all, root (node 0), or leaves \
+                 (all online nodes). For each requested node, the output shows \
+                 bound if the thread's CPU affinity mask includes any CPU on \
+                 that node, or none otherwise.",
+            )],
+            examples: &[
+                Example {
+                    title: "Example 1 Display home nodes",
+                    description: "Display the home NUMA node for each thread of the shell:",
+                    code: "\
+$ plgrp $$
+       PID/TID  HOME
+     3401/3401     1",
+                },
+                Example {
+                    title: "Example 2 Display affinities",
+                    description: "Display home node and affinity for nodes 0 through 2:",
+                    code: "\
+$ plgrp -a 0-2 101398
+       PID/TID  HOME  AFFINITY
+ 101398/101398     1  0/bound,1/none,2/bound
+ 101398/101412     0  0/bound,1/none,2/bound",
+                },
+            ],
+            exit_status: DEFAULT_EXIT_STATUS,
+            files: "/proc/pid/task/tid/stat\tThread scheduling information.\n\
+                    /sys/devices/system/node/\tNUMA topology information.",
+            see_also: "taskset(1), numactl(8), sched_getaffinity(2), proc(5)",
+            warnings: "",
+        },
+        out_dir,
+    );
+
     println!("cargo:rerun-if-changed=build.rs");
 }

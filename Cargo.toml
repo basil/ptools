@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "development-tools::debugging"]
 
 [dependencies]
 lexopt = "0.3.1"
-nix = { version = "0.30.1", features = ["event", "fs", "process", "signal", "socket"] }
+nix = { version = "0.30.1", features = ["event", "fs", "process", "sched", "signal", "socket"] }
 
 [build-dependencies]
 roff = "0.2.2"
@@ -45,6 +45,7 @@ assets = [
   ["target/release/pcred", "usr/bin/", "755"],
   ["target/release/penv", "usr/bin/", "755"],
   ["target/release/pfiles", "usr/bin/", "755"],
+  ["target/release/plgrp", "usr/bin/", "755"],
   ["target/release/prun", "usr/bin/", "755"],
   ["target/release/psig", "usr/bin/", "755"],
   ["target/release/pstop", "usr/bin/", "755"],
@@ -55,6 +56,7 @@ assets = [
   ["target/man/pcred.1", "usr/share/man/man1/pcred.1", "644"],
   ["target/man/penv.1", "usr/share/man/man1/penv.1", "644"],
   ["target/man/pfiles.1", "usr/share/man/man1/pfiles.1", "644"],
+  ["target/man/plgrp.1", "usr/share/man/man1/plgrp.1", "644"],
   ["target/man/prun.1", "usr/share/man/man1/prun.1", "644"],
   ["target/man/psig.1", "usr/share/man/man1/psig.1", "644"],
   ["target/man/pstop.1", "usr/share/man/man1/pstop.1", "644"],
@@ -71,6 +73,7 @@ assets = [
   { source = "target/release/pcred", dest = "/usr/bin/pcred", mode = "755" },
   { source = "target/release/penv", dest = "/usr/bin/penv", mode = "755" },
   { source = "target/release/pfiles", dest = "/usr/bin/pfiles", mode = "755" },
+  { source = "target/release/plgrp", dest = "/usr/bin/plgrp", mode = "755" },
   { source = "target/release/prun", dest = "/usr/bin/prun", mode = "755" },
   { source = "target/release/psig", dest = "/usr/bin/psig", mode = "755" },
   { source = "target/release/pstop", dest = "/usr/bin/pstop", mode = "755" },
@@ -81,6 +84,7 @@ assets = [
   { source = "target/man/pcred.1", dest = "/usr/share/man/man1/pcred.1", mode = "644" },
   { source = "target/man/penv.1", dest = "/usr/share/man/man1/penv.1", mode = "644" },
   { source = "target/man/pfiles.1", dest = "/usr/share/man/man1/pfiles.1", mode = "644" },
+  { source = "target/man/plgrp.1", dest = "/usr/share/man/man1/plgrp.1", mode = "644" },
   { source = "target/man/prun.1", dest = "/usr/share/man/man1/prun.1", mode = "644" },
   { source = "target/man/psig.1", dest = "/usr/share/man/man1/psig.1", mode = "644" },
   { source = "target/man/pstop.1", dest = "/usr/share/man/man1/pstop.1", mode = "644" },
