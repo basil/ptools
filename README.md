@@ -53,8 +53,9 @@ make this same consistent debugging experience available on Linux.
 ## Current State
 
 The following table lists all Solaris/illumos ptools and their status in this
-project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps) or
-[glibc](https://www.gnu.org/software/libc/) are not reimplemented here, as these
+project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps),
+[glibc](https://www.gnu.org/software/libc/), or
+[python-linux-procfs](python-linux-procfs) are not reimplemented here, as these
 packages are widely available on Linux distributions and already provide
 equivalent functionality. There are a number of commands available on
 Solaris/illumos which have not been implemented here yet, perhaps most notably
@@ -67,10 +68,10 @@ Solaris/illumos which have not been implemented here yet, perhaps most notably
 | `pcred(1)`     | Print process credentials                             | ✅ Implemented         |
 | `penv(1)`      | Print process environment variables                   | ✅ Implemented         |
 | `pfiles(1)`    | Print information for all open files in each process  | ✅ Implemented         |
-| `pflags(1)`    | Print process status flags                            | ✅ Implemented         |
+| `pflags(1)`    | Print process status flags                            | ➡️ See `python-linux-procfs` |
 | `pgrep(1)`     | Find processes by name                                | ➡️ See `procps-ng`     |
 | `pkill(1)`     | Signal processes by name                              | ➡️ See `procps-ng`     |
-| `pldd(1)`      | Print process dynamic libraries                       | ➡️ See `glibc`         |
+| `pldd(1)`      | Print process dynamic libraries                       | ➡️ See `glibc`         |`
 | `plgrp(1)`     | Print or modify home lgroup and lgroup affinities     | 🔲 Not yet implemented |
 | `plimit(1)`    | Get or set process resource limits                    | 🔲 Not yet implemented |
 | `plockstat(1)` | Print lock statistics                                 | 🔲 Not yet implemented |

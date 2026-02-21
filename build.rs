@@ -125,7 +125,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "pauxv(1), penv(1), pflags(1), proc(5)",
+            see_also: "pauxv(1), penv(1), proc(5)",
             warnings: "",
         },
         out_dir,
@@ -184,7 +184,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "pfiles(1), pflags(1), proc(5), credentials(7)",
+            see_also: "pfiles(1), proc(5), credentials(7)",
             warnings: "",
         },
         out_dir,
@@ -225,35 +225,13 @@ fn main() {
             description: "List the signal actions and handlers of each process. For each \
                           signal, print whether the signal is caught, ignored, or handled by \
                           default, and whether the signal is blocked or pending. Real-time \
-                          signals (SIGRTMIN through SIGRTMAX) are also displayed. Use \
-                          pflags(1) to see more information about currently pending signals \
-                          and signal masks.",
+                          signals (SIGRTMIN through SIGRTMAX) are also displayed.",
             synopsis: "PID...",
             options: &[],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "kill(1), pflags(1), signal(7), proc(5)",
-            warnings: "",
-        },
-        out_dir,
-    );
-
-    render_man_page(
-        &ManPage {
-            name: "pflags",
-            about: "print process status flags",
-            description: "Print the data model, process flags, pending and held signals, \
-                          and other status information for each process or specified threads \
-                          in each process. For each thread, print its state, current system \
-                          call (if any), and signal mask. If a thread has a non-empty signal \
-                          mask, it will be printed.",
-            synopsis: "PID[/TID]...",
-            options: &[],
-            examples: &[],
-            exit_status: DEFAULT_EXIT_STATUS,
-            files: DEFAULT_FILES,
-            see_also: "psig(1), proc(5)",
+            see_also: "kill(1), signal(7), proc(5)",
             warnings: "",
         },
         out_dir,
