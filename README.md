@@ -187,34 +187,34 @@ of commands available on Solaris/illumos which have not
 been implemented here yet, perhaps most notably `pstack(1)`. Also, support
 for examining core dumps has not yet been implemented.
 
-| Command        | Description                                           | Status                       |
-| -------------- | ----------------------------------------------------- | ---------------------------- |
-| `pargs(1)`     | Print process arguments                               | ✅ Implemented               |
-| `pauxv(1)`     | Print process auxiliary vector                        | ✅ Implemented               |
-| `pcred(1)`     | Print process credentials                             | ✅ Implemented               |
-| `penv(1)`      | Print process environment variables                   | ✅ Implemented               |
-| `pfiles(1)`    | Print information for all open files in each process  | ✅ Implemented               |
-| `pflags(1)`    | Print process status flags                            | ➡️ See `python-linux-procfs` |
-| `pgrep(1)`     | Find processes by name                                | ➡️ See `procps-ng`           |
-| `pkill(1)`     | Signal processes by name                              | ➡️ See `procps-ng`           |
-| `pldd(1)`      | Print process dynamic libraries                       | ➡️ See `glibc`               |
-| `plgrp(1)`     | Display home NUMA node and thread affinities          | ✅ Implemented               |
-| `plimit(1)`    | Get or set process resource limits                    | 🔲 Not yet implemented       |
-| `plockstat(1)` | Print lock statistics                                 | 🔲 Not yet implemented       |
-| `pmadvise(1)`  | Apply advice about memory to a process                | 🔲 Not yet implemented       |
-| `pmap(1)`      | Print process address maps                            | ➡️ See `procps-ng`           |
-| `ppgsz(1)`     | Set preferred page size                               | 🔲 Not yet implemented       |
-| `ppriv(1)`     | Print or modify process privilege sets and attributes | 🔲 Not yet implemented       |
-| `preap(1)`     | Force a defunct process to be reaped                  | 🔲 Not yet implemented       |
-| `prun(1)`      | Set stopped processes running with `SIGCONT`          | ✅ Implemented               |
-| `psecflags(1)` | Print or modify process security flags                | 🔲 Not yet implemented       |
-| `psig(1)`      | Print process signal actions                          | ✅ Implemented               |
-| `pstack(1)`    | Print process call stack                              | 🔲 Not yet implemented       |
-| `pstop(1)`     | Stop processes with `SIGSTOP`                         | ✅ Implemented               |
-| `ptime(1)`     | Time a process using microstate accounting            | 🔲 Not yet implemented       |
-| `ptree(1)`     | Print process trees                                   | ✅ Implemented               |
-| `pwait(1)`     | Wait for processes to terminate                       | ✅ Implemented               |
-| `pwdx(1)`      | Print the current working directory of the process    | ➡️ See `procps-ng`           |
+| Command                                                        | Description                                           | Status                       |
+| -------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
+| [`pargs(1)`](https://illumos.org/man/1/pargs)                 | Print process arguments                               | ✅ Implemented               |
+| [`pauxv(1)`](https://illumos.org/man/1/pauxv)                 | Print process auxiliary vector                        | ✅ Implemented               |
+| [`pcred(1)`](https://illumos.org/man/1/pcred)                 | Print process credentials                             | ✅ Implemented               |
+| [`penv(1)`](https://illumos.org/man/1/penv)                   | Print process environment variables                   | ✅ Implemented               |
+| [`pfiles(1)`](https://illumos.org/man/1/pfiles)               | Print information for all open files in each process  | ✅ Implemented               |
+| [`pflags(1)`](https://illumos.org/man/1/pflags)               | Print process status flags                            | ➡️ See `python-linux-procfs` |
+| [`pgrep(1)`](https://illumos.org/man/1/pgrep)                 | Find processes by name                                | ➡️ See `procps-ng`           |
+| [`pkill(1)`](https://illumos.org/man/1/pkill)                 | Signal processes by name                              | ➡️ See `procps-ng`           |
+| [`pldd(1)`](https://illumos.org/man/1/pldd)                   | Print process dynamic libraries                       | ➡️ See `glibc`               |
+| [`plgrp(1)`](https://illumos.org/man/1/plgrp)                 | Print home NUMA node and thread affinities            | ✅ Implemented               |
+| [`plimit(1)`](https://illumos.org/man/1/plimit)               | Get or set process resource limits                    | 🔲 Not yet implemented       |
+| [`plockstat(1)`](https://illumos.org/man/8/plockstat)         | Print lock statistics                                 | 🔲 Not yet implemented       |
+| [`pmadvise(1)`](https://illumos.org/man/1/pmadvise)           | Apply advice about memory to a process                | 🔲 Not yet implemented       |
+| [`pmap(1)`](https://illumos.org/man/1/pmap)                   | Print process address maps                            | ➡️ See `procps-ng`           |
+| [`ppgsz(1)`](https://illumos.org/man/1/ppgsz)                 | Set preferred page size                               | 🔲 Not yet implemented       |
+| [`ppriv(1)`](https://illumos.org/man/1/ppriv)                 | Print or modify process privilege sets and attributes | 🔲 Not yet implemented       |
+| [`preap(1)`](https://illumos.org/man/1/preap)                 | Force a defunct process to be reaped                  | 🔲 Not yet implemented       |
+| [`prun(1)`](https://illumos.org/man/1/prun)                   | Set stopped processes running with `SIGCONT`          | ✅ Implemented               |
+| [`psecflags(1)`](https://illumos.org/man/1/psecflags)         | Print or modify process security flags                | 🔲 Not yet implemented       |
+| [`psig(1)`](https://illumos.org/man/1/psig)                   | Print process signal actions                          | ✅ Implemented               |
+| [`pstack(1)`](https://illumos.org/man/1/pstack)               | Print process call stack                              | 🔲 Not yet implemented       |
+| [`pstop(1)`](https://illumos.org/man/1/pstop)                 | Stop processes with `SIGSTOP`                         | ✅ Implemented               |
+| [`ptime(1)`](https://illumos.org/man/1/ptime)                 | Time a process using microstate accounting            | 🔲 Not yet implemented       |
+| [`ptree(1)`](https://illumos.org/man/1/ptree)                 | Print process trees                                   | ✅ Implemented               |
+| [`pwait(1)`](https://illumos.org/man/1/pwait)                 | Wait for processes to terminate                       | ✅ Implemented               |
+| [`pwdx(1)`](https://illumos.org/man/1/pwdx)                   | Print the current working directory of the process    | ➡️ See `procps-ng`           |
 
 ## Contributing
 
