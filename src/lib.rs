@@ -14,7 +14,9 @@
 //   limitations under the License.
 //
 
+pub mod coredump_source;
 pub mod proc_source;
+pub use coredump_source::CoredumpSource;
 pub use proc_source::{LiveProcess, ProcSource};
 
 use std::collections::HashSet;
