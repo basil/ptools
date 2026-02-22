@@ -125,18 +125,16 @@ impl CoredumpSource {
     /// journal for the matching coredump entry to fill in rich fields like
     /// `COREDUMP_PROC_STATUS`, `COREDUMP_ENVIRON`, `COREDUMP_CMDLINE`, etc.
     pub fn from_corefile(path: &Path) -> io::Result<Self> {
-        if !path.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("{}: no such file", path.display()),
-            ));
-        }
+        let file_exists = path.exists();
 
-        // Read what we can from extended attributes.
+        // Read what we can from extended attributes (only possible if
+        // the core file is still on disk).
         let mut fields = HashMap::new();
-        for &(xattr_name, field_name) in XATTR_MAP {
-            if let Some(value) = get_xattr(path, xattr_name) {
-                fields.insert(field_name.to_string(), value);
+        if file_exists {
+            for &(xattr_name, field_name) in XATTR_MAP {
+                if let Some(value) = get_xattr(path, xattr_name) {
+                    fields.insert(field_name.to_string(), value);
+                }
             }
         }
 
@@ -144,9 +142,24 @@ impl CoredumpSource {
         // COREDUMP_* fields not already present from xattrs.
         let journal_fields = lookup_journal_fields(path, &fields);
         if journal_fields.is_empty() {
+            if !file_exists {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!(
+                        "{}: core file missing and no matching journal entry found",
+                        path.display()
+                    ),
+                ));
+            }
             eprintln!(
                 "warning: no matching journal entry found for {}; \
                  output will be limited to core file metadata",
+                path.display()
+            );
+        } else if !file_exists {
+            eprintln!(
+                "warning: core file {} no longer exists; \
+                 using journal entry only",
                 path.display()
             );
         }
