@@ -76,7 +76,7 @@ fn pcred_reports_groups_when_supplementary_groups_exist() {
 
     if !has_groups {
         // No supplementary groups in this environment (e.g., mock build chroot).
-        // Nothing to test — pcred correctly omits the groups line.
+        // Nothing to test -- pcred correctly omits the groups line.
         return;
     }
 

@@ -492,7 +492,7 @@ fn parse_fd_entries(text: &str) -> Vec<FdEntry> {
             None => continue,
         };
 
-        // Parse "FD_NUM:PATH" — split on first ':'
+        // Parse "FD_NUM:PATH" -- split on first ':'
         let (fd_str, path) = match header.split_once(':') {
             Some((f, p)) => (f, p),
             None => continue,

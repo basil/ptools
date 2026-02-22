@@ -1111,12 +1111,12 @@ fn print_file(
     non_verbose: bool,
 ) {
     let pid = source.pid();
-    // stat() on the fd path stats the TARGET file, not /proc itself — live-only.
+    // stat() on the fd path stats the TARGET file, not /proc itself -- live-only.
     let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
     let link_path = Path::new(&link_path_str);
 
     if let Ok(stat_info) = stat(link_path) {
-        // Full output — stat succeeded (live process).
+        // Full output -- stat succeeded (live process).
         let file_type = file_type(stat_info.st_mode, link_path);
 
         print!(
@@ -1155,7 +1155,7 @@ fn print_file(
                 // evaluated in the target process's network namespace.
                 if let Some(sock_info) = sockets.get(&stat_info.st_ino) {
                     debug_assert_eq!(sock_info.inode, stat_info.st_ino);
-                    // pidfd_open / pidfd_getfd for fd duplication — live-only.
+                    // pidfd_open / pidfd_getfd for fd duplication -- live-only.
                     let sock_fd = duplicate_target_fd(pid, fd);
                     print_sockname(sock_info);
                     let peer =
@@ -1163,7 +1163,7 @@ fn print_file(
                             .get(&sock_info.inode)
                             .cloned()
                             .or_else(|| match sock_info.family {
-                                // SO_PEERCRED on duplicated fd — live-only.
+                                // SO_PEERCRED on duplicated fd -- live-only.
                                 AddressFamily::Unix => unix_peer_process(pid, fd),
                                 _ => None,
                             });
@@ -1194,7 +1194,7 @@ fn print_file(
             },
         }
     } else {
-        // Fallback — stat failed (coredump or inaccessible fd).
+        // Fallback -- stat failed (coredump or inaccessible fd).
         // Print what we can from ProcSource methods.
         let path = match source.read_fd_link(fd) {
             Ok(p) => p,
