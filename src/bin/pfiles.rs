@@ -189,17 +189,9 @@ fn print_file_type(file_type: &FileType) -> String {
     }
 }
 
-fn print_matching_fdinfo_lines(handle: &ProcHandle, fd: u64, prefixes: &[&str]) {
-    let fdinfo = match handle.fdinfo_raw(fd) {
-        Ok(fdinfo) => fdinfo,
-        Err(e) => {
-            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", handle.pid(), fd, e);
-            return;
-        }
-    };
-
-    for line in fdinfo
-        .lines()
+fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
+    for line in extra_lines
+        .iter()
         .filter(|line| prefixes.iter().any(|prefix| line.starts_with(prefix)))
     {
         // Normalize whitespace in key:value lines (kernel pads with many spaces)
@@ -1038,18 +1030,16 @@ fn fetch_sock_info(handle: &ProcHandle) -> HashMap<u64, SockInfo> {
     sockets
 }
 
-fn print_fd_details(handle: &ProcHandle, fd: u64, path: &Path) {
-    match handle.fd_offset(fd) {
-        Ok(offset) => println!("      offset: {}", offset),
-        Err(e) => eprintln!("failed to read fd offset: {}", e),
-    }
+fn print_fd_details(info: &ptools::FdInfo, path: &Path) {
+    println!("      offset: {}", info.offset);
     match path.as_os_str().to_string_lossy().as_ref() {
-        "anon_inode:[eventpoll]" => print_epoll_fdinfo(handle, fd),
-        "anon_inode:[eventfd]" => print_matching_fdinfo_lines(handle, fd, &["eventfd-count:"]),
-        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(handle, fd, &["sigmask:"]),
+        "anon_inode:[eventpoll]" => print_epoll_fdinfo(&info.extra_lines),
+        "anon_inode:[eventfd]" => {
+            print_matching_fdinfo_lines(&info.extra_lines, &["eventfd-count:"])
+        }
+        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(&info.extra_lines, &["sigmask:"]),
         "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
-            handle,
-            fd,
+            &info.extra_lines,
             &[
                 "clockid:",
                 "ticks:",
@@ -1059,7 +1049,7 @@ fn print_fd_details(handle: &ProcHandle, fd: u64, path: &Path) {
             ],
         ),
         "anon_inode:inotify" | "anon_inode:[inotify]" => {
-            print_matching_fdinfo_lines(handle, fd, &["inotify "])
+            print_matching_fdinfo_lines(&info.extra_lines, &["inotify "])
         }
         _ => {}
     }
@@ -1106,11 +1096,16 @@ fn print_file(
             return;
         }
 
+        let info = match handle.fdinfo(fd) {
+            Ok(info) => info,
+            Err(e) => {
+                eprintln!("failed to read /proc/{}/fdinfo/{}: {}", pid, fd, e);
+                return;
+            }
+        };
+
         print!("      ");
-        match handle.fd_flags(fd) {
-            Ok(flags) => print_open_flags(flags),
-            Err(e) => eprintln!("failed to read fd flags: {}", e),
-        }
+        print_open_flags(info.flags);
 
         match file_type {
             FileType::Posix(PosixFileType::Socket) => {
@@ -1151,7 +1146,7 @@ fn print_file(
             _ => match handle.fd_path(fd) {
                 Ok(path) => {
                     println!("      {}", path.to_string_lossy());
-                    print_fd_details(handle, fd, &path);
+                    print_fd_details(&info, &path);
                 }
                 Err(e) => eprintln!("failed to readlink /proc/{}/fd/{}: {}", pid, fd, e),
             },
@@ -1172,30 +1167,27 @@ fn print_file(
             return;
         }
 
+        let info = match handle.fdinfo(fd) {
+            Ok(info) => info,
+            Err(e) => {
+                eprintln!("failed to read /proc/{}/fdinfo/{}: {}", pid, fd, e);
+                return;
+            }
+        };
+
         print!("      ");
-        match handle.fd_flags(fd) {
-            Ok(flags) => print_open_flags(flags),
-            Err(e) => eprintln!("failed to read fd flags: {}", e),
-        }
+        print_open_flags(info.flags);
 
         if path.to_string_lossy().starts_with("socket:[") {
             println!("        (socket details not available)");
         }
 
-        print_fd_details(handle, fd, &path);
+        print_fd_details(&info, &path);
     }
 }
 
-fn print_epoll_fdinfo(handle: &ProcHandle, fd: u64) {
-    let fdinfo = match handle.fdinfo_raw(fd) {
-        Ok(fdinfo) => fdinfo,
-        Err(e) => {
-            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", handle.pid(), fd, e);
-            return;
-        }
-    };
-
-    for line in fdinfo.lines().filter(|line| line.starts_with("tfd:")) {
+fn print_epoll_fdinfo(extra_lines: &[String]) {
+    for line in extra_lines.iter().filter(|line| line.starts_with("tfd:")) {
         let mut parts = line.split_whitespace().peekable();
         let mut tfd = None;
         let mut events = None;

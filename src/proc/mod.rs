@@ -59,6 +59,14 @@ pub struct Rlimit {
     pub hard: RlimitVal,
 }
 
+/// Parsed fdinfo with structured fields from `/proc/[pid]/fdinfo/<fd>`.
+pub struct FdInfo {
+    pub offset: u64,
+    pub flags: OFlag,
+    pub mnt_id: Option<u64>,
+    pub extra_lines: Vec<String>,
+}
+
 fn parse_rlimit_val(s: &str) -> Result<RlimitVal, Error> {
     if s.eq_ignore_ascii_case("unlimited") {
         Ok(None)
@@ -120,8 +128,37 @@ impl ProcHandle {
         Ok(self.source.read_fd_link(fd)?)
     }
 
-    pub fn fdinfo_raw(&self, fd: u64) -> Result<String, Error> {
-        Ok(self.source.read_fdinfo(fd)?)
+    pub fn fdinfo(&self, fd: u64) -> Result<FdInfo, Error> {
+        let contents = self.source.read_fdinfo(fd)?;
+        let mut offset = None;
+        let mut flags = None;
+        let mut mnt_id = None;
+        let mut extra_lines = Vec::new();
+
+        for line in contents.lines() {
+            if let Some(val) = line.strip_prefix("pos:") {
+                offset = Some(
+                    val.trim()
+                        .parse::<u64>()
+                        .map_err(|e| Error::in_file("fdinfo", &format!("invalid pos: {}", e)))?,
+                );
+            } else if let Some(val) = line.strip_prefix("flags:") {
+                let raw = i32::from_str_radix(val.trim(), 8)
+                    .map_err(|e| Error::in_file("fdinfo", &format!("invalid flags: {}", e)))?;
+                flags = Some(OFlag::from_bits_truncate(raw));
+            } else if let Some(val) = line.strip_prefix("mnt_id:") {
+                mnt_id = val.trim().parse::<u64>().ok();
+            } else if !line.is_empty() {
+                extra_lines.push(line.to_string());
+            }
+        }
+
+        Ok(FdInfo {
+            offset: offset.ok_or_else(|| Error::in_file("fdinfo", "missing 'pos' field"))?,
+            flags: flags.ok_or_else(|| Error::in_file("fdinfo", "missing 'flags' field"))?,
+            mnt_id,
+            extra_lines,
+        })
     }
 
     pub fn limits_raw(&self) -> Result<String, Error> {
@@ -395,40 +432,6 @@ impl ProcHandle {
             }
         }
         Ok(vars)
-    }
-
-    /// Parse the "flags:" field from fdinfo as open-file flags.
-    pub fn fd_flags(&self, fd: u64) -> Result<OFlag, Error> {
-        let contents = self.source.read_fdinfo(fd)?;
-        let line = contents
-            .lines()
-            .rfind(|line| line.starts_with("flags:"))
-            .ok_or_else(|| Error::in_file("fdinfo", "no value 'flags'"))?;
-        let (_, value) = line.split_once(':').ok_or_else(|| {
-            Error::in_file(
-                "fdinfo",
-                &format!("unexpected format for 'flags': {}", line),
-            )
-        })?;
-        let raw = i32::from_str_radix(value.trim(), 8)
-            .map_err(|e| Error::in_file("fdinfo", &format!("invalid flags: {}", e)))?;
-        Ok(OFlag::from_bits_truncate(raw))
-    }
-
-    /// Parse the "pos:" field from fdinfo as the file offset.
-    pub fn fd_offset(&self, fd: u64) -> Result<u64, Error> {
-        let contents = self.source.read_fdinfo(fd)?;
-        let line = contents
-            .lines()
-            .rfind(|line| line.starts_with("pos:"))
-            .ok_or_else(|| Error::in_file("fdinfo", "no value 'pos'"))?;
-        let (_, value) = line.split_once(':').ok_or_else(|| {
-            Error::in_file("fdinfo", &format!("unexpected format for 'pos': {}", line))
-        })?;
-        value
-            .trim()
-            .parse::<u64>()
-            .map_err(|e| Error::in_file("fdinfo", &format!("invalid pos: {}", e)))
     }
 
     /// Parse the "Max open files" line from /proc/[pid]/limits.
