@@ -175,6 +175,16 @@ ALRM      default
 TERM      default blocked
 ```
 
+## Core Dump Support
+
+Core dump support is available for `pargs(1)`, `pauxv(1)`, `pcred(1)`,
+`penv(1)`, `pfiles(1)`, and `psig(1)` via `systemd-coredump(8)` extended
+attributes and journal metadata. Even when a core file has been removed by
+`systemd-tmpfiles(8)` or by storage limits, process metadata can often still
+be retrieved from the `systemd-coredump(8)` journal entry; use
+`coredumpctl list <name> -F COREDUMP_FILENAME` to find the path and pass it
+to any of these tools.
+
 ## Current State
 
 The following table lists all Solaris/illumos ptools and their status in this
@@ -184,10 +194,7 @@ project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps),
 are not reimplemented here, as these packages are widely available on Linux
 distributions and already provide equivalent functionality. There are a number
 of commands available on Solaris/illumos which have not
-been implemented here yet, perhaps most notably `pstack(1)`. Core dump
-support is available for `pargs(1)`, `pauxv(1)`, `pcred(1)`, `penv(1)`,
-`pfiles(1)`, and `psig(1)` via systemd-coredump extended attributes and
-journal metadata.
+been implemented here yet, perhaps most notably `pstack(1)`.
 
 | Command                                                       | Description                                           | Status                       |
 | ------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |

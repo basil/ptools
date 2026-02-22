@@ -18,6 +18,7 @@ struct ManPage<'a> {
     examples: &'a [Example<'a>],
     exit_status: &'a str,
     files: &'a str,
+    notes: &'a str,
     see_also: &'a str,
     warnings: &'a str,
 }
@@ -32,9 +33,22 @@ const CORE_OPERANDS: &[(&str, &str)] = &[
     ("pid", "Process ID list."),
     (
         "core",
-        "Process core file, as produced by systemd-coredump(8).",
+        "Process core file, as produced by systemd-coredump(8). The core file \
+         does not need to exist on disk; if it has been removed, the \
+         corresponding systemd journal entry will be used instead. See \
+         NOTES below.",
     ),
 ];
+
+const CORE_NOTES: &str = "When a core file has been removed by systemd-tmpfiles(8) or \
+                           by storage limits configured in coredump.conf(5), the \
+                           systemd-coredump(8) journal entry for the crash may still be \
+                           available. In this case, the path to the deleted core file \
+                           can be passed as the core operand even though the file no \
+                           longer exists on disk, and process metadata will be retrieved \
+                           from the journal entry instead. Use coredumpctl(1) to obtain \
+                           the path of a missing core file, e.g., \
+                           coredumpctl list <name> -F COREDUMP_FILENAME.";
 
 fn render_man_page(page: &ManPage, out_dir: &Path) {
     let version = env!("CARGO_PKG_VERSION");
@@ -95,6 +109,10 @@ fn render_man_page(page: &ManPage, out_dir: &Path) {
             }
         }
     }
+    if !page.notes.is_empty() {
+        roff.control("SH", ["NOTES"]);
+        roff.text([roman(page.notes)]);
+    }
     if !page.warnings.is_empty() {
         roff.control("SH", ["WARNINGS"]);
         roff.text([roman(page.warnings)]);
@@ -149,6 +167,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: CORE_NOTES,
             see_also: "pauxv(1), penv(1), coredumpctl(1), proc(5)",
             warnings: "",
         },
@@ -168,6 +187,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: CORE_NOTES,
             see_also: "pargs(1), penv(1), coredumpctl(1), proc(5)",
             warnings: "",
         },
@@ -187,6 +207,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: CORE_NOTES,
             see_also: "pargs(1), pauxv(1), coredumpctl(1), environ(7), proc(5)",
             warnings: "",
         },
@@ -214,6 +235,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: CORE_NOTES,
             see_also: "pfiles(1), coredumpctl(1), proc(5), credentials(7)",
             warnings: "",
         },
@@ -244,6 +266,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: CORE_NOTES,
             see_also: "fstat(2), fcntl(2), coredumpctl(1), proc(5)",
             warnings: "",
         },
@@ -265,6 +288,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: CORE_NOTES,
             see_also: "kill(1), signal(7), coredumpctl(1), proc(5)",
             warnings: "",
         },
@@ -282,6 +306,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: "",
             see_also: "prun(1), kill(1), proc(5)",
             warnings: "A process can do nothing while it is stopped. Stopping a heavily \
                        used process in a production environment, even for a short amount of \
@@ -303,6 +328,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: "",
             see_also: "pstop(1), kill(1), proc(5)",
             warnings: "",
         },
@@ -327,6 +353,7 @@ fn main() {
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: "",
             see_also: "wait(1), proc(5)",
             warnings: "",
         },
@@ -392,6 +419,7 @@ $ ptree -ag `pgrep ssh`
             ],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
+            notes: "",
             see_also: "pargs(1), pgrep(1), ps(1), proc(5)",
             warnings: "",
         },
@@ -440,6 +468,7 @@ $ plgrp -a 0-2 101398
             exit_status: DEFAULT_EXIT_STATUS,
             files: "/proc/pid/task/tid/stat\tThread scheduling information.\n\
                     /sys/devices/system/node/\tNUMA topology information.",
+            notes: "",
             see_also: "taskset(1), numactl(8), sched_getaffinity(2), proc(5)",
             warnings: "",
         },
