@@ -185,16 +185,6 @@ impl CoredumpSource {
         })
     }
 
-    /// Create from a pre-built field map (e.g. from journal bindings).
-    pub fn from_fields(fields: HashMap<String, Vec<u8>>) -> io::Result<Self> {
-        let pid = extract_pid(&fields)?;
-        Ok(CoredumpSource {
-            pid,
-            fields,
-            warnings: Vec::new(),
-        })
-    }
-
     /// Return any warnings generated during construction.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
