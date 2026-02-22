@@ -1246,9 +1246,19 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
 
     ptools::print_proc_summary_from(handle);
     match handle.nofile_limit() {
-        Ok((soft, hard)) => {
-            println!("  Current soft rlimit: {} file descriptors", soft);
-            println!("  Current hard rlimit: {} file descriptors", hard);
+        Ok(limit) => {
+            let fmt = |v: ptools::RlimitVal| match v {
+                Some(n) => n.to_string(),
+                None => "unlimited".into(),
+            };
+            println!(
+                "  Current soft rlimit: {} file descriptors",
+                fmt(limit.soft)
+            );
+            println!(
+                "  Current hard rlimit: {} file descriptors",
+                fmt(limit.hard)
+            );
         }
         Err(e) => eprintln!("Failed to read RLIMIT_NOFILE for {}: {}", pid, e),
     }

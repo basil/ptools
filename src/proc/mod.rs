@@ -47,6 +47,28 @@ pub(crate) trait ProcSource {
     fn read_net_file(&self, name: &str) -> io::Result<String>;
 }
 
+/// A resource limit value (soft or hard).
+///
+/// `None` represents "unlimited" (i.e. `RLIM_INFINITY`).
+pub type RlimitVal = Option<u64>;
+
+/// Parsed resource limit with soft and hard values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rlimit {
+    pub soft: RlimitVal,
+    pub hard: RlimitVal,
+}
+
+fn parse_rlimit_val(s: &str) -> Result<RlimitVal, Error> {
+    if s.eq_ignore_ascii_case("unlimited") {
+        Ok(None)
+    } else {
+        s.parse::<u64>()
+            .map(Some)
+            .map_err(|e| Error::parse("rlimit value", &e.to_string()))
+    }
+}
+
 /// Opaque process handle
 ///
 /// Callers obtain a handle via [`resolve_operand`] and interact with it
@@ -410,7 +432,7 @@ impl ProcHandle {
     }
 
     /// Parse the "Max open files" line from /proc/[pid]/limits.
-    pub fn nofile_limit(&self) -> Result<(String, String), Error> {
+    pub fn nofile_limit(&self) -> Result<Rlimit, Error> {
         let limits = self.source.read_limits()?;
         for line in limits.lines() {
             if line.starts_with("Max open files") {
@@ -421,7 +443,10 @@ impl ProcHandle {
                         "line has fewer fields than expected",
                     ));
                 }
-                return Ok((fields[3].to_string(), fields[4].to_string()));
+                return Ok(Rlimit {
+                    soft: parse_rlimit_val(fields[3])?,
+                    hard: parse_rlimit_val(fields[4])?,
+                });
             }
         }
         Err(Error::parse(
