@@ -212,7 +212,7 @@ fn print_matching_fdinfo_lines(handle: &ProcHandle, fd: u64, prefixes: &[&str]) 
     }
 }
 
-fn print_open_flags(flags: u64) {
+fn print_open_flags(flags: OFlag) {
     let open_flags = [
         (OFlag::O_APPEND, "O_APPEND"),
         (OFlag::O_ASYNC, "O_ASYNC"),
@@ -234,11 +234,11 @@ fn print_open_flags(flags: u64) {
 
     print!(
         "{}",
-        match OFlag::from_bits_truncate(flags as i32 & OFlag::O_ACCMODE.bits()) {
-            OFlag::O_RDONLY => "O_RDONLY".to_string(),
-            OFlag::O_WRONLY => "O_WRONLY".to_string(),
-            OFlag::O_RDWR => "O_RDWR".to_string(),
-            _ => format!("Unexpected mode {:o}", flags),
+        match flags & OFlag::O_ACCMODE {
+            OFlag::O_RDONLY => "O_RDONLY",
+            OFlag::O_WRONLY => "O_WRONLY",
+            OFlag::O_RDWR => "O_RDWR",
+            _ => "O_ACCMODE(?)",
         }
     );
 
@@ -246,10 +246,8 @@ fn print_open_flags(flags: u64) {
     // On illumos it is always printed; we skip it here since it is
     // implicit on Linux (64-bit offsets are the default).
 
-    let raw_flags = flags as i32;
     for &(flag, desc) in open_flags.iter() {
-        let bits = flag.bits();
-        if bits != 0 && (raw_flags & bits) == bits {
+        if flags.contains(flag) {
             print!("|{}", desc);
         }
     }

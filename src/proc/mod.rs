@@ -5,6 +5,7 @@ pub(crate) mod live;
 pub mod numa;
 pub mod signal;
 
+use nix::fcntl::OFlag;
 use std::ffi::OsString;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
@@ -374,8 +375,8 @@ impl ProcHandle {
         Ok(vars)
     }
 
-    /// Parse the "flags:" field from fdinfo as an octal file-flags value.
-    pub fn fd_flags(&self, fd: u64) -> Result<u64, Error> {
+    /// Parse the "flags:" field from fdinfo as open-file flags.
+    pub fn fd_flags(&self, fd: u64) -> Result<OFlag, Error> {
         let contents = self.source.read_fdinfo(fd)?;
         let line = contents
             .lines()
@@ -387,8 +388,9 @@ impl ProcHandle {
                 &format!("unexpected format for 'flags': {}", line),
             )
         })?;
-        u64::from_str_radix(value.trim(), 8)
-            .map_err(|e| Error::in_file("fdinfo", &format!("invalid flags: {}", e)))
+        let raw = i32::from_str_radix(value.trim(), 8)
+            .map_err(|e| Error::in_file("fdinfo", &format!("invalid flags: {}", e)))?;
+        Ok(OFlag::from_bits_truncate(raw))
     }
 
     /// Parse the "pos:" field from fdinfo as the file offset.
