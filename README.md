@@ -187,8 +187,8 @@ of commands available on Solaris/illumos which have not
 been implemented here yet, perhaps most notably `pstack(1)`. Also, support
 for examining core dumps has not yet been implemented.
 
-| Command                                                        | Description                                           | Status                       |
-| -------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
+| Command                                                       | Description                                           | Status                       |
+| ------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
 | [`pargs(1)`](https://illumos.org/man/1/pargs)                 | Print process arguments                               | ✅ Implemented               |
 | [`pauxv(1)`](https://illumos.org/man/1/pauxv)                 | Print process auxiliary vector                        | ✅ Implemented               |
 | [`pcred(1)`](https://illumos.org/man/1/pcred)                 | Print process credentials                             | ✅ Implemented               |
