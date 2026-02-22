@@ -7,9 +7,11 @@ pub struct ProcCred {
     pub euid: u32,
     pub ruid: u32,
     pub suid: u32,
+    pub fsuid: u32,
     pub egid: u32,
     pub rgid: u32,
     pub sgid: u32,
+    pub fsgid: u32,
     pub groups: Vec<u32>,
 }
 
@@ -28,8 +30,8 @@ pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
                         .split_whitespace()
                         .filter_map(|s| s.parse().ok())
                         .collect();
-                    if fields.len() >= 3 {
-                        uid_fields = Some((fields[0], fields[1], fields[2]));
+                    if fields.len() >= 4 {
+                        uid_fields = Some((fields[0], fields[1], fields[2], fields[3]));
                     }
                 }
                 "Gid" => {
@@ -37,8 +39,8 @@ pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
                         .split_whitespace()
                         .filter_map(|s| s.parse().ok())
                         .collect();
-                    if fields.len() >= 3 {
-                        gid_fields = Some((fields[0], fields[1], fields[2]));
+                    if fields.len() >= 4 {
+                        gid_fields = Some((fields[0], fields[1], fields[2], fields[3]));
                     }
                 }
                 "Groups" => {
@@ -52,16 +54,20 @@ pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
         }
     }
 
-    let (ruid, euid, suid) = uid_fields.ok_or_else(|| Error::in_file("status", "missing Uid"))?;
-    let (rgid, egid, sgid) = gid_fields.ok_or_else(|| Error::in_file("status", "missing Gid"))?;
+    let (ruid, euid, suid, fsuid) =
+        uid_fields.ok_or_else(|| Error::in_file("status", "missing Uid"))?;
+    let (rgid, egid, sgid, fsgid) =
+        gid_fields.ok_or_else(|| Error::in_file("status", "missing Gid"))?;
 
     Ok(ProcCred {
         euid,
         ruid,
         suid,
+        fsuid,
         egid,
         rgid,
         sgid,
+        fsgid,
         groups,
     })
 }
