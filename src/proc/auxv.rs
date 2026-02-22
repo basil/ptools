@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::mem::size_of;
@@ -12,43 +13,125 @@ use super::ProcHandle;
 const AT_RSEQ_FEATURE_SIZE: u64 = 27;
 const AT_RSEQ_ALIGN: u64 = 28;
 
-#[allow(clippy::unnecessary_cast)]
-pub const AUX_NAMES: &[(u64, &str)] = &[
-    (libc::AT_BASE as u64, "AT_BASE"),
-    (libc::AT_BASE_PLATFORM as u64, "AT_BASE_PLATFORM"),
-    (libc::AT_CLKTCK as u64, "AT_CLKTCK"),
-    (libc::AT_EGID as u64, "AT_EGID"),
-    (libc::AT_ENTRY as u64, "AT_ENTRY"),
-    (libc::AT_EUID as u64, "AT_EUID"),
-    (libc::AT_EXECFD as u64, "AT_EXECFD"),
-    (libc::AT_EXECFN as u64, "AT_EXECFN"),
-    (libc::AT_FLAGS as u64, "AT_FLAGS"),
-    (libc::AT_GID as u64, "AT_GID"),
-    (libc::AT_HWCAP2 as u64, "AT_HWCAP2"),
-    (libc::AT_HWCAP as u64, "AT_HWCAP"),
-    (libc::AT_IGNORE as u64, "AT_IGNORE"),
-    (libc::AT_MINSIGSTKSZ as u64, "AT_MINSIGSTKSZ"),
-    (libc::AT_NOTELF as u64, "AT_NOTELF"),
-    (libc::AT_NULL as u64, "AT_NULL"),
-    (libc::AT_PAGESZ as u64, "AT_PAGESZ"),
-    (libc::AT_PHDR as u64, "AT_PHDR"),
-    (libc::AT_PHENT as u64, "AT_PHENT"),
-    (libc::AT_PHNUM as u64, "AT_PHNUM"),
-    (libc::AT_PLATFORM as u64, "AT_PLATFORM"),
-    (libc::AT_RANDOM as u64, "AT_RANDOM"),
-    (AT_RSEQ_FEATURE_SIZE, "AT_RSEQ_FEATURE_SIZE"),
-    (AT_RSEQ_ALIGN, "AT_RSEQ_ALIGN"),
-    (libc::AT_SECURE as u64, "AT_SECURE"),
-    (libc::AT_SYSINFO_EHDR as u64, "AT_SYSINFO_EHDR"),
-    (libc::AT_UID as u64, "AT_UID"),
-];
+/// An auxiliary vector entry type (`AT_*` constant).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuxvType {
+    Null,
+    Ignore,
+    ExecFd,
+    Phdr,
+    PhEnt,
+    PhNum,
+    PageSz,
+    Base,
+    Flags,
+    Entry,
+    NotElf,
+    Uid,
+    Euid,
+    Gid,
+    Egid,
+    ClkTck,
+    Platform,
+    Hwcap,
+    Hwcap2,
+    Secure,
+    BasePlatform,
+    Random,
+    ExecFn,
+    SysinfoEhdr,
+    MinSigStkSz,
+    RseqFeatureSize,
+    RseqAlign,
+    Unknown(u64),
+}
 
-pub fn aux_key_name(key: u64) -> String {
-    AUX_NAMES
-        .iter()
-        .find_map(|(k, name)| (*k == key).then_some(*name))
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("AT_{}", key))
+#[allow(clippy::unnecessary_cast)]
+impl From<u64> for AuxvType {
+    fn from(v: u64) -> Self {
+        match v {
+            x if x == libc::AT_NULL as u64 => Self::Null,
+            x if x == libc::AT_IGNORE as u64 => Self::Ignore,
+            x if x == libc::AT_EXECFD as u64 => Self::ExecFd,
+            x if x == libc::AT_PHDR as u64 => Self::Phdr,
+            x if x == libc::AT_PHENT as u64 => Self::PhEnt,
+            x if x == libc::AT_PHNUM as u64 => Self::PhNum,
+            x if x == libc::AT_PAGESZ as u64 => Self::PageSz,
+            x if x == libc::AT_BASE as u64 => Self::Base,
+            x if x == libc::AT_FLAGS as u64 => Self::Flags,
+            x if x == libc::AT_ENTRY as u64 => Self::Entry,
+            x if x == libc::AT_NOTELF as u64 => Self::NotElf,
+            x if x == libc::AT_UID as u64 => Self::Uid,
+            x if x == libc::AT_EUID as u64 => Self::Euid,
+            x if x == libc::AT_GID as u64 => Self::Gid,
+            x if x == libc::AT_EGID as u64 => Self::Egid,
+            x if x == libc::AT_CLKTCK as u64 => Self::ClkTck,
+            x if x == libc::AT_PLATFORM as u64 => Self::Platform,
+            x if x == libc::AT_HWCAP as u64 => Self::Hwcap,
+            x if x == libc::AT_HWCAP2 as u64 => Self::Hwcap2,
+            x if x == libc::AT_SECURE as u64 => Self::Secure,
+            x if x == libc::AT_BASE_PLATFORM as u64 => Self::BasePlatform,
+            x if x == libc::AT_RANDOM as u64 => Self::Random,
+            x if x == libc::AT_EXECFN as u64 => Self::ExecFn,
+            x if x == libc::AT_SYSINFO_EHDR as u64 => Self::SysinfoEhdr,
+            x if x == libc::AT_MINSIGSTKSZ as u64 => Self::MinSigStkSz,
+            x if x == AT_RSEQ_FEATURE_SIZE => Self::RseqFeatureSize,
+            x if x == AT_RSEQ_ALIGN => Self::RseqAlign,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl AuxvType {
+    pub fn is_uid(self) -> bool {
+        matches!(self, Self::Uid | Self::Euid)
+    }
+
+    pub fn is_gid(self) -> bool {
+        matches!(self, Self::Gid | Self::Egid)
+    }
+}
+
+impl fmt::Display for AuxvType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let name = match self {
+            Self::Null => "AT_NULL",
+            Self::Ignore => "AT_IGNORE",
+            Self::ExecFd => "AT_EXECFD",
+            Self::Phdr => "AT_PHDR",
+            Self::PhEnt => "AT_PHENT",
+            Self::PhNum => "AT_PHNUM",
+            Self::PageSz => "AT_PAGESZ",
+            Self::Base => "AT_BASE",
+            Self::Flags => "AT_FLAGS",
+            Self::Entry => "AT_ENTRY",
+            Self::NotElf => "AT_NOTELF",
+            Self::Uid => "AT_UID",
+            Self::Euid => "AT_EUID",
+            Self::Gid => "AT_GID",
+            Self::Egid => "AT_EGID",
+            Self::ClkTck => "AT_CLKTCK",
+            Self::Platform => "AT_PLATFORM",
+            Self::Hwcap => "AT_HWCAP",
+            Self::Hwcap2 => "AT_HWCAP2",
+            Self::Secure => "AT_SECURE",
+            Self::BasePlatform => "AT_BASE_PLATFORM",
+            Self::Random => "AT_RANDOM",
+            Self::ExecFn => "AT_EXECFN",
+            Self::SysinfoEhdr => "AT_SYSINFO_EHDR",
+            Self::MinSigStkSz => "AT_MINSIGSTKSZ",
+            Self::RseqFeatureSize => "AT_RSEQ_FEATURE_SIZE",
+            Self::RseqAlign => "AT_RSEQ_ALIGN",
+            Self::Unknown(v) => return write!(f, "AT_{}", v),
+        };
+        f.write_str(name)
+    }
+}
+
+/// A single entry from the auxiliary vector.
+pub struct AuxvEntry {
+    pub key: AuxvType,
+    pub value: u64,
 }
 
 pub fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, String> {
@@ -69,7 +152,7 @@ pub fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, String> {
     }
 }
 
-pub fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<(u64, u64)>, String> {
+pub fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, String> {
     let record_size = word_size
         .checked_mul(2)
         .ok_or_else(|| "auxv record size overflow".to_string())?;
@@ -80,13 +163,16 @@ pub fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<(u64, u6
     let mut result = Vec::new();
     let mut saw_terminator = false;
     for chunk in bytes.chunks_exact(record_size) {
-        let key = parse_word(&chunk[..word_size], word_size)?;
+        let raw_key = parse_word(&chunk[..word_size], word_size)?;
         let value = parse_word(&chunk[word_size..record_size], word_size)?;
-        if key == 0 {
+        if raw_key == 0 {
             saw_terminator = true;
             break;
         }
-        result.push((key, value));
+        result.push(AuxvEntry {
+            key: AuxvType::from(raw_key),
+            value,
+        });
     }
 
     if !saw_terminator {
@@ -115,7 +201,7 @@ pub fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
 /// Read and parse the auxiliary vector from a process handle.
 ///
 /// Returns the parsed auxv records, or an error string describing what went wrong.
-pub fn read_auxv(handle: &ProcHandle) -> Result<Vec<(u64, u64)>, String> {
+pub fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, String> {
     let bytes = handle
         .auxv_bytes()
         .map_err(|e| format!("error reading auxv for pid {}: {}", handle.pid(), e))?;
@@ -153,8 +239,7 @@ pub fn read_auxv(handle: &ProcHandle) -> Result<Vec<(u64, u64)>, String> {
 }
 
 #[cfg(target_arch = "x86_64")]
-#[allow(clippy::unnecessary_cast)]
-pub fn decode_hwcap(key: u64, value: u64) -> Option<String> {
+pub fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
     // AT_HWCAP on x86_64: CPUID leaf 1 EDX register bits
     const HWCAP_NAMES: &[(u32, &str)] = &[
         (0, "FPU"),
@@ -191,12 +276,10 @@ pub fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     // AT_HWCAP2 on x86_64: kernel-defined bits from asm/hwcap2.h
     const HWCAP2_NAMES: &[(u32, &str)] = &[(0, "RING3MWAIT"), (1, "FSGSBASE")];
 
-    let table = if key == libc::AT_HWCAP as u64 {
-        HWCAP_NAMES
-    } else if key == libc::AT_HWCAP2 as u64 {
-        HWCAP2_NAMES
-    } else {
-        return None;
+    let table = match key {
+        AuxvType::Hwcap => HWCAP_NAMES,
+        AuxvType::Hwcap2 => HWCAP2_NAMES,
+        _ => return None,
     };
 
     let names: Vec<&str> = table
@@ -208,13 +291,12 @@ pub fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     if names.is_empty() {
         None
     } else {
-        Some(names.join(" | "))
+        Some(names)
     }
 }
 
 #[cfg(target_arch = "aarch64")]
-#[allow(clippy::unnecessary_cast)]
-pub fn decode_hwcap(key: u64, value: u64) -> Option<String> {
+pub fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
     // AT_HWCAP on aarch64: bits from arch/arm64/include/uapi/asm/hwcap.h
     const HWCAP_NAMES: &[(u32, &str)] = &[
         (0, "FP"),
@@ -300,12 +382,10 @@ pub fn decode_hwcap(key: u64, value: u64) -> Option<String> {
         (44, "HBC"),
     ];
 
-    let table = if key == libc::AT_HWCAP as u64 {
-        HWCAP_NAMES
-    } else if key == libc::AT_HWCAP2 as u64 {
-        HWCAP2_NAMES
-    } else {
-        return None;
+    let table = match key {
+        AuxvType::Hwcap => HWCAP_NAMES,
+        AuxvType::Hwcap2 => HWCAP2_NAMES,
+        _ => return None,
     };
 
     let names: Vec<&str> = table
@@ -317,23 +397,13 @@ pub fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     if names.is_empty() {
         None
     } else {
-        Some(names.join(" | "))
+        Some(names)
     }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub fn decode_hwcap(_key: u64, _value: u64) -> Option<String> {
+pub fn decode_hwcap(_key: AuxvType, _value: u64) -> Option<Vec<&'static str>> {
     None
-}
-
-#[allow(clippy::unnecessary_cast)]
-pub fn is_uid_auxv_key(key: u64) -> bool {
-    key == libc::AT_UID as u64 || key == libc::AT_EUID as u64
-}
-
-#[allow(clippy::unnecessary_cast)]
-pub fn is_gid_auxv_key(key: u64) -> bool {
-    key == libc::AT_GID as u64 || key == libc::AT_EGID as u64
 }
 
 #[cfg(test)]
@@ -349,7 +419,9 @@ mod tests {
         bytes.extend_from_slice(&(0u64).to_ne_bytes());
 
         let auxv = parse_auxv_records(&bytes, 8).expect("parse 64-bit auxv");
-        assert_eq!(auxv, vec![(6, 4096)]);
+        assert_eq!(auxv.len(), 1);
+        assert_eq!(auxv[0].key, AuxvType::PageSz);
+        assert_eq!(auxv[0].value, 4096);
     }
 
     #[test]
@@ -361,7 +433,9 @@ mod tests {
         bytes.extend_from_slice(&(0u32).to_ne_bytes());
 
         let auxv = parse_auxv_records(&bytes, 4).expect("parse 32-bit auxv");
-        assert_eq!(auxv, vec![(6, 4096)]);
+        assert_eq!(auxv.len(), 1);
+        assert_eq!(auxv[0].key, AuxvType::PageSz);
+        assert_eq!(auxv[0].value, 4096);
     }
 
     #[test]

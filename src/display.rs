@@ -2,9 +2,7 @@ use std::error::Error;
 use std::io;
 use std::io::ErrorKind;
 
-use nix::libc;
-
-use crate::proc::auxv::{aux_key_name, decode_hwcap, is_gid_auxv_key, is_uid_auxv_key, read_auxv};
+use crate::proc::auxv::{decode_hwcap, read_auxv, AuxvType};
 use crate::proc::cred::{resolve_gid, resolve_uid};
 use crate::proc::ProcHandle;
 
@@ -41,42 +39,41 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Box<dyn Error>> {
     let auxv = read_auxv(handle)?;
 
     print_proc_summary_from(handle);
-    for (key, value) in auxv {
-        if key == libc::AT_EXECFN as u64 {
+    for entry in &auxv {
+        if entry.key == AuxvType::ExecFn {
             let s = handle
                 .exe()
                 .ok()
                 .and_then(|p| p.to_str().map(str::to_string))
                 .unwrap_or_default();
-            println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, s);
-        } else if let Some(flags) = decode_hwcap(key, value) {
-            println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, flags);
-        } else if is_uid_auxv_key(key) {
-            if let Some(name) = resolve_uid(value as u32) {
+            println!("{:<15} 0x{:016x} {}", entry.key, entry.value, s);
+        } else if let Some(flags) = decode_hwcap(entry.key, entry.value) {
+            println!(
+                "{:<15} 0x{:016x} {}",
+                entry.key,
+                entry.value,
+                flags.join(" | ")
+            );
+        } else if entry.key.is_uid() {
+            if let Some(name) = resolve_uid(entry.value as u32) {
                 println!(
                     "{:<15} 0x{:016x} {}({})",
-                    aux_key_name(key),
-                    value,
-                    value,
-                    name
+                    entry.key, entry.value, entry.value, name
                 );
             } else {
-                println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+                println!("{:<15} 0x{:016x}", entry.key, entry.value);
             }
-        } else if is_gid_auxv_key(key) {
-            if let Some(name) = resolve_gid(value as u32) {
+        } else if entry.key.is_gid() {
+            if let Some(name) = resolve_gid(entry.value as u32) {
                 println!(
                     "{:<15} 0x{:016x} {}({})",
-                    aux_key_name(key),
-                    value,
-                    value,
-                    name
+                    entry.key, entry.value, entry.value, name
                 );
             } else {
-                println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+                println!("{:<15} 0x{:016x}", entry.key, entry.value);
             }
         } else {
-            println!("{:<15} 0x{:016x}", aux_key_name(key), value);
+            println!("{:<15} 0x{:016x}", entry.key, entry.value);
         }
     }
     Ok(())
