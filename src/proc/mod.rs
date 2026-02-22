@@ -338,13 +338,13 @@ impl ProcHandle {
         fields.get(36)?.parse::<u32>().ok()
     }
 
-    /// Cpus_allowed_list from a thread's status, as a sorted list of CPU IDs.
-    pub fn thread_affinity(&self, tid: u64) -> Option<Vec<u32>> {
+    /// Cpus_allowed_list from a thread's status, as a `CpuSet`.
+    pub fn thread_affinity(&self, tid: u64) -> Option<numa::CpuSet> {
         let status = self.source.read_tid_status(tid).ok()?;
         let line = status
             .lines()
             .find_map(|l| l.strip_prefix("Cpus_allowed_list:"))?;
-        crate::proc::numa::parse_list_format(line.trim()).ok()
+        numa::parse_list_format(line.trim()).ok()
     }
 
     // -- Compound convenience ----------------------------------------

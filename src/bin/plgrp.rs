@@ -16,14 +16,16 @@
 
 use std::process;
 
-use nix::sched::{sched_getaffinity, CpuSet};
+use nix::sched::sched_getaffinity;
 use nix::unistd::Pid;
 
-use ptools::{cpu_to_node, numa_node_cpus, numa_online_nodes, ProcHandle};
+use ptools::{cpu_to_node, numa_online_nodes, CpuSet, ProcHandle};
 
-/// Get the CPU affinity mask for a thread.
+/// Get the CPU affinity mask for a thread via syscall.
 fn get_thread_affinity(tid: u64) -> Option<CpuSet> {
-    sched_getaffinity(Pid::from_raw(tid as i32)).ok()
+    sched_getaffinity(Pid::from_raw(tid as i32))
+        .ok()
+        .map(CpuSet::from)
 }
 
 struct NodeList {
@@ -42,10 +44,10 @@ fn parse_node_list(s: &str) -> Result<NodeList, String> {
         let part = part.trim();
         match part {
             "all" | "leaves" => {
-                result.extend_from_slice(&online);
+                result.extend(online.iter());
             }
             "root" => {
-                if online.contains(&0) {
+                if online.contains(0) {
                     result.push(0);
                 }
             }
@@ -63,7 +65,7 @@ fn parse_node_list(s: &str) -> Result<NodeList, String> {
                         return Err(format!("invalid range {}-{}", start, end));
                     }
                     for n in start..=end {
-                        if online.contains(&n) {
+                        if online.contains(n) {
                             result.push(n);
                         } else {
                             eprintln!("plgrp: bad node {}", n);
@@ -74,7 +76,7 @@ fn parse_node_list(s: &str) -> Result<NodeList, String> {
                     let n: u32 = part
                         .parse()
                         .map_err(|e| format!("invalid node '{}': {}", part, e))?;
-                    if online.contains(&n) {
+                    if online.contains(n) {
                         result.push(n);
                     } else {
                         eprintln!("plgrp: bad node {}", n);
@@ -91,23 +93,6 @@ fn parse_node_list(s: &str) -> Result<NodeList, String> {
         nodes: result,
         had_bad_nodes,
     })
-}
-
-/// Check whether a thread's affinity includes any CPU on the given node.
-fn thread_has_affinity_for_node(affinity: &CpuSet, node: u32) -> bool {
-    let Ok(cpus) = numa_node_cpus(node) else {
-        return false;
-    };
-    cpus.iter()
-        .any(|&cpu| affinity.is_set(cpu as usize).unwrap_or(false))
-}
-
-/// Check whether a list of allowed CPUs includes any CPU on the given node.
-fn cpus_include_node(allowed: &[u32], node: u32) -> bool {
-    let Ok(cpus) = numa_node_cpus(node) else {
-        return false;
-    };
-    cpus.iter().any(|cpu| allowed.contains(cpu))
 }
 
 struct Args {
@@ -201,35 +186,23 @@ fn print_thread(handle: &ProcHandle, tid: u64, affinity_nodes: &Option<Vec<u32>>
 
     let pid_tid = format!("{}/{}", pid, tid);
     if let Some(nodes) = affinity_nodes {
-        let aff_str: String = if handle.is_core() {
-            let allowed = handle.thread_affinity(tid);
-            nodes
-                .iter()
-                .map(|&n| {
-                    let label = match &allowed {
-                        Some(cpus) if cpus_include_node(cpus, n) => "bound",
-                        Some(_) => "none",
-                        None => "?",
-                    };
-                    format!("{}/{}", n, label)
-                })
-                .collect::<Vec<_>>()
-                .join(",")
+        let affinity = if handle.is_core() {
+            handle.thread_affinity(tid)
         } else {
-            let affinity = get_thread_affinity(tid);
-            nodes
-                .iter()
-                .map(|&n| {
-                    let label = match &affinity {
-                        Some(cpuset) if thread_has_affinity_for_node(cpuset, n) => "bound",
-                        Some(_) => "none",
-                        None => "?",
-                    };
-                    format!("{}/{}", n, label)
-                })
-                .collect::<Vec<_>>()
-                .join(",")
+            get_thread_affinity(tid)
         };
+        let aff_str: String = nodes
+            .iter()
+            .map(|&n| {
+                let label = match &affinity {
+                    Some(cpuset) if cpuset.includes_node(n) => "bound",
+                    Some(_) => "none",
+                    None => "?",
+                };
+                format!("{}/{}", n, label)
+            })
+            .collect::<Vec<_>>()
+            .join(",");
         println!("{:>14}  {:>4}  {}", pid_tid, home, aff_str);
     } else {
         println!("{:>14}  {:>4}", pid_tid, home);
