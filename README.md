@@ -184,8 +184,10 @@ project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps),
 are not reimplemented here, as these packages are widely available on Linux
 distributions and already provide equivalent functionality. There are a number
 of commands available on Solaris/illumos which have not
-been implemented here yet, perhaps most notably `pstack(1)`. Also, support
-for examining core dumps has not yet been implemented.
+been implemented here yet, perhaps most notably `pstack(1)`. Core dump
+support is available for `pargs(1)`, `pauxv(1)`, `pcred(1)`, `penv(1)`,
+`pfiles(1)`, and `psig(1)` via systemd-coredump extended attributes and
+journal metadata.
 
 | Command                                                       | Description                                           | Status                       |
 | ------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
