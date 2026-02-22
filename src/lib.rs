@@ -14,23 +14,24 @@
 //   limitations under the License.
 //
 
-pub mod display;
-pub mod proc;
+mod display;
+mod proc;
 
-// Re-export key types at crate root for convenience (preserves existing API)
-pub use display::*;
-pub use proc::auxv;
+// Re-export public API at crate root.
+pub use display::{
+    print_auxv_from, print_cmd_summary_from, print_env_from, print_proc_summary_from,
+};
 pub use proc::cred::{resolve_gid, resolve_uid, ProcCred};
 pub use proc::fd::{
     address_family_from_sockprotoname, AnonFileType, FdStat, FileDescriptor, FileType, OpenFlags,
     PosixFileType,
 };
 pub use proc::net::{PeerProcess, SockType, Socket, TcpInfo, TcpState};
-pub use proc::numa::{cpu_to_node, numa_node_cpus, numa_online_nodes, parse_list_format, CpuSet};
+pub use proc::numa::{cpu_to_node, numa_online_nodes, CpuSet};
 pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{
-    enumerate_tids, proc_state, resolve_operand, resolve_operand_with_tid, Error, FdInfo,
-    ProcHandle, ProcessState, Resource, Rlimit, RlimitVal, SignalMasks,
+    resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcessState, Rlimit, RlimitVal,
+    SignalMasks,
 };
 
 use nix::libc;

@@ -134,7 +134,7 @@ pub struct AuxvEntry {
     pub value: u64,
 }
 
-pub fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
+fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
     match word_size {
         4 => {
             let raw: [u8; 4] = chunk.try_into().map_err(|_| {
@@ -155,7 +155,7 @@ pub fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
     }
 }
 
-pub fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, super::Error> {
+fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, super::Error> {
     let record_size = word_size
         .checked_mul(2)
         .ok_or_else(|| super::Error::Parse("auxv record size overflow".to_string()))?;
@@ -190,7 +190,7 @@ pub fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntr
     Ok(result)
 }
 
-pub fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
+fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
     let mut exe_file = File::open(exe_path).ok()?;
     let mut header = [0u8; 5];
     exe_file.read_exact(&mut header).ok()?;
@@ -245,7 +245,7 @@ pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Er
 }
 
 #[cfg(target_arch = "x86_64")]
-pub fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
+pub(crate) fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
     // AT_HWCAP on x86_64: CPUID leaf 1 EDX register bits
     const HWCAP_NAMES: &[(u32, &str)] = &[
         (0, "FPU"),
@@ -302,7 +302,7 @@ pub fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
 }
 
 #[cfg(target_arch = "aarch64")]
-pub fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
+pub(crate) fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
     // AT_HWCAP on aarch64: bits from arch/arm64/include/uapi/asm/hwcap.h
     const HWCAP_NAMES: &[(u32, &str)] = &[
         (0, "FP"),

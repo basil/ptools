@@ -26,10 +26,6 @@ pub fn print_env_from(handle: &mut ProcHandle) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn print_env(pid: u64) -> Result<(), Error> {
-    print_env_from(&mut ProcHandle::from_pid(pid))
-}
-
 #[allow(clippy::unnecessary_cast)]
 pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
     let auxv = handle.auxv()?;
@@ -75,18 +71,9 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn print_auxv(pid: u64) -> Result<(), Error> {
-    print_auxv_from(&ProcHandle::from_pid(pid))
-}
-
 pub fn print_proc_summary_from(handle: &ProcHandle) {
     print!("{}:\t", handle.pid());
     print_cmd_summary_from(handle);
-}
-
-// Print the pid and a summary of command line arguments on a single line.
-pub fn print_proc_summary(pid: u64) {
-    print_proc_summary_from(&ProcHandle::from_pid(pid));
 }
 
 pub fn print_cmd_summary_from(handle: &ProcHandle) {
@@ -121,9 +108,4 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
             eprintln!("{}", e);
         }
     }
-}
-
-// Print a summary of command line arguments on a single line.
-pub fn print_cmd_summary(pid: u64) {
-    print_cmd_summary_from(&ProcHandle::from_pid(pid));
 }

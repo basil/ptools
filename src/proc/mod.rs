@@ -1,11 +1,11 @@
-pub mod auxv;
+pub(crate) mod auxv;
 pub(crate) mod coredump;
-pub mod cred;
-pub mod fd;
+pub(crate) mod cred;
+pub(crate) mod fd;
 pub(crate) mod live;
 pub(crate) mod net;
-pub mod numa;
-pub mod signal;
+pub(crate) mod numa;
+pub(crate) mod signal;
 
 use nix::fcntl::OFlag;
 use std::ffi::OsString;
@@ -17,8 +17,6 @@ use coredump::CoredumpSource;
 use cred::{parse_cred, ProcCred};
 use live::LiveProcess;
 use signal::{intersect_blocked_masks, parse_signal_set, SignalSet};
-
-use auxv::{AuxvEntry, AuxvType};
 
 /// Abstraction over process data sources.
 ///
@@ -63,78 +61,12 @@ pub struct Rlimit {
     pub hard: RlimitVal,
 }
 
-/// Resource types that can be queried via `/proc/[pid]/limits`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Resource {
-    CpuTime,
-    FileSize,
-    DataSize,
-    StackSize,
-    CoreSize,
-    ResidentSet,
-    Processes,
-    OpenFiles,
-    LockedMemory,
-    AddressSpace,
-    FileLocks,
-    PendingSignals,
-    MsgqueueSize,
-    NicePriority,
-    RealtimePriority,
-    RealtimeTimeout,
-}
-
-impl Resource {
-    /// All known resource types, in the order they appear in
-    /// `/proc/[pid]/limits`.
-    pub const ALL: &[Resource] = &[
-        Resource::CpuTime,
-        Resource::FileSize,
-        Resource::DataSize,
-        Resource::StackSize,
-        Resource::CoreSize,
-        Resource::ResidentSet,
-        Resource::Processes,
-        Resource::OpenFiles,
-        Resource::LockedMemory,
-        Resource::AddressSpace,
-        Resource::FileLocks,
-        Resource::PendingSignals,
-        Resource::MsgqueueSize,
-        Resource::NicePriority,
-        Resource::RealtimePriority,
-        Resource::RealtimeTimeout,
-    ];
-
-    /// The line prefix used in `/proc/[pid]/limits` for this resource.
-    fn line_prefix(self) -> &'static str {
-        match self {
-            Resource::CpuTime => "Max cpu time",
-            Resource::FileSize => "Max file size",
-            Resource::DataSize => "Max data size",
-            Resource::StackSize => "Max stack size",
-            Resource::CoreSize => "Max core file size",
-            Resource::ResidentSet => "Max resident set",
-            Resource::Processes => "Max processes",
-            Resource::OpenFiles => "Max open files",
-            Resource::LockedMemory => "Max locked memory",
-            Resource::AddressSpace => "Max address space",
-            Resource::FileLocks => "Max file locks",
-            Resource::PendingSignals => "Max pending signals",
-            Resource::MsgqueueSize => "Max msgqueue size",
-            Resource::NicePriority => "Max nice priority",
-            Resource::RealtimePriority => "Max realtime priority",
-            Resource::RealtimeTimeout => "Max realtime timeout",
-        }
-    }
-}
-
 /// Parsed fdinfo with structured fields from `/proc/[pid]/fdinfo/<fd>`.
-pub struct FdInfo {
-    pub offset: u64,
-    pub flags: OFlag,
-    pub mnt_id: Option<u64>,
-    pub extra_lines: Vec<String>,
+struct FdInfo {
+    offset: u64,
+    flags: OFlag,
+    mnt_id: Option<u64>,
+    extra_lines: Vec<String>,
 }
 
 fn parse_rlimit_val(s: &str) -> Result<RlimitVal, Error> {
@@ -199,17 +131,11 @@ impl ProcHandle {
     }
 
     /// Parse and return all auxiliary vector entries.
-    pub fn auxv(&self) -> Result<Vec<AuxvEntry>, Error> {
+    pub(crate) fn auxv(&self) -> Result<Vec<auxv::AuxvEntry>, Error> {
         auxv::read_auxv(self)
     }
 
-    /// Look up a specific auxv value by type.
-    pub fn auxv_val(&self, key: AuxvType) -> Result<Option<u64>, Error> {
-        let entries = self.auxv()?;
-        Ok(entries.iter().find(|e| e.key == key).map(|e| e.value))
-    }
-
-    pub fn comm(&self) -> Result<String, Error> {
+    pub(crate) fn comm(&self) -> Result<String, Error> {
         Ok(self.source.read_comm()?)
     }
 
@@ -221,15 +147,15 @@ impl ProcHandle {
         Ok(self.source.list_tids()?)
     }
 
-    pub fn fds(&self) -> Result<Vec<u64>, Error> {
+    fn fds(&self) -> Result<Vec<u64>, Error> {
         Ok(self.source.list_fds()?)
     }
 
-    pub fn fd_path(&self, fd: u64) -> Result<PathBuf, Error> {
+    fn fd_path(&self, fd: u64) -> Result<PathBuf, Error> {
         Ok(self.source.read_fd_link(fd)?)
     }
 
-    pub fn fdinfo(&self, fd: u64) -> Result<FdInfo, Error> {
+    fn fdinfo(&self, fd: u64) -> Result<FdInfo, Error> {
         let contents = self.source.read_fdinfo(fd)?;
         let mut offset = None;
         let mut flags = None;
@@ -260,14 +186,6 @@ impl ProcHandle {
             mnt_id,
             extra_lines,
         })
-    }
-
-    pub fn limits_raw(&self) -> Result<String, Error> {
-        Ok(self.source.read_limits()?)
-    }
-
-    pub fn net_file(&self, name: &str) -> Result<String, Error> {
-        Ok(self.source.read_net_file(name)?)
     }
 
     // -- Parsed from /proc/[pid]/stat --------------------------------
@@ -517,7 +435,7 @@ impl ProcHandle {
     /// `(key, value)` pairs.  Entries that lack an `=` or have an
     /// empty key are silently skipped (processes like sshd can overwrite
     /// their environ memory with status info, leaving garbage).
-    pub fn environ(&mut self) -> Result<Vec<(OsString, OsString)>, Error> {
+    pub(crate) fn environ(&mut self) -> Result<Vec<(OsString, OsString)>, Error> {
         let bytes = self.source.read_environ()?;
         let mut vars = Vec::new();
         for chunk in bytes.split(|b| *b == b'\0') {
@@ -540,35 +458,11 @@ impl ProcHandle {
         Ok(vars)
     }
 
-    /// Query a single resource limit from `/proc/[pid]/limits`.
-    pub fn rlimit(&self, resource: Resource) -> Result<Rlimit, Error> {
-        let limits = self.source.read_limits()?;
-        let prefix = resource.line_prefix();
-        parse_rlimit_line(&limits, prefix)?.ok_or_else(|| {
-            Error::parse("/proc/[pid]/limits", &format!("{} line not found", prefix))
-        })
-    }
-
-    /// Query all resource limits from `/proc/[pid]/limits`.
-    ///
-    /// Returns a vec of `(Resource, Rlimit)` pairs for each resource
-    /// present in the limits file.
-    pub fn rlimits(&self) -> Result<Vec<(Resource, Rlimit)>, Error> {
-        let limits = self.source.read_limits()?;
-        let mut result = Vec::new();
-        for &resource in Resource::ALL {
-            if let Some(rlimit) = parse_rlimit_line(&limits, resource.line_prefix())? {
-                result.push((resource, rlimit));
-            }
-        }
-        Ok(result)
-    }
-
-    /// Query the open-files resource limit.
-    ///
-    /// Convenience wrapper around [`rlimit(Resource::OpenFiles)`](Self::rlimit).
+    /// Query the open-files resource limit from `/proc/[pid]/limits`.
     pub fn nofile_limit(&self) -> Result<Rlimit, Error> {
-        self.rlimit(Resource::OpenFiles)
+        let limits = self.source.read_limits()?;
+        parse_rlimit_line(&limits, "Max open files")?
+            .ok_or_else(|| Error::parse("/proc/[pid]/limits", "Max open files line not found"))
     }
 
     /// Gather fully-populated [`fd::FileDescriptor`] structs for every open
@@ -837,16 +731,6 @@ pub fn resolve_operand_with_tid(arg: &str) -> Result<(ProcHandle, Option<u64>), 
             grab_core(&path).map(|h| (h, None))
         }
     }
-}
-
-/// Read the process state from /proc/[pid]/stat.
-pub fn proc_state(pid: u64) -> Result<ProcessState, Error> {
-    ProcHandle::from_pid(pid).state()
-}
-
-/// List all thread IDs for a given PID by reading `/proc/PID/task/`.
-pub fn enumerate_tids(pid: u64) -> Result<Vec<u64>, Error> {
-    ProcHandle::from_pid(pid).tids()
 }
 
 /// Unified error type for ptools operations.

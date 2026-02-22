@@ -40,7 +40,7 @@ impl From<nix::sched::CpuSet> for CpuSet {
 }
 
 /// Parse a kernel list-format string like "0-3,5,7-8" into a `CpuSet`.
-pub fn parse_list_format(s: &str) -> Result<CpuSet, super::Error> {
+pub(crate) fn parse_list_format(s: &str) -> Result<CpuSet, super::Error> {
     let s = s.trim();
     if s.is_empty() {
         return Ok(CpuSet { cpus: Vec::new() });
@@ -82,7 +82,7 @@ pub fn numa_online_nodes() -> Result<CpuSet, super::Error> {
 }
 
 /// Return the set of CPUs belonging to a given NUMA node.
-pub fn numa_node_cpus(node: u32) -> Result<CpuSet, super::Error> {
+pub(crate) fn numa_node_cpus(node: u32) -> Result<CpuSet, super::Error> {
     let path = format!("/sys/devices/system/node/node{}/cpulist", node);
     let content = std::fs::read_to_string(&path)
         .map_err(|e| super::Error::Parse(format!("failed to read {}: {}", path, e)))?;

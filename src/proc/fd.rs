@@ -146,7 +146,7 @@ pub struct FileDescriptor {
 /// When the mode bits identify a concrete POSIX type, that is returned.
 /// When the mode bits are zero (as for anonymous inodes), the link text
 /// is examined for `anon_inode:` patterns.
-pub fn file_type_from_stat(mode: u32, link_text: &str) -> FileType {
+pub(crate) fn file_type_from_stat(mode: u32, link_text: &str) -> FileType {
     let masked = mode & SFlag::S_IFMT.bits();
     if masked != 0 {
         let posix = match SFlag::from_bits_truncate(masked) {
@@ -167,7 +167,7 @@ pub fn file_type_from_stat(mode: u32, link_text: &str) -> FileType {
 
 /// Classify a file from the symlink text alone (used when `stat()` is
 /// unavailable, e.g. coredumps).
-pub fn file_type_from_link(link_text: &str) -> FileType {
+pub(crate) fn file_type_from_link(link_text: &str) -> FileType {
     if link_text.starts_with("anon_inode:") {
         let fd_type_str = link_text
             .trim_start_matches("anon_inode:")
@@ -189,7 +189,7 @@ pub fn file_type_from_link(link_text: &str) -> FileType {
 }
 
 /// Extract the inode number from a `"socket:[12345]"` link text.
-pub fn parse_socket_inode(link_text: &str) -> Option<u64> {
+pub(crate) fn parse_socket_inode(link_text: &str) -> Option<u64> {
     let inner = link_text.strip_prefix("socket:[")?;
     let inner = inner.strip_suffix(']')?;
     inner.parse::<u64>().ok()
@@ -244,7 +244,7 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
+fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
     match std::io::Error::last_os_error().raw_os_error() {
         Some(nix::libc::ENODATA)
         | Some(nix::libc::EOPNOTSUPP)

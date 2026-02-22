@@ -14,7 +14,7 @@ pub struct ProcCred {
 }
 
 /// Parse credentials from the text of /proc/[pid]/status.
-pub fn parse_cred(status: &str) -> Result<ProcCred, Error> {
+pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
     let mut uid_fields = None;
     let mut gid_fields = None;
     let mut groups = Vec::new();

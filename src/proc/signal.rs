@@ -36,7 +36,7 @@ impl SignalSet {
 }
 
 /// Parse a hex signal mask (e.g. from `SigIgn`) into a [`SignalSet`].
-pub fn parse_signal_set(hex: &str) -> Result<SignalSet, super::Error> {
+pub(crate) fn parse_signal_set(hex: &str) -> Result<SignalSet, super::Error> {
     let trimmed = hex.trim();
     if trimmed.is_empty() {
         return Err(super::Error::Parse("empty signal mask".to_string()));
@@ -72,7 +72,7 @@ pub fn parse_signal_set(hex: &str) -> Result<SignalSet, super::Error> {
 }
 
 /// Compute the intersection of per-thread blocked masks.
-pub fn intersect_blocked_masks(masks: &[SignalSet]) -> SignalSet {
+pub(crate) fn intersect_blocked_masks(masks: &[SignalSet]) -> SignalSet {
     let Some(first) = masks.first() else {
         return SignalSet::default();
     };
