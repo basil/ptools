@@ -1,6 +1,7 @@
 pub mod auxv;
 pub(crate) mod coredump;
 pub mod cred;
+pub mod fd;
 pub(crate) mod live;
 pub(crate) mod net;
 pub mod numa;
@@ -584,6 +585,101 @@ impl ProcHandle {
     /// Convenience wrapper around [`rlimit(Resource::OpenFiles)`](Self::rlimit).
     pub fn nofile_limit(&self) -> Result<Rlimit, Error> {
         self.rlimit(Resource::OpenFiles)
+    }
+
+    /// Gather fully-populated [`fd::FileDescriptor`] structs for every open
+    /// file descriptor in the process.
+    ///
+    /// This is the primary entry point for tools that need to enumerate a
+    /// process's open files.  It combines `fds()`, `fd_path()`, `fdinfo()`,
+    /// `stat()`, `socket_info()`, and `socket_details()` into a single call.
+    pub fn file_descriptors(&self) -> Result<Vec<fd::FileDescriptor>, Error> {
+        let fds = self.fds()?;
+        let sockets = self.socket_info();
+        let mut result = Vec::with_capacity(fds.len());
+        for fd_num in fds {
+            match self.gather_fd(fd_num, &sockets) {
+                Ok(fd_desc) => result.push(fd_desc),
+                Err(e) => {
+                    eprintln!(
+                        "failed to gather info for /proc/{}/fd/{}: {}",
+                        self.pid(),
+                        fd_num,
+                        e
+                    );
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    /// Gather all available information for a single file descriptor.
+    #[allow(clippy::unnecessary_cast)]
+    fn gather_fd(
+        &self,
+        fd_num: u64,
+        sockets: &std::collections::HashMap<u64, net::SocketInfo>,
+    ) -> Result<fd::FileDescriptor, Error> {
+        let path = self.fd_path(fd_num)?;
+        let link_text = path.to_string_lossy();
+        let info = self.fdinfo(fd_num)?;
+
+        // stat() -- live only
+        let stat_result = if !self.is_core {
+            fd::stat_fd(self.pid(), fd_num).ok()
+        } else {
+            None
+        };
+
+        // Classify file type
+        let file_type = if let Some(ref st) = stat_result {
+            fd::file_type_from_stat(st.mode, &link_text)
+        } else {
+            fd::file_type_from_link(&link_text)
+        };
+
+        // Socket resolution
+        let is_socket = matches!(file_type, fd::FileType::Posix(fd::PosixFileType::Socket))
+            || link_text.starts_with("socket:[");
+
+        let mut socket = None;
+        let mut sockprotoname = None;
+
+        if is_socket {
+            // Try to find inode -- from stat if available, else from link text
+            let inode = stat_result
+                .as_ref()
+                .map(|st| st.inode)
+                .or_else(|| fd::parse_socket_inode(&link_text));
+
+            if let Some(inode) = inode {
+                if let Some(sock_info) = sockets.get(&inode) {
+                    let details = self.socket_details(fd_num);
+                    socket = Some(fd::FdSocket {
+                        info: sock_info.clone(),
+                        details,
+                    });
+                }
+            }
+
+            // Fallback: sockprotoname xattr when not found in /proc/net/*
+            if socket.is_none() && !self.is_core {
+                sockprotoname = fd::get_sockprotoname(self.pid(), fd_num);
+            }
+        }
+
+        Ok(fd::FileDescriptor {
+            fd: fd_num,
+            path: path.clone(),
+            file_type,
+            stat: stat_result,
+            offset: info.offset,
+            open_flags: fd::OpenFlags(info.flags),
+            mnt_id: info.mnt_id,
+            extra_lines: info.extra_lines,
+            socket,
+            sockprotoname,
+        })
     }
 }
 

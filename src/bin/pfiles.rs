@@ -14,10 +14,11 @@
 //   limitations under the License.
 //
 
-use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
-use nix::sys::stat::{major, minor, stat, SFlag};
-use ptools::{Error, ProcHandle, SockType, SocketDetails, SocketInfo, TcpState};
+use ptools::{
+    Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, SocketDetails,
+    SocketInfo, TcpState,
+};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
@@ -29,131 +30,6 @@ use std::process::exit;
 struct PeerProcess {
     pid: u64,
     comm: String,
-}
-
-// TODO Handle remaining anonymous inode types:
-// - anon_inode:[io_uring]
-// - anon_inode:[userfaultfd]
-// - anon_inode:[fanotify]
-// - anon_inode:[perf_event], BPF, etc.
-
-// As defined by the file type bits of the st_mode field returned by stat
-#[derive(PartialEq)]
-enum PosixFileType {
-    Regular,
-    Directory,
-    Socket,
-    SymLink,
-    BlockDevice,
-    CharDevice,
-    Fifo,
-    Unknown(u32),
-}
-
-// For descriptors where stat(2) cannot identify a concrete POSIX file type, Linux may expose
-// anonymous inode metadata via /proc/[pid]/fd/<fd> symlink text like "anon_inode:[eventpoll]".
-#[derive(PartialEq)]
-enum AnonFileType {
-    Epoll,
-    EventFd,
-    SignalFd,
-    TimerFd,
-    Inotify,
-    PidFd,
-    Unknown(String),
-}
-
-#[derive(PartialEq)]
-enum FileType {
-    Posix(PosixFileType),
-    Anon(AnonFileType),
-    Unknown,
-}
-
-// Some common types of files have their type described by the st_mode returned by stat. For certain
-// types of files, though, st_mode is zero. In this case we can try to get more info from the text
-// in /proc/[pid]/fd/[fd]
-fn file_type(mode: u32, link_path: &Path) -> FileType {
-    let mode = mode & SFlag::S_IFMT.bits();
-    if mode != 0 {
-        let posix_file_type = match SFlag::from_bits_truncate(mode) {
-            SFlag::S_IFSOCK => PosixFileType::Socket,
-            SFlag::S_IFLNK => PosixFileType::SymLink,
-            SFlag::S_IFREG => PosixFileType::Regular,
-            SFlag::S_IFBLK => PosixFileType::BlockDevice,
-            SFlag::S_IFDIR => PosixFileType::Directory,
-            SFlag::S_IFCHR => PosixFileType::CharDevice,
-            SFlag::S_IFIFO => PosixFileType::Fifo,
-            _ => PosixFileType::Unknown(mode),
-        };
-        FileType::Posix(posix_file_type)
-    } else {
-        // Symlinks normally contain name of another file, but the contents of /proc/[pid]/fd/[fd]
-        // is in this case just text. fs::read_link converts this arbitrary text to a path, and then
-        // we convert it back to a String here. We are assuming this conversion is lossless.
-        let faux_path = match fs::read_link(link_path) {
-            Ok(faux_path) => faux_path,
-            Err(e) => {
-                eprintln!("Failed to read {:?}: {}", link_path, e);
-                return FileType::Unknown;
-            }
-        };
-        let fd_info = match faux_path.to_str() {
-            Some(fd_info) => fd_info,
-            None => {
-                eprintln!("Failed to convert path to string: {:?}", faux_path);
-                return FileType::Unknown;
-            }
-        };
-        // For anonymous inodes, this text has the format 'anon_inode:[<type>]' or
-        // 'anon_inode:<type>'.
-        if fd_info.starts_with("anon_inode:") {
-            let fd_type_str = fd_info
-                .trim_start_matches("anon_inode:")
-                .trim_start_matches("[")
-                .trim_end_matches("]");
-            let anon_file_type = match fd_type_str {
-                "eventpoll" => AnonFileType::Epoll,
-                "eventfd" => AnonFileType::EventFd,
-                "signalfd" => AnonFileType::SignalFd,
-                "timerfd" => AnonFileType::TimerFd,
-                "inotify" => AnonFileType::Inotify,
-                "pidfd" => AnonFileType::PidFd,
-                x => AnonFileType::Unknown(x.to_string()),
-            };
-            FileType::Anon(anon_file_type)
-        } else {
-            FileType::Unknown
-        }
-    }
-}
-
-fn print_file_type(file_type: &FileType) -> String {
-    match file_type {
-        // TODO For now we print the Posix file types using the somewhat cryptic macro identifiers used
-        // by the st_mode field returned by stat to match what is printed on Solaris. However, given
-        // that we already have more file types than we do on Solaris (because of Linux specific
-        // things like epoll, for example), and given that these additional file types can't be
-        // printed using S_ names (since they don't exist for these file types, since they aren't
-        // understood by stat), we are printing names that are sort of inconsistent. Maybe we should
-        // just be consistent, print better names, and just break compatibility with Solaris pfiles.
-        FileType::Posix(PosixFileType::Regular) => "S_IFREG".into(),
-        FileType::Posix(PosixFileType::Directory) => "S_IFDIR".into(),
-        FileType::Posix(PosixFileType::Socket) => "S_IFSOCK".into(),
-        FileType::Posix(PosixFileType::SymLink) => "S_IFLNK".into(),
-        FileType::Posix(PosixFileType::BlockDevice) => "S_IFBLK".into(),
-        FileType::Posix(PosixFileType::CharDevice) => "S_IFCHR".into(),
-        FileType::Posix(PosixFileType::Fifo) => "S_IFIFO".into(),
-        FileType::Posix(PosixFileType::Unknown(x)) => format!("UNKNOWN_TYPE(mode={})", x),
-        FileType::Anon(AnonFileType::Epoll) => "anon_inode(epoll)".into(),
-        FileType::Anon(AnonFileType::EventFd) => "anon_inode(eventfd)".into(),
-        FileType::Anon(AnonFileType::SignalFd) => "anon_inode(signalfd)".into(),
-        FileType::Anon(AnonFileType::TimerFd) => "anon_inode(timerfd)".into(),
-        FileType::Anon(AnonFileType::Inotify) => "anon_inode(inotify)".into(),
-        FileType::Anon(AnonFileType::PidFd) => "anon_inode(pidfd)".into(),
-        FileType::Anon(AnonFileType::Unknown(s)) => format!("anon_inode({})", s),
-        FileType::Unknown => "UNKNOWN_TYPE".into(),
-    }
 }
 
 fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
@@ -171,142 +47,11 @@ fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
     }
 }
 
-fn print_open_flags(flags: OFlag) {
-    let open_flags = [
-        (OFlag::O_APPEND, "O_APPEND"),
-        (OFlag::O_ASYNC, "O_ASYNC"),
-        (OFlag::O_CLOEXEC, "O_CLOEXEC"),
-        (OFlag::O_CREAT, "O_CREAT"),
-        (OFlag::O_DIRECT, "O_DIRECT"),
-        (OFlag::O_DIRECTORY, "O_DIRECTORY"),
-        (OFlag::O_DSYNC, "O_DSYNC"),
-        (OFlag::O_EXCL, "O_EXCL"),
-        (OFlag::O_NOATIME, "O_NOATIME"),
-        (OFlag::O_NOCTTY, "O_NOCTTY"),
-        (OFlag::O_NOFOLLOW, "O_NOFOLLOW"),
-        (OFlag::O_NONBLOCK, "O_NONBLOCK"),
-        (OFlag::O_PATH, "O_PATH"),
-        (OFlag::O_SYNC, "O_SYNC"),
-        (OFlag::O_TMPFILE, "O_TMPFILE"),
-        (OFlag::O_TRUNC, "O_TRUNC"),
-    ];
-
-    print!(
-        "{}",
-        match flags & OFlag::O_ACCMODE {
-            OFlag::O_RDONLY => "O_RDONLY",
-            OFlag::O_WRONLY => "O_WRONLY",
-            OFlag::O_RDWR => "O_RDWR",
-            _ => "O_ACCMODE(?)",
-        }
-    );
-
-    // O_LARGEFILE is 0 on some architectures but 0o100000 on x86_64.
-    // On illumos it is always printed; we skip it here since it is
-    // implicit on Linux (64-bit offsets are the default).
-
-    for &(flag, desc) in open_flags.iter() {
-        if flags.contains(flag) {
-            print!("|{}", desc);
-        }
-    }
-
-    // illumos prints close-on-exec separately because it is a descriptor flag (FD_CLOEXEC via
-    // fcntl(F_GETFD)), not an open-file status flag (F_GETFL). Linux exposes the CLOEXEC bit in
-    // /proc/[pid]/fdinfo flags, so we keep it in this compact flag list.
-
-    println!();
-}
-
-fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
-    #[cfg(target_os = "linux")]
-    {
-        let path = std::ffi::CString::new(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
-        let name = std::ffi::CString::new("system.sockprotoname").ok()?;
-
-        let size =
-            unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
-
-        if size < 0 {
-            handle_sockprotoname_xattr_error(pid, fd);
-            return None;
-        }
-
-        let mut buf = vec![0u8; size as usize];
-        let filled = unsafe {
-            nix::libc::getxattr(
-                path.as_ptr(),
-                name.as_ptr(),
-                buf.as_mut_ptr().cast::<nix::libc::c_void>(),
-                buf.len(),
-            )
-        };
-        if filled < 0 {
-            handle_sockprotoname_xattr_error(pid, fd);
-            return None;
-        }
-
-        buf.truncate(filled as usize);
-        if buf.last() == Some(&0) {
-            buf.pop();
-        }
-
-        if buf.is_empty() {
-            return None;
-        }
-
-        String::from_utf8(buf).ok()
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (pid, fd);
-        None
-    }
-}
-
-fn address_family_from_sockprotoname(sockprotoname: &str) -> Option<AddressFamily> {
-    let name = sockprotoname.strip_prefix("AF_").unwrap_or(sockprotoname);
-    Some(match name {
-        // Kernel proto names (sk_prot_creator->name), not AF_* family names.
-        "UNIX" | "UNIX-STREAM" => AddressFamily::Unix,
-        "TCP" | "UDP" | "RAW" | "PING" | "MPTCP" | "L2TP/IP" => AddressFamily::Inet,
-        "TCPv6" | "UDPv6" | "RAWv6" | "SCTPv6" | "SMC6" | "L2TP/IPv6" => AddressFamily::Inet6,
-        "SCTP" | "SMC" => AddressFamily::Inet,
-        "NETLINK" => AddressFamily::Netlink,
-        "PACKET" => AddressFamily::Packet,
-        "ALG" => AddressFamily::Alg,
-        "XDP" => AddressFamily::Packet,
-        "ROSE" => AddressFamily::Rose,
-        _ => return None,
-    })
-}
-
 fn sockname_from_sockprotoname(sockprotoname: &str) -> String {
-    if let Some(addr_fam) = address_family_from_sockprotoname(sockprotoname) {
+    if let Some(addr_fam) = ptools::address_family_from_sockprotoname(sockprotoname) {
         address_family_str(addr_fam).to_string()
     } else {
         sockprotoname.to_string()
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
-    match std::io::Error::last_os_error().raw_os_error() {
-        // Missing xattr or unsupported xattr for this procfs entry.
-        Some(nix::libc::ENODATA)
-        | Some(nix::libc::EOPNOTSUPP)
-        | Some(nix::libc::ENOENT)
-        | Some(nix::libc::EPERM)
-        | Some(nix::libc::EACCES) => {}
-        Some(errno) => eprintln!(
-            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}: errno {}",
-            pid, fd, errno
-        ),
-        None => eprintln!(
-            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}",
-            pid, fd
-        ),
     }
 }
 
@@ -597,16 +342,14 @@ fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
     })
 }
 
-fn print_fd_details(info: &ptools::FdInfo, path: &Path) {
-    println!("      offset: {}", info.offset);
-    match path.as_os_str().to_string_lossy().as_ref() {
-        "anon_inode:[eventpoll]" => print_epoll_fdinfo(&info.extra_lines),
-        "anon_inode:[eventfd]" => {
-            print_matching_fdinfo_lines(&info.extra_lines, &["eventfd-count:"])
-        }
-        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(&info.extra_lines, &["sigmask:"]),
+fn print_fd_details(fd: &FileDescriptor) {
+    println!("      offset: {}", fd.offset);
+    match fd.path.as_os_str().to_string_lossy().as_ref() {
+        "anon_inode:[eventpoll]" => print_epoll_fdinfo(&fd.extra_lines),
+        "anon_inode:[eventfd]" => print_matching_fdinfo_lines(&fd.extra_lines, &["eventfd-count:"]),
+        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(&fd.extra_lines, &["sigmask:"]),
         "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
-            &info.extra_lines,
+            &fd.extra_lines,
             &[
                 "clockid:",
                 "ticks:",
@@ -616,71 +359,43 @@ fn print_fd_details(info: &ptools::FdInfo, path: &Path) {
             ],
         ),
         "anon_inode:inotify" | "anon_inode:[inotify]" => {
-            print_matching_fdinfo_lines(&info.extra_lines, &["inotify "])
+            print_matching_fdinfo_lines(&fd.extra_lines, &["inotify "])
         }
         _ => {}
     }
 }
 
-#[allow(clippy::unnecessary_cast)]
-fn print_file(
-    handle: &ProcHandle,
-    fd: u64,
-    sockets: &HashMap<u64, SocketInfo>,
-    peers: &HashMap<u64, PeerProcess>,
-    non_verbose: bool,
-) {
-    let pid = handle.pid();
-    // stat() on the fd path stats the TARGET file, not /proc itself -- live-only.
-    let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
-    let link_path = Path::new(&link_path_str);
-
-    if let Ok(stat_info) = stat(link_path) {
+fn print_file(fd: &FileDescriptor, pid: u64, peers: &HashMap<u64, PeerProcess>, non_verbose: bool) {
+    if let Some(ref st) = fd.stat {
         // Full output -- stat succeeded (live process).
-        let file_type = file_type(stat_info.st_mode, link_path);
-
         print!(
             "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
-            fd,
-            print_file_type(&file_type),
-            stat_info.st_mode & 0o7777,
-            major(stat_info.st_dev),
-            minor(stat_info.st_dev),
-            stat_info.st_ino,
-            stat_info.st_uid,
-            stat_info.st_gid
+            fd.fd,
+            fd.file_type,
+            st.mode & 0o7777,
+            st.dev_major,
+            st.dev_minor,
+            st.inode,
+            st.uid,
+            st.gid
         );
 
-        let rdev_major = major(stat_info.st_rdev);
-        let rdev_minor = minor(stat_info.st_rdev);
-        if rdev_major == 0 && rdev_minor == 0 {
-            println!(" size:{}", stat_info.st_size)
+        if st.rdev_major == 0 && st.rdev_minor == 0 {
+            println!(" size:{}", st.size)
         } else {
-            println!(" rdev:{},{}", rdev_major, rdev_minor);
+            println!(" rdev:{},{}", st.rdev_major, st.rdev_minor);
         }
 
         if non_verbose {
             return;
         }
 
-        let info = match handle.fdinfo(fd) {
-            Ok(info) => info,
-            Err(e) => {
-                eprintln!("failed to read /proc/{}/fdinfo/{}: {}", pid, fd, e);
-                return;
-            }
-        };
+        println!("      {}", fd.open_flags);
 
-        print!("      ");
-        print_open_flags(info.flags);
-
-        match file_type {
+        match fd.file_type {
             FileType::Posix(PosixFileType::Socket) => {
-                // Socket metadata is resolved from /proc/<pid>/net/*, so inode lookups are
-                // evaluated in the target process's network namespace.
-                if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
-                    debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
-                    let details = handle.socket_details(fd);
+                if let Some(ref sock) = fd.socket {
+                    let sock_info = &sock.info;
                     print_sockname(sock_info);
                     let peer =
                         peers
@@ -688,69 +403,49 @@ fn print_file(
                             .cloned()
                             .or_else(|| match sock_info.family {
                                 // SO_PEERCRED on duplicated fd -- live-only.
-                                AddressFamily::Unix => unix_peer_process(pid, fd),
+                                AddressFamily::Unix => unix_peer_process(pid, fd.fd),
                                 _ => None,
                             });
                     print_peername(sock_info, peer.as_ref());
                     println!("        {}", sock_info.sock_type);
-                    if let Some(ref details) = details {
+                    if let Some(ref details) = sock.details {
                         if !details.options.is_empty() {
                             println!("        {}", details.options.join(","));
                         }
                     }
-                    print_tcp_details(details.as_ref(), sock_info);
-                } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
+                    print_tcp_details(sock.details.as_ref(), sock_info);
+                } else if let Some(ref sockprotoname) = fd.sockprotoname {
                     println!(
                         "        sockname: {}",
-                        sockname_from_sockprotoname(&sockprotoname)
+                        sockname_from_sockprotoname(sockprotoname)
                     );
                 } else {
                     println!(
                         "      ERROR: failed to find info for socket with inode num {}",
-                        stat_info.st_ino
+                        st.inode
                     );
                 }
             }
-            _ => match handle.fd_path(fd) {
-                Ok(path) => {
-                    println!("      {}", path.to_string_lossy());
-                    print_fd_details(&info, &path);
-                }
-                Err(e) => eprintln!("failed to readlink /proc/{}/fd/{}: {}", pid, fd, e),
-            },
+            _ => {
+                println!("      {}", fd.path.to_string_lossy());
+                print_fd_details(fd);
+            }
         }
     } else {
         // Fallback -- stat failed (coredump or inaccessible fd).
-        // Print what we can from ProcHandle methods.
-        let path = match handle.fd_path(fd) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("failed to read fd link for fd {}: {}", fd, e);
-                return;
-            }
-        };
-        println!("{: >4}: {}", fd, path.to_string_lossy());
+        println!("{: >4}: {}", fd.fd, fd.path.to_string_lossy());
 
         if non_verbose {
             return;
         }
 
-        let info = match handle.fdinfo(fd) {
-            Ok(info) => info,
-            Err(e) => {
-                eprintln!("failed to read /proc/{}/fdinfo/{}: {}", pid, fd, e);
-                return;
-            }
-        };
+        println!("      {}", fd.open_flags);
 
-        print!("      ");
-        print_open_flags(info.flags);
-
-        if path.to_string_lossy().starts_with("socket:[") {
+        if fd.path.to_string_lossy().starts_with("socket:[") {
             println!("        (socket details not available)");
         }
 
-        print_fd_details(&info, &path);
+        print_fd_details(fd);
     }
 }
 
@@ -827,22 +522,23 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
         Err(e) => eprintln!("Failed to read umask for {}: {}", pid, e),
     }
 
-    let sockets = handle.socket_info();
-    // derive_peer_processes does system-wide /proc scan; skip when there are
-    // no sockets to match (always the case for coredump sources).
-    let peers = if sockets.is_empty() {
-        HashMap::new()
-    } else {
-        derive_peer_processes(pid, &sockets)
-    };
-
-    let fds = handle.fds().map_err(|e| {
+    let file_descs = handle.file_descriptors().map_err(|e| {
         eprintln!("Unable to read /proc/{}/fd/: {}", pid, e);
         e
     })?;
 
-    for fd in fds {
-        print_file(handle, fd, &sockets, &peers, non_verbose);
+    // derive_peer_processes does system-wide /proc scan; skip when there are
+    // no sockets to match (always the case for coredump sources).
+    let has_sockets = file_descs.iter().any(|f| f.socket.is_some());
+    let peers = if has_sockets {
+        let sockets = handle.socket_info();
+        derive_peer_processes(pid, &sockets)
+    } else {
+        HashMap::new()
+    };
+
+    for fd in &file_descs {
+        print_file(fd, pid, &peers, non_verbose);
     }
 
     Ok(())
@@ -939,7 +635,6 @@ fn main() {
 mod test {
     use super::*;
     use nix::sys::socket::AddressFamily;
-    use nix::sys::stat::SFlag;
 
     #[test]
     fn test_address_family_str() {
@@ -972,24 +667,5 @@ mod test {
             sockname_from_sockprotoname("SOMETHING_UNKNOWN"),
             "SOMETHING_UNKNOWN"
         );
-    }
-
-    #[test]
-    fn test_posix_file_type_symlink_and_block_device() {
-        let dummy = Path::new("/proc/self/fd/0");
-
-        let symlink_type = file_type(SFlag::S_IFLNK.bits(), dummy);
-        assert!(matches!(
-            symlink_type,
-            FileType::Posix(PosixFileType::SymLink)
-        ));
-        assert_eq!(print_file_type(&symlink_type), "S_IFLNK");
-
-        let block_device_type = file_type(SFlag::S_IFBLK.bits(), dummy);
-        assert!(matches!(
-            block_device_type,
-            FileType::Posix(PosixFileType::BlockDevice)
-        ));
-        assert_eq!(print_file_type(&block_device_type), "S_IFBLK");
     }
 }

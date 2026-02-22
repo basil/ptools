@@ -76,6 +76,7 @@ impl std::fmt::Display for TcpState {
 }
 
 /// Parsed socket metadata from `/proc/[pid]/net/*`.
+#[derive(Clone)]
 pub struct SocketInfo {
     pub family: AddressFamily,
     pub sock_type: SockType,
@@ -328,6 +329,7 @@ pub(crate) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, SocketI
 ///
 /// These details are only available for live processes where fd duplication
 /// via `pidfd_getfd` succeeds.
+#[derive(Clone)]
 pub struct SocketDetails {
     /// Socket option flags and buffer sizes (e.g., "SO_REUSEADDR", "SO_SNDBUF(212992)").
     pub options: Vec<String>,
