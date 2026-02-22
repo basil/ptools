@@ -198,23 +198,6 @@ impl CoredumpSource {
             )
         })
     }
-
-    /// Synthesize a `/proc/[pid]/stat`-like line from status fields.
-    fn synthesize_stat(&self) -> io::Result<String> {
-        let status = self.get_field_str("COREDUMP_PROC_STATUS")?;
-        let comm = extract_status_field(status, "Name").unwrap_or("?");
-        let state = extract_status_field(status, "State")
-            .and_then(|s| s.chars().next())
-            .unwrap_or('?');
-        let ppid = extract_status_field(status, "PPid").unwrap_or("0");
-        // Fields 1-44, zeros where unknown.
-        let mut stat = format!("{} ({}) {} {}", self.pid, comm, state, ppid);
-        for _ in 5..=44 {
-            stat.push_str(" 0");
-        }
-        stat.push('\n');
-        Ok(stat)
-    }
 }
 
 fn unsupported(what: &str) -> io::Error {
@@ -230,7 +213,7 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_stat(&self) -> io::Result<String> {
-        self.synthesize_stat()
+        Err(unsupported("stat"))
     }
 
     fn read_status(&self) -> io::Result<String> {
@@ -465,18 +448,6 @@ fn extract_pid(fields: &HashMap<String, Vec<u8>>) -> io::Result<u64> {
             format!("COREDUMP_PID '{}' is not a valid integer: {}", s, e),
         )
     })
-}
-
-/// Extract a field value from `/proc/[pid]/status`-formatted text.
-fn extract_status_field<'a>(status: &'a str, name: &str) -> Option<&'a str> {
-    for line in status.lines() {
-        if let Some(rest) = line.strip_prefix(name) {
-            if let Some(value) = rest.strip_prefix(':') {
-                return Some(value.trim());
-            }
-        }
-    }
-    None
 }
 
 /// Parse the `COREDUMP_OPEN_FDS` field into fd entries.
