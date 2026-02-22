@@ -14,9 +14,11 @@
 //   limitations under the License.
 //
 
+use std::ffi::OsString;
+
 use ptools::ProcHandle;
 
-fn read_cmdline(handle: &ProcHandle) -> Option<Vec<Vec<u8>>> {
+fn read_cmdline(handle: &ProcHandle) -> Option<Vec<OsString>> {
     match handle.argv() {
         Ok(args) => Some(args),
         Err(e) => {
@@ -44,9 +46,8 @@ fn shell_quote(arg: &str) -> String {
 fn print_args(handle: &ProcHandle) -> bool {
     if let Some(args) = read_cmdline(handle) {
         ptools::print_proc_summary_from(handle);
-        for (i, bytes) in args.iter().enumerate() {
-            let arg = String::from_utf8_lossy(bytes);
-            println!("argv[{}]: {}", i, arg);
+        for (i, arg) in args.iter().enumerate() {
+            println!("argv[{}]: {}", i, arg.to_string_lossy());
         }
         true
     } else {
@@ -60,15 +61,15 @@ fn print_cmdline(handle: &ProcHandle) -> bool {
         // argv[0], which may be a relative path or a name set by the process.
         let exe = handle.exe().ok();
         let mut quoted = Vec::with_capacity(args.len());
-        for (i, bytes) in args.iter().enumerate() {
+        for (i, arg) in args.iter().enumerate() {
             let display = if i == 0 {
                 if let Some(ref path) = exe {
                     path.to_string_lossy().into_owned()
                 } else {
-                    String::from_utf8_lossy(bytes).into_owned()
+                    arg.to_string_lossy().into_owned()
                 }
             } else {
-                String::from_utf8_lossy(bytes).into_owned()
+                arg.to_string_lossy().into_owned()
             };
             quoted.push(shell_quote(&display));
         }

@@ -103,41 +103,28 @@ pub fn print_proc_summary(pid: u64) {
 }
 
 pub fn print_cmd_summary_from(handle: &ProcHandle) {
-    match handle.cmdline_bytes() {
-        Ok(bytes) => {
-            let mut summary = String::new();
-            for arg in bytes.split(|b| *b == b'\0') {
-                if !arg.is_empty() {
-                    if !summary.is_empty() {
-                        summary.push(' ');
+    match handle.argv() {
+        Ok(args) if !args.is_empty() => {
+            let summary: Vec<_> = args.iter().map(|a| a.to_string_lossy()).collect();
+            println!("{}", summary.join(" "));
+        }
+        Ok(_) => {
+            // Empty cmdline — fall back to comm name.
+            let is_zombie = handle.state() == Some('Z');
+            match handle.comm() {
+                Ok(ref comm) if !comm.is_empty() => {
+                    print!("{}", comm);
+                    if is_zombie {
+                        print!(" <defunct>");
                     }
-                    summary.push_str(&String::from_utf8_lossy(arg));
+                    println!();
                 }
-            }
-            if summary.is_empty() {
-                let is_zombie = handle.state() == Some('Z');
-                match handle.comm() {
-                    Ok(ref comm) => {
-                        if comm.is_empty() {
-                            print!("<unknown>");
-                        } else {
-                            print!("{}", comm);
-                        }
-                        if is_zombie {
-                            print!(" <defunct>");
-                        }
-                    }
-                    Err(ref e) if e.kind() == ErrorKind::NotFound => {
-                        print!("<exited>");
-                    }
-                    Err(_) => {
-                        print!("<unknown>");
-                    }
+                Ok(_) => println!("<unknown>"),
+                Err(ref e) if e.kind() == ErrorKind::NotFound => {
+                    println!("<exited>");
                 }
-            } else {
-                print!("{}", summary);
+                Err(_) => println!("<unknown>"),
             }
-            println!();
         }
         Err(ref e) if e.kind() == ErrorKind::NotFound => {
             println!("<exited>");

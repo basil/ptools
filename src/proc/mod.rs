@@ -72,10 +72,6 @@ impl ProcHandle {
         self.source.pid()
     }
 
-    pub fn cmdline_bytes(&self) -> io::Result<Vec<u8>> {
-        self.source.read_cmdline()
-    }
-
     pub fn auxv_bytes(&self) -> io::Result<Vec<u8>> {
         self.source.read_auxv()
     }
@@ -353,10 +349,13 @@ impl ProcHandle {
 
     // -- Compound convenience ----------------------------------------
 
-    /// Read cmdline and split on NUL into individual argument vectors.
-    pub fn argv(&self) -> io::Result<Vec<Vec<u8>>> {
+    /// Read cmdline and split on NUL into individual arguments.
+    pub fn argv(&self) -> io::Result<Vec<OsString>> {
         let bytes = self.source.read_cmdline()?;
-        let mut args: Vec<Vec<u8>> = bytes.split(|b| *b == b'\0').map(<[u8]>::to_vec).collect();
+        let mut args: Vec<OsString> = bytes
+            .split(|b| *b == b'\0')
+            .map(|b| OsString::from(std::ffi::OsStr::from_bytes(b)))
+            .collect();
         if args.last().is_some_and(|arg| arg.is_empty()) {
             args.pop();
         }
