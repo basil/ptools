@@ -1076,6 +1076,33 @@ fn fetch_sock_info(source: &dyn ProcSource) -> HashMap<u64, SockInfo> {
     sockets
 }
 
+fn print_fd_details(source: &dyn ProcSource, fd: u64, path: &Path) {
+    match get_offset(source, fd) {
+        Ok(offset) => println!("      offset: {}", offset),
+        Err(e) => eprintln!("failed to read fd offset: {}", e),
+    }
+    match path.as_os_str().to_string_lossy().as_ref() {
+        "anon_inode:[eventpoll]" => print_epoll_fdinfo(source, fd),
+        "anon_inode:[eventfd]" => print_matching_fdinfo_lines(source, fd, &["eventfd-count:"]),
+        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(source, fd, &["sigmask:"]),
+        "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
+            source,
+            fd,
+            &[
+                "clockid:",
+                "ticks:",
+                "settime flags:",
+                "it_value:",
+                "it_interval:",
+            ],
+        ),
+        "anon_inode:inotify" | "anon_inode:[inotify]" => {
+            print_matching_fdinfo_lines(source, fd, &["inotify "])
+        }
+        _ => {}
+    }
+}
+
 fn print_file(
     source: &dyn ProcSource,
     fd: u64,
@@ -1087,116 +1114,108 @@ fn print_file(
     // stat() on the fd path stats the TARGET file, not /proc itself — live-only.
     let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
     let link_path = Path::new(&link_path_str);
-    let stat_info = match stat(link_path) {
-        Err(e) => {
-            eprintln!("failed to stat {}: {}", &link_path_str, e);
+
+    if let Ok(stat_info) = stat(link_path) {
+        // Full output — stat succeeded (live process).
+        let file_type = file_type(stat_info.st_mode, link_path);
+
+        print!(
+            "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
+            fd,
+            print_file_type(&file_type),
+            stat_info.st_mode & 0o7777,
+            major(stat_info.st_dev),
+            minor(stat_info.st_dev),
+            stat_info.st_ino,
+            stat_info.st_uid,
+            stat_info.st_gid
+        );
+
+        let rdev_major = major(stat_info.st_rdev);
+        let rdev_minor = minor(stat_info.st_rdev);
+        if rdev_major == 0 && rdev_minor == 0 {
+            println!(" size:{}", stat_info.st_size)
+        } else {
+            println!(" rdev:{},{}", rdev_major, rdev_minor);
+        }
+
+        if non_verbose {
             return;
         }
-        Ok(stat_info) => stat_info,
-    };
 
-    let file_type = file_type(stat_info.st_mode, link_path);
-
-    print!(
-        "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
-        fd,
-        print_file_type(&file_type),
-        stat_info.st_mode & 0o7777,
-        major(stat_info.st_dev),
-        minor(stat_info.st_dev),
-        stat_info.st_ino,
-        stat_info.st_uid,
-        stat_info.st_gid
-    );
-
-    let rdev_major = major(stat_info.st_rdev);
-    let rdev_minor = minor(stat_info.st_rdev);
-    if rdev_major == 0 && rdev_minor == 0 {
-        println!(" size:{}", stat_info.st_size)
-    } else {
-        println!(" rdev:{},{}", rdev_major, rdev_minor);
-    }
-
-    if non_verbose {
-        return;
-    }
-
-    print!("      ");
-    match get_flags(source, fd) {
-        Ok(flags) => print_open_flags(flags),
-        Err(e) => eprintln!("failed to read fd flags: {}", e),
-    }
-
-    match file_type {
-        FileType::Posix(PosixFileType::Socket) => {
-            // Socket metadata is resolved from /proc/<pid>/net/*, so inode lookups are
-            // evaluated in the target process's network namespace.
-            if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
-                debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
-                // pidfd_open / pidfd_getfd for fd duplication — live-only.
-                let sock_fd = duplicate_target_fd(pid, fd);
-                print_sockname(sock_info);
-                let peer =
-                    peers
-                        .get(&sock_info.inode)
-                        .cloned()
-                        .or_else(|| match sock_info.family {
-                            // SO_PEERCRED on duplicated fd — live-only.
-                            AddressFamily::Unix => unix_peer_process(pid, fd),
-                            _ => None,
-                        });
-                print_peername(sock_info, peer.as_ref());
-                print_sock_type(&sock_info.sock_type);
-                if let Some(ref sock_fd) = sock_fd {
-                    print_socket_options(sock_fd);
-                }
-                print_tcp_details(sock_fd.as_ref(), sock_info);
-            } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
-                println!(
-                    "        sockname: {}",
-                    sockname_from_sockprotoname(&sockprotoname)
-                );
-            } else {
-                println!(
-                    "      ERROR: failed to find info for socket with inode num {}",
-                    stat_info.st_ino
-                );
-            }
+        print!("      ");
+        match get_flags(source, fd) {
+            Ok(flags) => print_open_flags(flags),
+            Err(e) => eprintln!("failed to read fd flags: {}", e),
         }
-        _ => match source.read_fd_link(fd) {
-            Ok(path) => {
-                println!("      {}", path.to_string_lossy());
-                match get_offset(source, fd) {
-                    Ok(offset) => println!("      offset: {}", offset),
-                    Err(e) => eprintln!("failed to read fd offset: {}", e),
-                }
-                match path.as_os_str().to_string_lossy().as_ref() {
-                    "anon_inode:[eventpoll]" => print_epoll_fdinfo(source, fd),
-                    "anon_inode:[eventfd]" => {
-                        print_matching_fdinfo_lines(source, fd, &["eventfd-count:"])
+
+        match file_type {
+            FileType::Posix(PosixFileType::Socket) => {
+                // Socket metadata is resolved from /proc/<pid>/net/*, so inode lookups are
+                // evaluated in the target process's network namespace.
+                if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
+                    debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
+                    // pidfd_open / pidfd_getfd for fd duplication — live-only.
+                    let sock_fd = duplicate_target_fd(pid, fd);
+                    print_sockname(sock_info);
+                    let peer =
+                        peers
+                            .get(&sock_info.inode)
+                            .cloned()
+                            .or_else(|| match sock_info.family {
+                                // SO_PEERCRED on duplicated fd — live-only.
+                                AddressFamily::Unix => unix_peer_process(pid, fd),
+                                _ => None,
+                            });
+                    print_peername(sock_info, peer.as_ref());
+                    print_sock_type(&sock_info.sock_type);
+                    if let Some(ref sock_fd) = sock_fd {
+                        print_socket_options(sock_fd);
                     }
-                    "anon_inode:[signalfd]" => {
-                        print_matching_fdinfo_lines(source, fd, &["sigmask:"])
-                    }
-                    "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
-                        source,
-                        fd,
-                        &[
-                            "clockid:",
-                            "ticks:",
-                            "settime flags:",
-                            "it_value:",
-                            "it_interval:",
-                        ],
-                    ),
-                    "anon_inode:inotify" | "anon_inode:[inotify]" => {
-                        print_matching_fdinfo_lines(source, fd, &["inotify "])
-                    }
-                    _ => {}
+                    print_tcp_details(sock_fd.as_ref(), sock_info);
+                } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
+                    println!(
+                        "        sockname: {}",
+                        sockname_from_sockprotoname(&sockprotoname)
+                    );
+                } else {
+                    println!(
+                        "      ERROR: failed to find info for socket with inode num {}",
+                        stat_info.st_ino
+                    );
                 }
             }
-            Err(e) => eprintln!("failed to readlink /proc/{}/fd/{}: {}", pid, fd, e),
-        },
+            _ => match source.read_fd_link(fd) {
+                Ok(path) => {
+                    println!("      {}", path.to_string_lossy());
+                    print_fd_details(source, fd, &path);
+                }
+                Err(e) => eprintln!("failed to readlink /proc/{}/fd/{}: {}", pid, fd, e),
+            },
+        }
+    } else {
+        // Fallback — stat failed (coredump or inaccessible fd).
+        // Print what we can from ProcSource methods.
+        let path = match source.read_fd_link(fd) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("failed to read fd link for fd {}: {}", fd, e);
+                return;
+            }
+        };
+        println!("{: >4}: {}", fd, path.to_string_lossy());
+
+        if non_verbose {
+            return;
+        }
+
+        print!("      ");
+        match get_flags(source, fd) {
+            Ok(flags) => print_open_flags(flags),
+            Err(e) => eprintln!("failed to read fd flags: {}", e),
+        }
+
+        print_fd_details(source, fd, &path);
     }
 }
 
