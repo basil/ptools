@@ -62,6 +62,72 @@ pub struct Rlimit {
     pub hard: RlimitVal,
 }
 
+/// Resource types that can be queried via `/proc/[pid]/limits`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Resource {
+    CpuTime,
+    FileSize,
+    DataSize,
+    StackSize,
+    CoreSize,
+    ResidentSet,
+    Processes,
+    OpenFiles,
+    LockedMemory,
+    AddressSpace,
+    FileLocks,
+    PendingSignals,
+    MsgqueueSize,
+    NicePriority,
+    RealtimePriority,
+    RealtimeTimeout,
+}
+
+impl Resource {
+    /// All known resource types, in the order they appear in
+    /// `/proc/[pid]/limits`.
+    pub const ALL: &[Resource] = &[
+        Resource::CpuTime,
+        Resource::FileSize,
+        Resource::DataSize,
+        Resource::StackSize,
+        Resource::CoreSize,
+        Resource::ResidentSet,
+        Resource::Processes,
+        Resource::OpenFiles,
+        Resource::LockedMemory,
+        Resource::AddressSpace,
+        Resource::FileLocks,
+        Resource::PendingSignals,
+        Resource::MsgqueueSize,
+        Resource::NicePriority,
+        Resource::RealtimePriority,
+        Resource::RealtimeTimeout,
+    ];
+
+    /// The line prefix used in `/proc/[pid]/limits` for this resource.
+    fn line_prefix(self) -> &'static str {
+        match self {
+            Resource::CpuTime => "Max cpu time",
+            Resource::FileSize => "Max file size",
+            Resource::DataSize => "Max data size",
+            Resource::StackSize => "Max stack size",
+            Resource::CoreSize => "Max core file size",
+            Resource::ResidentSet => "Max resident set",
+            Resource::Processes => "Max processes",
+            Resource::OpenFiles => "Max open files",
+            Resource::LockedMemory => "Max locked memory",
+            Resource::AddressSpace => "Max address space",
+            Resource::FileLocks => "Max file locks",
+            Resource::PendingSignals => "Max pending signals",
+            Resource::MsgqueueSize => "Max msgqueue size",
+            Resource::NicePriority => "Max nice priority",
+            Resource::RealtimePriority => "Max realtime priority",
+            Resource::RealtimeTimeout => "Max realtime timeout",
+        }
+    }
+}
+
 /// Parsed fdinfo with structured fields from `/proc/[pid]/fdinfo/<fd>`.
 pub struct FdInfo {
     pub offset: u64,
@@ -78,6 +144,26 @@ fn parse_rlimit_val(s: &str) -> Result<RlimitVal, Error> {
             .map(Some)
             .map_err(|e| Error::parse("rlimit value", &e.to_string()))
     }
+}
+
+/// Try to parse a single resource limit from the raw limits text.
+///
+/// Returns `Ok(None)` if the line for this resource is not present.
+fn parse_rlimit_line(limits: &str, prefix: &str) -> Result<Option<Rlimit>, Error> {
+    for line in limits.lines() {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            let rest = rest.trim();
+            let fields: Vec<&str> = rest.split_whitespace().collect();
+            if fields.len() < 2 {
+                return Err(Error::parse(prefix, "line has fewer fields than expected"));
+            }
+            return Ok(Some(Rlimit {
+                soft: parse_rlimit_val(fields[0])?,
+                hard: parse_rlimit_val(fields[1])?,
+            }));
+        }
+    }
+    Ok(None)
 }
 
 /// Opaque process handle
@@ -469,28 +555,35 @@ impl ProcHandle {
         Ok(vars)
     }
 
-    /// Parse the "Max open files" line from /proc/[pid]/limits.
-    pub fn nofile_limit(&self) -> Result<Rlimit, Error> {
+    /// Query a single resource limit from `/proc/[pid]/limits`.
+    pub fn rlimit(&self, resource: Resource) -> Result<Rlimit, Error> {
         let limits = self.source.read_limits()?;
-        for line in limits.lines() {
-            if line.starts_with("Max open files") {
-                let fields: Vec<&str> = line.split_whitespace().collect();
-                if fields.len() < 6 {
-                    return Err(Error::parse(
-                        "Max open files",
-                        "line has fewer fields than expected",
-                    ));
-                }
-                return Ok(Rlimit {
-                    soft: parse_rlimit_val(fields[3])?,
-                    hard: parse_rlimit_val(fields[4])?,
-                });
+        let prefix = resource.line_prefix();
+        parse_rlimit_line(&limits, prefix)?.ok_or_else(|| {
+            Error::parse("/proc/[pid]/limits", &format!("{} line not found", prefix))
+        })
+    }
+
+    /// Query all resource limits from `/proc/[pid]/limits`.
+    ///
+    /// Returns a vec of `(Resource, Rlimit)` pairs for each resource
+    /// present in the limits file.
+    pub fn rlimits(&self) -> Result<Vec<(Resource, Rlimit)>, Error> {
+        let limits = self.source.read_limits()?;
+        let mut result = Vec::new();
+        for &resource in Resource::ALL {
+            if let Some(rlimit) = parse_rlimit_line(&limits, resource.line_prefix())? {
+                result.push((resource, rlimit));
             }
         }
-        Err(Error::parse(
-            "/proc/[pid]/limits",
-            "Max open files line not found",
-        ))
+        Ok(result)
+    }
+
+    /// Query the open-files resource limit.
+    ///
+    /// Convenience wrapper around [`rlimit(Resource::OpenFiles)`](Self::rlimit).
+    pub fn nofile_limit(&self) -> Result<Rlimit, Error> {
+        self.rlimit(Resource::OpenFiles)
     }
 }
 
