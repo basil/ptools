@@ -302,7 +302,7 @@ pub(crate) fn stat_fd(pid: u64, fd: u64) -> Result<FdStat, std::io::Error> {
         inode: info.st_ino as u64,
         uid: info.st_uid,
         gid: info.st_gid,
-        size: info.st_size,
+        size: info.st_size as i64,
         rdev_major: major(info.st_rdev),
         rdev_minor: minor(info.st_rdev),
     })
