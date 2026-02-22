@@ -223,7 +223,6 @@ fn print_open_flags(flags: u64) {
         (OFlag::O_DIRECTORY, "O_DIRECTORY"),
         (OFlag::O_DSYNC, "O_DSYNC"),
         (OFlag::O_EXCL, "O_EXCL"),
-        (OFlag::O_LARGEFILE, "O_LARGEFILE"),
         (OFlag::O_NOATIME, "O_NOATIME"),
         (OFlag::O_NOCTTY, "O_NOCTTY"),
         (OFlag::O_NOFOLLOW, "O_NOFOLLOW"),
@@ -1103,6 +1102,7 @@ fn print_fd_details(source: &dyn ProcSource, fd: u64, path: &Path) {
     }
 }
 
+#[allow(clippy::unnecessary_cast)]
 fn print_file(
     source: &dyn ProcSource,
     fd: u64,
@@ -1153,8 +1153,8 @@ fn print_file(
             FileType::Posix(PosixFileType::Socket) => {
                 // Socket metadata is resolved from /proc/<pid>/net/*, so inode lookups are
                 // evaluated in the target process's network namespace.
-                if let Some(sock_info) = sockets.get(&stat_info.st_ino) {
-                    debug_assert_eq!(sock_info.inode, stat_info.st_ino);
+                if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
+                    debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
                     // pidfd_open / pidfd_getfd for fd duplication -- live-only.
                     let sock_fd = duplicate_target_fd(pid, fd);
                     print_sockname(sock_info);
