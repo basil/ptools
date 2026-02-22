@@ -17,12 +17,11 @@
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
-use ptools::{Error, ProcHandle, SockType, SocketInfo, TcpState};
+use ptools::{Error, ProcHandle, SockType, SocketDetails, SocketInfo, TcpState};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::net::SocketAddr;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::Path;
 use std::process::exit;
 
@@ -311,108 +310,6 @@ fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
     }
 }
 
-#[cfg(target_os = "linux")]
-fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
-    let pid_i32 = i32::try_from(pid).ok()?;
-    let fd_i32 = i32::try_from(fd).ok()?;
-
-    let pidfd = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_open, pid_i32, 0) };
-    if pidfd < 0 {
-        return None;
-    }
-
-    let duplicated = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_getfd, pidfd, fd_i32, 0) };
-    let _ = unsafe { nix::libc::close(pidfd as i32) };
-
-    if duplicated < 0 {
-        return None;
-    }
-
-    Some(unsafe { OwnedFd::from_raw_fd(duplicated as i32) })
-}
-
-#[cfg(not(target_os = "linux"))]
-fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
-    None
-}
-
-fn socket_options(sock_fd: &OwnedFd) -> Vec<String> {
-    let mut options = Vec::new();
-
-    if matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)) {
-        options.push("SO_REUSEADDR".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)) {
-        options.push("SO_KEEPALIVE".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)) {
-        options.push("SO_BROADCAST".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)) {
-        options.push("SO_ACCEPTCONN".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)) {
-        options.push("SO_OOBINLINE".to_string());
-    }
-
-    if let Ok(sndbuf) = getsockopt(sock_fd, sockopt::SndBuf) {
-        options.push(format!("SO_SNDBUF({})", sndbuf));
-    }
-    if let Ok(rcvbuf) = getsockopt(sock_fd, sockopt::RcvBuf) {
-        options.push(format!("SO_RCVBUF({})", rcvbuf));
-    }
-
-    options
-}
-
-fn print_socket_options(sock_fd: &OwnedFd) {
-    let options = socket_options(sock_fd);
-    if !options.is_empty() {
-        println!("        {}", options.join(","));
-    }
-}
-
-fn tcp_congestion_control(sock_fd: &OwnedFd) -> Option<String> {
-    let mut buf = [0u8; 64];
-    let mut len = buf.len() as nix::libc::socklen_t;
-    let rc = unsafe {
-        nix::libc::getsockopt(
-            sock_fd.as_raw_fd(),
-            nix::libc::IPPROTO_TCP,
-            nix::libc::TCP_CONGESTION,
-            buf.as_mut_ptr().cast::<nix::libc::c_void>(),
-            &mut len,
-        )
-    };
-    if rc != 0 || len == 0 {
-        return None;
-    }
-
-    let len = len as usize;
-    let end = buf[..len].iter().position(|&b| b == 0).unwrap_or(len);
-    std::str::from_utf8(&buf[..end])
-        .ok()
-        .map(|name| name.to_string())
-}
-
-fn tcp_info(sock_fd: &OwnedFd) -> Option<nix::libc::tcp_info> {
-    let mut info: nix::libc::tcp_info = unsafe { std::mem::zeroed() };
-    let mut len = std::mem::size_of::<nix::libc::tcp_info>() as nix::libc::socklen_t;
-    let rc = unsafe {
-        nix::libc::getsockopt(
-            sock_fd.as_raw_fd(),
-            nix::libc::IPPROTO_TCP,
-            nix::libc::TCP_INFO,
-            (&raw mut info).cast::<nix::libc::c_void>(),
-            &raw mut len,
-        )
-    };
-    if rc != 0 {
-        return None;
-    }
-    Some(info)
-}
-
 fn address_family_str(addr_fam: AddressFamily) -> &'static str {
     match addr_fam {
         AddressFamily::Unix => "AF_UNIX",
@@ -483,11 +380,7 @@ fn print_sockname(sock_info: &SocketInfo) {
     );
 }
 
-fn print_tcp_info(sock_fd: &OwnedFd) {
-    let Some(info) = tcp_info(sock_fd) else {
-        return;
-    };
-
+fn print_tcp_info(info: &nix::libc::tcp_info) {
     let snd_wscale = info.tcpi_snd_rcv_wscale & 0x0f;
     let rcv_wscale = (info.tcpi_snd_rcv_wscale >> 4) & 0x0f;
     println!(
@@ -527,10 +420,10 @@ fn print_peername(sock_info: &SocketInfo, peer: Option<&PeerProcess>) {
     }
 }
 
-fn print_tcp_details(sock_fd: Option<&OwnedFd>, sock_info: &SocketInfo) {
-    if let Some(sock_fd) = sock_fd {
-        if let Some(congestion_control) = tcp_congestion_control(sock_fd) {
-            println!("        congestion control: {}", congestion_control);
+fn print_tcp_details(details: Option<&SocketDetails>, sock_info: &SocketInfo) {
+    if let Some(details) = details {
+        if let Some(ref cc) = details.congestion_control {
+            println!("        congestion control: {}", cc);
         }
     }
 
@@ -544,9 +437,11 @@ fn print_tcp_details(sock_fd: Option<&OwnedFd>, sock_info: &SocketInfo) {
         }
     }
 
-    if let Some(sock_fd) = sock_fd {
+    if let Some(details) = details {
         if sock_info.tcp_state.is_some() && !matches!(sock_info.tcp_state, Some(TcpState::Listen)) {
-            print_tcp_info(sock_fd);
+            if let Some(ref info) = details.tcp_info {
+                print_tcp_info(info);
+            }
         }
     }
 
@@ -785,8 +680,7 @@ fn print_file(
                 // evaluated in the target process's network namespace.
                 if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                     debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
-                    // pidfd_open / pidfd_getfd for fd duplication -- live-only.
-                    let sock_fd = duplicate_target_fd(pid, fd);
+                    let details = handle.socket_details(fd);
                     print_sockname(sock_info);
                     let peer =
                         peers
@@ -799,10 +693,12 @@ fn print_file(
                             });
                     print_peername(sock_info, peer.as_ref());
                     println!("        {}", sock_info.sock_type);
-                    if let Some(ref sock_fd) = sock_fd {
-                        print_socket_options(sock_fd);
+                    if let Some(ref details) = details {
+                        if !details.options.is_empty() {
+                            println!("        {}", details.options.join(","));
+                        }
                     }
-                    print_tcp_details(sock_fd.as_ref(), sock_info);
+                    print_tcp_details(details.as_ref(), sock_info);
                 } else if let Some(sockprotoname) = get_sockprotoname(pid, fd) {
                     println!(
                         "        sockname: {}",

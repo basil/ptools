@@ -176,6 +176,16 @@ impl ProcHandle {
         net::parse_socket_info(&*self.source)
     }
 
+    /// Query socket details (options, TCP info, congestion control) for a
+    /// file descriptor by duplicating it via `pidfd_getfd` and calling
+    /// `getsockopt`.
+    ///
+    /// Returns `None` for coredumps, non-Linux platforms, or when the fd
+    /// cannot be duplicated.
+    pub fn socket_details(&self, fd: u64) -> Option<net::SocketDetails> {
+        net::query_socket_details(self.pid(), fd)
+    }
+
     // -- Parsed from /proc/[pid]/stat --------------------------------
 
     /// Process state parsed from `/proc/[pid]/stat`.

@@ -1,7 +1,8 @@
-use nix::sys::socket::AddressFamily;
+use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use super::{Error, ProcSource};
 
@@ -321,6 +322,132 @@ pub(crate) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, SocketI
     );
 
     sockets
+}
+
+/// Socket details queried via `getsockopt` on a duplicated file descriptor.
+///
+/// These details are only available for live processes where fd duplication
+/// via `pidfd_getfd` succeeds.
+pub struct SocketDetails {
+    /// Socket option flags and buffer sizes (e.g., "SO_REUSEADDR", "SO_SNDBUF(212992)").
+    pub options: Vec<String>,
+    /// TCP connection metrics from `TCP_INFO`.
+    pub tcp_info: Option<nix::libc::tcp_info>,
+    /// TCP congestion control algorithm name from `TCP_CONGESTION`.
+    pub congestion_control: Option<String>,
+}
+
+#[cfg(target_os = "linux")]
+fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
+    let pid_i32 = i32::try_from(pid).ok()?;
+    let fd_i32 = i32::try_from(fd).ok()?;
+
+    let pidfd = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_open, pid_i32, 0) };
+    if pidfd < 0 {
+        return None;
+    }
+
+    let duplicated = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_getfd, pidfd, fd_i32, 0) };
+    let _ = unsafe { nix::libc::close(pidfd as i32) };
+
+    if duplicated < 0 {
+        return None;
+    }
+
+    Some(unsafe { OwnedFd::from_raw_fd(duplicated as i32) })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
+    None
+}
+
+fn query_socket_options(sock_fd: &OwnedFd) -> Vec<String> {
+    let mut options = Vec::new();
+
+    if matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)) {
+        options.push("SO_REUSEADDR".to_string());
+    }
+    if matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)) {
+        options.push("SO_KEEPALIVE".to_string());
+    }
+    if matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)) {
+        options.push("SO_BROADCAST".to_string());
+    }
+    if matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)) {
+        options.push("SO_ACCEPTCONN".to_string());
+    }
+    if matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)) {
+        options.push("SO_OOBINLINE".to_string());
+    }
+
+    if let Ok(sndbuf) = getsockopt(sock_fd, sockopt::SndBuf) {
+        options.push(format!("SO_SNDBUF({})", sndbuf));
+    }
+    if let Ok(rcvbuf) = getsockopt(sock_fd, sockopt::RcvBuf) {
+        options.push(format!("SO_RCVBUF({})", rcvbuf));
+    }
+
+    options
+}
+
+fn query_tcp_congestion_control(sock_fd: &OwnedFd) -> Option<String> {
+    let mut buf = [0u8; 64];
+    let mut len = buf.len() as nix::libc::socklen_t;
+    let rc = unsafe {
+        nix::libc::getsockopt(
+            sock_fd.as_raw_fd(),
+            nix::libc::IPPROTO_TCP,
+            nix::libc::TCP_CONGESTION,
+            buf.as_mut_ptr().cast::<nix::libc::c_void>(),
+            &mut len,
+        )
+    };
+    if rc != 0 || len == 0 {
+        return None;
+    }
+
+    let len = len as usize;
+    let end = buf[..len].iter().position(|&b| b == 0).unwrap_or(len);
+    std::str::from_utf8(&buf[..end])
+        .ok()
+        .map(|name| name.to_string())
+}
+
+fn query_tcp_info(sock_fd: &OwnedFd) -> Option<nix::libc::tcp_info> {
+    let mut info: nix::libc::tcp_info = unsafe { std::mem::zeroed() };
+    let mut len = std::mem::size_of::<nix::libc::tcp_info>() as nix::libc::socklen_t;
+    let rc = unsafe {
+        nix::libc::getsockopt(
+            sock_fd.as_raw_fd(),
+            nix::libc::IPPROTO_TCP,
+            nix::libc::TCP_INFO,
+            (&raw mut info).cast::<nix::libc::c_void>(),
+            &raw mut len,
+        )
+    };
+    if rc != 0 {
+        return None;
+    }
+    Some(info)
+}
+
+/// Query socket details (options, TCP info, congestion control) for a file
+/// descriptor belonging to a target process.
+///
+/// Duplicates the target fd via `pidfd_open`/`pidfd_getfd`, queries all
+/// socket-level and TCP-level options, and returns the results bundled
+/// in a [`SocketDetails`].
+///
+/// Returns `None` if the fd cannot be duplicated (e.g., coredumps,
+/// insufficient privileges, or non-Linux platforms).
+pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
+    let sock_fd = duplicate_target_fd(pid, fd)?;
+    Some(SocketDetails {
+        options: query_socket_options(&sock_fd),
+        tcp_info: query_tcp_info(&sock_fd),
+        congestion_control: query_tcp_congestion_control(&sock_fd),
+    })
 }
 
 #[cfg(test)]
