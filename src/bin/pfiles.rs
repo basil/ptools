@@ -223,7 +223,6 @@ fn print_open_flags(flags: u64) {
         (OFlag::O_DIRECTORY, "O_DIRECTORY"),
         (OFlag::O_DSYNC, "O_DSYNC"),
         (OFlag::O_EXCL, "O_EXCL"),
-        (OFlag::O_LARGEFILE, "O_LARGEFILE"),
         (OFlag::O_NOATIME, "O_NOATIME"),
         (OFlag::O_NOCTTY, "O_NOCTTY"),
         (OFlag::O_NOFOLLOW, "O_NOFOLLOW"),
