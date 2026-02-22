@@ -4,8 +4,7 @@ use nix::libc;
 ///
 /// Analogous to [`super::numa::CpuSet`] but for signal numbers.
 /// Internally stored as a boolean vector indexed by signal number.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SignalSet {
     signals: Vec<bool>,
 }
@@ -35,7 +34,6 @@ impl SignalSet {
             .filter_map(|(i, &set)| if set { Some(i) } else { None })
     }
 }
-
 
 /// Parse a hex signal mask (e.g. from `SigIgn`) into a [`SignalSet`].
 pub fn parse_signal_set(hex: &str) -> Result<SignalSet, String> {
