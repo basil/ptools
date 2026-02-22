@@ -87,8 +87,8 @@ pub fn intersect_blocked_masks(masks: &[SignalSet]) -> SignalSet {
     }
     let max_len = masks.iter().map(|m| m.signals.len()).max().unwrap_or(0);
     let mut result = vec![false; max_len];
-    for i in 0..max_len {
-        result[i] = masks.iter().all(|m| i < m.signals.len() && m.signals[i]);
+    for (i, slot) in result.iter_mut().enumerate().take(max_len) {
+        *slot = masks.iter().all(|m| i < m.signals.len() && m.signals[i]);
     }
     SignalSet { signals: result }
 }
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn intersect_single_mask() {
         let mask = parse_signal_set("3").unwrap(); // signals 1,2
-        let result = intersect_blocked_masks(&[mask.clone()]);
+        let result = intersect_blocked_masks(std::slice::from_ref(&mask));
         assert_eq!(result, mask);
     }
 
