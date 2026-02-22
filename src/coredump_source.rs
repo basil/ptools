@@ -143,6 +143,13 @@ impl CoredumpSource {
         // Look up the matching journal entry and merge in all
         // COREDUMP_* fields not already present from xattrs.
         let journal_fields = lookup_journal_fields(path, &fields);
+        if journal_fields.is_empty() {
+            eprintln!(
+                "warning: no matching journal entry found for {}; \
+                 output will be limited to core file metadata",
+                path.display()
+            );
+        }
         for (key, value) in journal_fields {
             fields.entry(key).or_insert(value);
         }

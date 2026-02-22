@@ -1215,6 +1215,10 @@ fn print_file(
             Err(e) => eprintln!("failed to read fd flags: {}", e),
         }
 
+        if path.to_string_lossy().starts_with("socket:[") {
+            println!("        (socket details not available)");
+        }
+
         print_fd_details(source, fd, &path);
     }
 }

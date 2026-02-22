@@ -83,6 +83,25 @@ fn intersect_blocked_masks(masks: &[Vec<bool>]) -> Vec<bool> {
 fn read_thread_blocked_masks(source: &dyn ProcSource) -> Option<Vec<Vec<bool>>> {
     let tids = source.list_tids().ok()?;
 
+    // Warn if the source reports fewer threads than actually existed (e.g.,
+    // coredump sources only expose the main thread).
+    if let Ok(status) = source.read_status() {
+        if let Some(n) = status
+            .lines()
+            .find_map(|l| l.strip_prefix("Threads:"))
+            .and_then(|v| v.trim().parse::<usize>().ok())
+        {
+            if n > tids.len() {
+                eprintln!(
+                    "warning: process had {} threads but only {} available; \
+                     blocked masks may be incomplete",
+                    n,
+                    tids.len()
+                );
+            }
+        }
+    }
+
     let mut masks = Vec::new();
     for tid in tids {
         let Ok(status) = source.read_tid_status(tid) else {
