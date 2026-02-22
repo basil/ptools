@@ -83,7 +83,8 @@ fn main() {
             println!();
         }
         first = false;
-        if !ptools::print_auxv(pid) {
+        let source = ptools::LiveProcess::new(pid);
+        if !ptools::print_auxv_from(&source) {
             error = true;
         }
     }

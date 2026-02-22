@@ -17,12 +17,11 @@
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
-use ptools::ParseError;
+use ptools::{LiveProcess, ParseError, ProcSource};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -191,12 +190,11 @@ fn print_file_type(file_type: &FileType) -> String {
     }
 }
 
-fn print_matching_fdinfo_lines(pid: u64, fd: u64, prefixes: &[&str]) {
-    let fdinfo_path = format!("/proc/{}/fdinfo/{}", pid, fd);
-    let fdinfo = match fs::read_to_string(&fdinfo_path) {
+fn print_matching_fdinfo_lines(source: &dyn ProcSource, fd: u64, prefixes: &[&str]) {
+    let fdinfo = match source.read_fdinfo(fd) {
         Ok(fdinfo) => fdinfo,
         Err(e) => {
-            eprintln!("failed to read {}: {}", &fdinfo_path, e);
+            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", source.pid(), fd, e);
             return;
         }
     };
@@ -265,9 +263,8 @@ fn print_open_flags(flags: u64) {
     println!();
 }
 
-fn get_fdinfo_field(pid: u64, fd: u64, field: &str) -> Result<String, Box<dyn Error>> {
-    let mut contents = String::new();
-    File::open(format!("/proc/{}/fdinfo/{}", pid, fd))?.read_to_string(&mut contents)?;
+fn get_fdinfo_field(source: &dyn ProcSource, fd: u64, field: &str) -> Result<String, Box<dyn Error>> {
+    let contents = source.read_fdinfo(fd)?;
     let line = contents
         .lines()
         .filter(|line| line.starts_with(&format!("{}:", field)))
@@ -286,13 +283,13 @@ fn get_fdinfo_field(pid: u64, fd: u64, field: &str) -> Result<String, Box<dyn Er
     Ok(value.trim().to_string())
 }
 
-fn get_flags(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
-    let str_flags = get_fdinfo_field(pid, fd, "flags")?;
+fn get_flags(source: &dyn ProcSource, fd: u64) -> Result<u64, Box<dyn Error>> {
+    let str_flags = get_fdinfo_field(source, fd, "flags")?;
     Ok(u64::from_str_radix(str_flags.trim(), 8)?)
 }
 
-fn get_offset(pid: u64, fd: u64) -> Result<u64, Box<dyn Error>> {
-    let str_offset = get_fdinfo_field(pid, fd, "pos")?;
+fn get_offset(source: &dyn ProcSource, fd: u64) -> Result<u64, Box<dyn Error>> {
+    let str_offset = get_fdinfo_field(source, fd, "pos")?;
     Ok(str_offset.parse::<u64>()?)
 }
 
@@ -943,18 +940,16 @@ fn ok_or_eprint<T>(r: Result<T, Box<dyn Error>>, filename: &str) -> Option<T> {
 
 // Parse the info for each socket in the system from /proc/[pid]/net, and return it as a map indexed
 // by inode
-fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
+fn fetch_sock_info(source: &dyn ProcSource) -> HashMap<u64, SockInfo> {
     let mut sockets = HashMap::new();
     // Socket table data is namespace-scoped in procfs. Always read from
     // /proc/<target-pid>/net/* so inode->socket metadata resolution is done in
     // the target process's network namespace instead of our own.
-    let filename = format!("/proc/{}/net/unix", pid);
-    if let Some(file) = ptools::open_or_warn(&filename) {
-        let unix_sockets = BufReader::new(file)
+    if let Ok(content) = source.read_net_file("unix") {
+        let unix_sockets = content
             .lines()
             .skip(1) // Header
             .map(|line| {
-                let line = line?;
                 let fields = line.split_whitespace().collect::<Vec<&str>>();
                 let inode = fields[6].parse()?;
                 let sock_info = SockInfo {
@@ -970,16 +965,17 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                 };
                 Ok((inode, sock_info))
             })
-            .filter_map(|sock_info| ok_or_eprint(sock_info, "unix"));
+            .filter_map(|sock_info: Result<(u64, SockInfo), Box<dyn Error>>| {
+                ok_or_eprint(sock_info, "unix")
+            });
         sockets.extend(unix_sockets);
     }
 
-    if let Some(file) = ptools::open_or_warn(&format!("/proc/{}/net/netlink", pid)) {
-        let netlink_sockets = BufReader::new(file)
+    if let Ok(content) = source.read_net_file("netlink") {
+        let netlink_sockets = content
             .lines()
             .skip(1) // Header
             .map(|line| {
-                let line = line?;
                 let fields = line.split_whitespace().collect::<Vec<&str>>();
                 let inode = fields[9].parse()?;
                 let sock_info = SockInfo {
@@ -995,20 +991,21 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
                 };
                 Ok((inode, sock_info))
             })
-            .filter_map(|sock_info| ok_or_eprint(sock_info, "netlink"));
+            .filter_map(|sock_info: Result<(u64, SockInfo), Box<dyn Error>>| {
+                ok_or_eprint(sock_info, "netlink")
+            });
         sockets.extend(netlink_sockets);
     }
 
     // procfs entries for tcp/udp/raw sockets (both IPv4 and IPv6) all use same format
-    let mut parse_file =
-        |filename, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, ParseError>| {
-            if let Some(file) = ptools::open_or_warn(&format!("/proc/{}/net/{}", pid, filename)) {
+    let mut parse_net_file =
+        |filename: &str, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, ParseError>| {
+            if let Ok(content) = source.read_net_file(filename) {
                 let is_tcp = filename == "tcp" || filename == "tcp6";
-                let additional_sockets = BufReader::new(file)
+                let additional_sockets = content
                     .lines()
                     .skip(1) // Header
                     .map(move |line| {
-                        let line = line?;
                         let fields = line.split_whitespace().collect::<Vec<&str>>();
                         let inode = fields[9].parse()?;
                         let peer_addr = parse_addr(fields[2])?;
@@ -1035,37 +1032,37 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
             }
         };
 
-    parse_file(
+    parse_net_file(
         "tcp",
         SockType::Stream,
         AddressFamily::Inet,
         parse_ipv4_sock_addr,
     );
-    parse_file(
+    parse_net_file(
         "udp",
         SockType::Datagram,
         AddressFamily::Inet,
         parse_ipv4_sock_addr,
     );
-    parse_file(
+    parse_net_file(
         "raw",
         SockType::Raw,
         AddressFamily::Inet,
         parse_ipv4_sock_addr,
     );
-    parse_file(
+    parse_net_file(
         "tcp6",
         SockType::Stream,
         AddressFamily::Inet6,
         parse_ipv6_sock_addr,
     );
-    parse_file(
+    parse_net_file(
         "udp6",
         SockType::Datagram,
         AddressFamily::Inet6,
         parse_ipv6_sock_addr,
     );
-    parse_file(
+    parse_net_file(
         "raw6",
         SockType::Raw,
         AddressFamily::Inet6,
@@ -1076,12 +1073,14 @@ fn fetch_sock_info(pid: u64) -> HashMap<u64, SockInfo> {
 }
 
 fn print_file(
-    pid: u64,
+    source: &dyn ProcSource,
     fd: u64,
     sockets: &HashMap<u64, SockInfo>,
     peers: &HashMap<u64, PeerProcess>,
     non_verbose: bool,
 ) {
+    let pid = source.pid();
+    // stat() on the fd path stats the TARGET file, not /proc itself — live-only.
     let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
     let link_path = Path::new(&link_path_str);
     let stat_info = match stat(link_path) {
@@ -1119,7 +1118,7 @@ fn print_file(
     }
 
     print!("      ");
-    match get_flags(pid, fd) {
+    match get_flags(source, fd) {
         Ok(flags) => print_open_flags(flags),
         Err(e) => eprintln!("failed to read fd flags: {}", e),
     }
@@ -1130,6 +1129,7 @@ fn print_file(
             // evaluated in the target process's network namespace.
             if let Some(sock_info) = sockets.get(&(stat_info.st_ino as u64)) {
                 debug_assert_eq!(sock_info.inode, stat_info.st_ino as u64);
+                // pidfd_open / pidfd_getfd for fd duplication — live-only.
                 let sock_fd = duplicate_target_fd(pid, fd);
                 print_sockname(sock_info);
                 let peer =
@@ -1137,6 +1137,7 @@ fn print_file(
                         .get(&sock_info.inode)
                         .cloned()
                         .or_else(|| match sock_info.family {
+                            // SO_PEERCRED on duplicated fd — live-only.
                             AddressFamily::Unix => unix_peer_process(pid, fd),
                             _ => None,
                         });
@@ -1158,21 +1159,23 @@ fn print_file(
                 );
             }
         }
-        _ => match fs::read_link(link_path) {
+        _ => match source.read_fd_link(fd) {
             Ok(path) => {
                 println!("      {}", path.to_string_lossy());
-                match get_offset(pid, fd) {
+                match get_offset(source, fd) {
                     Ok(offset) => println!("      offset: {}", offset),
                     Err(e) => eprintln!("failed to read fd offset: {}", e),
                 }
                 match path.as_os_str().to_string_lossy().as_ref() {
-                    "anon_inode:[eventpoll]" => print_epoll_fdinfo(pid, fd),
+                    "anon_inode:[eventpoll]" => print_epoll_fdinfo(source, fd),
                     "anon_inode:[eventfd]" => {
-                        print_matching_fdinfo_lines(pid, fd, &["eventfd-count:"])
+                        print_matching_fdinfo_lines(source, fd, &["eventfd-count:"])
                     }
-                    "anon_inode:[signalfd]" => print_matching_fdinfo_lines(pid, fd, &["sigmask:"]),
+                    "anon_inode:[signalfd]" => {
+                        print_matching_fdinfo_lines(source, fd, &["sigmask:"])
+                    }
                     "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
-                        pid,
+                        source,
                         fd,
                         &[
                             "clockid:",
@@ -1183,22 +1186,21 @@ fn print_file(
                         ],
                     ),
                     "anon_inode:inotify" | "anon_inode:[inotify]" => {
-                        print_matching_fdinfo_lines(pid, fd, &["inotify "])
+                        print_matching_fdinfo_lines(source, fd, &["inotify "])
                     }
                     _ => {}
                 }
             }
-            Err(e) => eprintln!("failed to readlink {}: {}", &link_path_str, e),
+            Err(e) => eprintln!("failed to readlink /proc/{}/fd/{}: {}", pid, fd, e),
         },
     }
 }
 
-fn print_epoll_fdinfo(pid: u64, fd: u64) {
-    let fdinfo_path = format!("/proc/{}/fdinfo/{}", pid, fd);
-    let fdinfo = match fs::read_to_string(&fdinfo_path) {
+fn print_epoll_fdinfo(source: &dyn ProcSource, fd: u64) {
+    let fdinfo = match source.read_fdinfo(fd) {
         Ok(fdinfo) => fdinfo,
         Err(e) => {
-            eprintln!("failed to read {}: {}", &fdinfo_path, e);
+            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", source.pid(), fd, e);
             return;
         }
     };
@@ -1249,8 +1251,8 @@ fn print_epoll_fdinfo(pid: u64, fd: u64) {
     }
 }
 
-fn read_nofile_rlimit(pid: u64) -> Result<(String, String), Box<dyn Error>> {
-    let limits = fs::read_to_string(format!("/proc/{}/limits", pid))?;
+fn read_nofile_rlimit(source: &dyn ProcSource) -> Result<(String, String), Box<dyn Error>> {
+    let limits = source.read_limits()?;
 
     for line in limits.lines() {
         if line.starts_with("Max open files") {
@@ -1272,8 +1274,8 @@ fn read_nofile_rlimit(pid: u64) -> Result<(String, String), Box<dyn Error>> {
     )))
 }
 
-fn read_umask(pid: u64) -> Result<String, Box<dyn Error>> {
-    let status = fs::read_to_string(format!("/proc/{}/status", pid))?;
+fn read_umask(source: &dyn ProcSource) -> Result<String, Box<dyn Error>> {
+    let status = source.read_status()?;
     for line in status.lines() {
         let Some((field, value)) = line.split_once(':') else {
             continue;
@@ -1291,47 +1293,41 @@ fn read_umask(pid: u64) -> Result<String, Box<dyn Error>> {
     )))
 }
 
-fn print_files(pid: u64, non_verbose: bool) -> bool {
+fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
+    let pid = source.pid();
     let proc_dir = format!("/proc/{}/", pid);
     if !Path::new(&proc_dir).exists() {
         eprintln!("No such directory {}", &proc_dir);
         return false;
     }
 
-    ptools::print_proc_summary(pid);
-    match read_nofile_rlimit(pid) {
+    ptools::print_proc_summary_from(source);
+    match read_nofile_rlimit(source) {
         Ok((soft, hard)) => {
             println!("  Current soft rlimit: {} file descriptors", soft);
             println!("  Current hard rlimit: {} file descriptors", hard);
         }
         Err(e) => eprintln!("Failed to read RLIMIT_NOFILE for {}: {}", pid, e),
     }
-    match read_umask(pid) {
+    match read_umask(source) {
         Ok(umask) => println!("  Current umask: {}", umask),
         Err(e) => eprintln!("Failed to read umask for {}: {}", pid, e),
     }
 
-    let sockets = fetch_sock_info(pid);
+    let sockets = fetch_sock_info(source);
+    // derive_peer_processes does system-wide /proc scan — live-only.
     let peers = derive_peer_processes(pid, &sockets);
 
-    let fd_dir = format!("/proc/{}/fd/", pid);
-    let readdir_res = fs::read_dir(&fd_dir).and_then(|entries| {
-        for entry in entries {
-            let entry = entry?;
-            let filename = entry.file_name();
-            let filename = filename.to_string_lossy();
-            if let Ok(fd) = filename.parse::<u64>() {
-                print_file(pid, fd, &sockets, &peers, non_verbose);
-            } else {
-                eprint!("Unexpected file /proc/[pid]/fd/{} found", &filename);
-            }
+    let fds = match source.list_fds() {
+        Ok(fds) => fds,
+        Err(e) => {
+            eprintln!("Unable to read /proc/{}/fd/: {}", pid, e);
+            return false;
         }
-        Ok(())
-    });
+    };
 
-    if let Err(e) = readdir_res {
-        eprintln!("Unable to read {}: {}", &fd_dir, e);
-        return false;
+    for fd in fds {
+        print_file(source, fd, &sockets, &peers, non_verbose);
     }
 
     true
@@ -1410,7 +1406,8 @@ fn main() {
             println!();
         }
         first = false;
-        if !print_files(pid, args.non_verbose) {
+        let source = LiveProcess::new(pid);
+        if !print_files(&source, args.non_verbose) {
             error = true;
         }
     }

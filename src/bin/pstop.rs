@@ -24,11 +24,12 @@ use nix::unistd::Pid;
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
 fn verify_stopped(pid: u64) -> bool {
+    let source = ptools::LiveProcess::new(pid);
     let mut backoff = Duration::from_millis(10);
     let cap = Duration::from_millis(100);
     let mut warned_d = false;
     loop {
-        match ptools::proc_state(pid) {
+        match ptools::proc_state_from(&source) {
             Some('T') => return true,
             Some('t') => {
                 eprintln!(

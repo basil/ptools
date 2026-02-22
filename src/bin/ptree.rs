@@ -15,12 +15,10 @@
 //
 
 use nix::libc;
-use ptools::ParseError;
+use ptools::{LiveProcess, ParseError, ProcSource};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::process::exit;
 
 struct GraphChars {
@@ -79,7 +77,7 @@ impl ProcStat {
     // can't parse this file reliably. We can read the command from /proc/[pid]/comm,
     // so we know exactly what to expect, but that would be a pain.
     //
-    fn read(pid: u64) -> Result<Self, Box<dyn Error>> {
+    fn from_source(source: &dyn ProcSource) -> Result<Self, Box<dyn Error>> {
         // /proc/[pid]/status contains lines of the form
         //
         //    Name:   bash
@@ -87,11 +85,12 @@ impl ProcStat {
         //    State:  S (sleeping)
         //    ...
 
-        let status_file = ProcStat::status_file(pid);
-        let fields = BufReader::new(File::open(&status_file)?)
+        let pid = source.pid();
+        let status_file = format!("/proc/{}/status", pid);
+        let content = source.read_status()?;
+        let fields = content
             .lines()
             .map(|s| {
-                let s: String = s?;
                 let substrs = s.splitn(2, ":").collect::<Vec<&str>>();
                 if substrs.len() < 2 {
                     Err(ParseError::in_file(
@@ -111,19 +110,14 @@ impl ProcStat {
         Ok(ProcStat { pid, fields })
     }
 
-    fn status_file(pid: u64) -> String {
-        format!("/proc/{}/status", pid)
-    }
-
     fn get_field(&self, field: &str) -> Result<&str, Box<dyn Error>> {
         match self.fields.get(field) {
             Some(val) => Ok(val),
             None => Err(From::from(ParseError::in_file(
                 "status",
                 &format!(
-                    "Missing expected field '{}' in file {}",
-                    field,
-                    ProcStat::status_file(self.pid)
+                    "Missing expected field '{}' in file /proc/{}/status",
+                    field, self.pid
                 ),
             ))),
         }
@@ -142,8 +136,8 @@ impl ProcStat {
             return Err(From::from(ParseError::in_file(
                 "status",
                 &format!(
-                    "Uid field in {} had fewer fields than expected",
-                    ProcStat::status_file(self.pid)
+                    "Uid field in /proc/{}/status had fewer fields than expected",
+                    self.pid
                 ),
             )));
         }
@@ -154,8 +148,8 @@ impl ProcStat {
 // Read the start time (field 22) from /proc/[pid]/stat.
 // Field 2 (comm) is wrapped in parens and may contain spaces or parens,
 // so we find the last ')' and parse fields after it.
-fn read_starttime(pid: u64) -> Option<u64> {
-    let data = fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+fn read_starttime(source: &dyn ProcSource) -> Option<u64> {
+    let data = source.read_stat().ok()?;
     let after_comm = &data[data.rfind(')')? + 2..];
     // Fields after comm: state(1) ppid(2) pgrp(3) session(4) tty_nr(5) tpgid(6)
     // flags(7) minflt(8) cminflt(9) majflt(10) cmajflt(11) utime(12) stime(13)
@@ -179,7 +173,8 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
         let entry = entry?;
         let filename = entry.file_name();
         if let Some(pid) = filename.to_str().and_then(|s| s.parse::<u64>().ok()) {
-            let proc_stat = match ProcStat::read(pid) {
+            let source = LiveProcess::new(pid);
+            let proc_stat = match ProcStat::from_source(&source) {
                 Ok(proc_stat) => proc_stat,
                 // Proc probably exited before we could read its status
                 Err(_) => continue,
@@ -198,7 +193,7 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
                     continue;
                 }
             };
-            if let Some(st) = read_starttime(pid) {
+            if let Some(st) = read_starttime(&source) {
                 starttime_map.insert(pid, st);
             }
             child_map.entry(ppid).or_insert(vec![]).push(pid);
@@ -331,7 +326,8 @@ fn print_ptree_line(
         }
     }
     print!("{}  ", pid);
-    ptools::print_cmd_summary(pid);
+    let source = LiveProcess::new(pid);
+    ptools::print_cmd_summary_from(&source);
 }
 
 fn lookup_uid_by_username(username: &str) -> Result<Option<u32>, Box<dyn Error>> {

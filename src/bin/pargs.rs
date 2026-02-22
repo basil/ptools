@@ -14,23 +14,21 @@
 //   limitations under the License.
 //
 
-use std::io::Read;
+use ptools::ProcSource;
 
-fn read_cmdline(pid: u64) -> Option<Vec<Vec<u8>>> {
-    if let Some(mut file) = ptools::open_or_warn(&format!("/proc/{}/cmdline", pid)) {
-        let mut bytes = Vec::new();
-        if let Err(e) = file.read_to_end(&mut bytes) {
-            eprintln!("Error reading args: {}", e);
+fn read_cmdline(source: &dyn ProcSource) -> Option<Vec<Vec<u8>>> {
+    let bytes = match source.read_cmdline() {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("Error opening /proc/{}/cmdline: {}", source.pid(), e);
             return None;
         }
-        let mut args: Vec<Vec<u8>> = bytes.split(|b| *b == b'\0').map(<[u8]>::to_vec).collect();
-        if args.last().is_some_and(|arg| arg.is_empty()) {
-            args.pop();
-        }
-        Some(args)
-    } else {
-        None
+    };
+    let mut args: Vec<Vec<u8>> = bytes.split(|b| *b == b'\0').map(<[u8]>::to_vec).collect();
+    if args.last().is_some_and(|arg| arg.is_empty()) {
+        args.pop();
     }
+    Some(args)
 }
 
 fn shell_quote(arg: &str) -> String {
@@ -48,9 +46,9 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
-fn print_args(pid: u64) -> bool {
-    if let Some(args) = read_cmdline(pid) {
-        ptools::print_proc_summary(pid);
+fn print_args(source: &dyn ProcSource) -> bool {
+    if let Some(args) = read_cmdline(source) {
+        ptools::print_proc_summary_from(source);
         for (i, bytes) in args.iter().enumerate() {
             let arg = String::from_utf8_lossy(bytes);
             println!("argv[{}]: {}", i, arg);
@@ -61,11 +59,11 @@ fn print_args(pid: u64) -> bool {
     }
 }
 
-fn print_cmdline(pid: u64) -> bool {
-    if let Some(args) = read_cmdline(pid) {
+fn print_cmdline(source: &dyn ProcSource) -> bool {
+    if let Some(args) = read_cmdline(source) {
         // Use /proc/[pid]/exe to resolve the real executable path instead of
         // argv[0], which may be a relative path or a name set by the process.
-        let exe = std::fs::read_link(format!("/proc/{}/exe", pid)).ok();
+        let exe = source.read_exe().ok();
         let mut quoted = Vec::with_capacity(args.len());
         for (i, bytes) in args.iter().enumerate() {
             let display = if i == 0 {
@@ -180,13 +178,14 @@ fn main() {
             println!();
         }
         first = false;
+        let source = ptools::LiveProcess::new(pid);
         let mut section = false;
         if want_args {
             if args.line {
-                if !print_cmdline(pid) {
+                if !print_cmdline(&source) {
                     error = true;
                 }
-            } else if !print_args(pid) {
+            } else if !print_args(&source) {
                 error = true;
             }
             section = true;
@@ -195,7 +194,7 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_env(pid) {
+            if !ptools::print_env_from(&source) {
                 error = true;
             }
             section = true;
@@ -204,7 +203,7 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_auxv(pid) {
+            if !ptools::print_auxv_from(&source) {
                 error = true;
             }
         }

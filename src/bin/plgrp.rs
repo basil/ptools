@@ -19,11 +19,14 @@ use std::process;
 use nix::sched::{sched_getaffinity, CpuSet};
 use nix::unistd::Pid;
 
-use ptools::{cpu_to_node, enumerate_tids, numa_node_cpus, numa_online_nodes, parse_pid_spec};
+use ptools::{
+    cpu_to_node, enumerate_tids_from, numa_node_cpus, numa_online_nodes, parse_pid_spec,
+    LiveProcess, ProcSource,
+};
 
 /// Get the CPU number a thread is currently running on (field 39 of /proc/PID/task/TID/stat).
-fn get_thread_cpu(pid: u64, tid: u64) -> Option<u32> {
-    let stat = std::fs::read_to_string(format!("/proc/{}/task/{}/stat", pid, tid)).ok()?;
+fn get_thread_cpu(source: &dyn ProcSource, tid: u64) -> Option<u32> {
+    let stat = source.read_tid_stat(tid).ok()?;
     // Skip past the comm field (enclosed in parentheses) which may contain spaces and parens.
     let after_comm = stat.rfind(')')? + 1;
     let fields: Vec<&str> = stat[after_comm..].split_whitespace().collect();
@@ -194,8 +197,9 @@ fn parse_args() -> Args {
     args
 }
 
-fn print_thread(pid: u64, tid: u64, affinity_nodes: &Option<Vec<u32>>) -> bool {
-    let Some(cpu) = get_thread_cpu(pid, tid) else {
+fn print_thread(source: &dyn ProcSource, tid: u64, affinity_nodes: &Option<Vec<u32>>) -> bool {
+    let pid = source.pid();
+    let Some(cpu) = get_thread_cpu(source, tid) else {
         eprintln!("plgrp: cannot read CPU for {}/{}", pid, tid);
         return false;
     };
@@ -237,19 +241,20 @@ fn main() {
 
     let mut error = false;
     for spec in &args.specs {
+        let source = LiveProcess::new(spec.pid);
         if let Some(tid) = spec.tid {
-            if !print_thread(spec.pid, tid, &args.affinity_nodes) {
+            if !print_thread(&source, tid, &args.affinity_nodes) {
                 error = true;
             }
         } else {
-            let tids = enumerate_tids(spec.pid);
+            let tids = enumerate_tids_from(&source);
             if tids.is_empty() {
                 eprintln!("plgrp: cannot read threads for PID {}", spec.pid);
                 error = true;
                 continue;
             }
             for tid in tids {
-                if !print_thread(spec.pid, tid, &args.affinity_nodes) {
+                if !print_thread(&source, tid, &args.affinity_nodes) {
                     error = true;
                 }
             }

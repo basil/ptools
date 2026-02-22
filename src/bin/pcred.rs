@@ -16,7 +16,7 @@
 
 use std::process::exit;
 
-use ptools::{resolve_gid, resolve_uid};
+use ptools::{resolve_gid, resolve_uid, LiveProcess, ProcSource};
 
 struct Args {
     all: bool,
@@ -92,8 +92,10 @@ struct Cred {
     groups: Vec<u32>,
 }
 
-fn read_cred(pid: u64) -> Option<Cred> {
-    let status = std::fs::read_to_string(format!("/proc/{}/status", pid))
+fn read_cred(source: &dyn ProcSource) -> Option<Cred> {
+    let pid = source.pid();
+    let status = source
+        .read_status()
         .map_err(|e| {
             eprintln!("pcred: {}: {}", pid, e);
             e
@@ -178,8 +180,9 @@ fn fmt_gid(gid: u32) -> String {
     }
 }
 
-fn print_cred(pid: u64, all: bool) -> bool {
-    let Some(cred) = read_cred(pid) else {
+fn print_cred(source: &dyn ProcSource, all: bool) -> bool {
+    let pid = source.pid();
+    let Some(cred) = read_cred(source) else {
         return false;
     };
 
@@ -228,7 +231,8 @@ fn main() {
             println!();
         }
         first = false;
-        if !print_cred(pid, args.all) {
+        let source = LiveProcess::new(pid);
+        if !print_cred(&source, args.all) {
             error = true;
         }
     }

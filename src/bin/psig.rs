@@ -15,6 +15,7 @@
 //
 
 use nix::libc;
+use ptools::ProcSource;
 
 #[derive(Copy, Clone)]
 enum SignalAction {
@@ -79,19 +80,12 @@ fn intersect_blocked_masks(masks: &[Vec<bool>]) -> Vec<bool> {
     result
 }
 
-fn read_thread_blocked_masks(pid: u64) -> Option<Vec<Vec<bool>>> {
-    let task_dir = format!("/proc/{}/task", pid);
-    let entries = std::fs::read_dir(&task_dir).ok()?;
-    let mut tids: Vec<u64> = entries
-        .filter_map(|e| e.ok())
-        .filter_map(|e| e.file_name().to_str()?.parse::<u64>().ok())
-        .collect();
-    tids.sort();
+fn read_thread_blocked_masks(source: &dyn ProcSource) -> Option<Vec<Vec<bool>>> {
+    let tids = source.list_tids().ok()?;
 
     let mut masks = Vec::new();
     for tid in tids {
-        let status_path = format!("/proc/{}/task/{}/status", pid, tid);
-        let Ok(status) = std::fs::read_to_string(&status_path) else {
+        let Ok(status) = source.read_tid_status(tid) else {
             continue;
         };
         for line in status.lines() {
@@ -111,8 +105,10 @@ fn read_thread_blocked_masks(pid: u64) -> Option<Vec<Vec<bool>>> {
     }
 }
 
-fn parse_status_signal_masks(pid: u64) -> Option<SignalMasks> {
-    let status = std::fs::read_to_string(format!("/proc/{}/status", pid))
+fn parse_status_signal_masks(source: &dyn ProcSource) -> Option<SignalMasks> {
+    let pid = source.pid();
+    let status = source
+        .read_status()
         .map_err(|e| {
             eprintln!("Error reading /proc/{}/status: {}", pid, e);
             e
@@ -168,7 +164,7 @@ fn parse_status_signal_masks(pid: u64) -> Option<SignalMasks> {
 
     // Compute blocked mask as intersection across all threads.
     // Falls back to main thread's SigBlk if /proc/[pid]/task/ is unreadable.
-    let sig_blk = read_thread_blocked_masks(pid)
+    let sig_blk = read_thread_blocked_masks(source)
         .map(|masks| intersect_blocked_masks(&masks))
         .or_else(|| sig_blk.and_then(|s| parse("SigBlk", &s)))
         .unwrap_or_default();
@@ -258,10 +254,10 @@ fn action_text(action: SignalAction) -> &'static str {
     }
 }
 
-fn print_signal_actions(pid: u64) -> bool {
-    ptools::print_proc_summary(pid);
+fn print_signal_actions(source: &dyn ProcSource) -> bool {
+    ptools::print_proc_summary_from(source);
 
-    let Some(masks) = parse_status_signal_masks(pid) else {
+    let Some(masks) = parse_status_signal_masks(source) else {
         return false;
     };
 
@@ -368,7 +364,8 @@ fn main() {
             println!();
         }
         first = false;
-        if !print_signal_actions(pid) {
+        let source = ptools::LiveProcess::new(pid);
+        if !print_signal_actions(&source) {
             error = true;
         }
     }

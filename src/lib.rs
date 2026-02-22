@@ -14,12 +14,16 @@
 //   limitations under the License.
 //
 
+pub mod proc_source;
+pub use proc_source::{LiveProcess, ProcSource};
+
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::File;
 use std::io::ErrorKind;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::Read;
 use std::mem::size_of;
+use std::path::Path;
 
 use nix::libc;
 
@@ -79,13 +83,18 @@ pub fn parse_pid_spec(s: &str) -> Result<PidSpec, String> {
     }
 }
 
-/// Read the state character from /proc/[pid]/stat.
-pub fn proc_state(pid: u64) -> Option<char> {
-    let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+/// Read the state character from a process source.
+pub fn proc_state_from(source: &dyn ProcSource) -> Option<char> {
+    let stat = source.read_stat().ok()?;
     // Use rfind to handle comm fields containing parentheses, e.g. "(a)b)".
     let after_comm = stat.rfind(')')? + 1;
     let rest = stat[after_comm..].trim_start();
     rest.chars().next()
+}
+
+/// Read the state character from /proc/[pid]/stat.
+pub fn proc_state(pid: u64) -> Option<char> {
+    proc_state_from(&LiveProcess::new(pid))
 }
 
 pub fn open_or_warn(filename: &str) -> Option<File> {
@@ -98,7 +107,7 @@ pub fn open_or_warn(filename: &str) -> Option<File> {
     }
 }
 
-pub fn print_env(pid: u64) -> bool {
+pub fn print_env_from(source: &dyn ProcSource) -> bool {
     // This contains the environ as it was when the proc was started. To get the current
     // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
@@ -107,33 +116,37 @@ pub fn print_env(pid: u64) -> bool {
     //
     // TODO Long term, we might want to print the current environment if we can, and print a warning
     // + the contents of /proc/[pid]/environ if we can't
-    if let Some(file) = open_or_warn(&format!("/proc/{}/environ", pid)) {
-        print_proc_summary(pid);
+    let bytes = match source.read_environ() {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("Error opening /proc/{}/environ: {}", source.pid(), e);
+            return false;
+        }
+    };
 
-        let mut i = 0;
-        for bytes in BufReader::new(file).split(b'\0') {
-            match &bytes {
-                Ok(bytes) => {
-                    let arg = String::from_utf8_lossy(bytes);
-                    // Skip entries that aren't valid env vars (KEY=VALUE with non-empty KEY).
-                    // Processes like sshd overwrite their environ memory with status info,
-                    // leaving garbage and null bytes in /proc/[pid]/environ.
-                    if let Some(pos) = arg.find('=') {
-                        if pos > 0 {
-                            println!("envp[{}]: {}", i, arg);
-                            i += 1;
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprint!("Error reading environment: {}", e)
-                }
+    print_proc_summary_from(source);
+
+    let mut i = 0;
+    for chunk in bytes.split(|b| *b == b'\0') {
+        if chunk.is_empty() {
+            continue;
+        }
+        let arg = String::from_utf8_lossy(chunk);
+        // Skip entries that aren't valid env vars (KEY=VALUE with non-empty KEY).
+        // Processes like sshd overwrite their environ memory with status info,
+        // leaving garbage and null bytes in /proc/[pid]/environ.
+        if let Some(pos) = arg.find('=') {
+            if pos > 0 {
+                println!("envp[{}]: {}", i, arg);
+                i += 1;
             }
         }
-        true
-    } else {
-        false
     }
+    true
+}
+
+pub fn print_env(pid: u64) -> bool {
+    print_env_from(&LiveProcess::new(pid))
 }
 
 // Not yet in the libc crate for Linux (only Android).
@@ -223,8 +236,7 @@ fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<(u64, u64)>,
     Ok(result)
 }
 
-fn elf_word_size(pid: u64) -> Option<usize> {
-    let exe_path = std::fs::read_link(format!("/proc/{}/exe", pid)).ok()?;
+fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
     let mut exe_file = File::open(exe_path).ok()?;
     let mut header = [0u8; 5];
     exe_file.read_exact(&mut header).ok()?;
@@ -240,42 +252,47 @@ fn elf_word_size(pid: u64) -> Option<usize> {
     }
 }
 
-fn read_auxv(pid: u64) -> Option<Vec<(u64, u64)>> {
-    if let Some(mut file) = open_or_warn(&format!("/proc/{}/auxv", pid)) {
-        let mut bytes = Vec::new();
-        if let Err(e) = file.read_to_end(&mut bytes) {
-            eprintln!("Error reading auxv: {}", e);
+fn read_auxv_from(source: &dyn ProcSource) -> Option<Vec<(u64, u64)>> {
+    let bytes = match source.read_auxv() {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln!("Error opening /proc/{}/auxv: {}", source.pid(), e);
             return None;
         }
+    };
 
-        let native_word_size = size_of::<usize>();
-        let mut candidate_word_sizes = Vec::new();
-        if let Some(ws) = elf_word_size(pid) {
+    if bytes.is_empty() {
+        eprintln!("Error reading auxv: empty file");
+        return None;
+    }
+
+    let native_word_size = size_of::<usize>();
+    let mut candidate_word_sizes = Vec::new();
+    if let Ok(exe_path) = source.read_exe() {
+        if let Some(ws) = elf_word_size_from_path(&exe_path) {
             candidate_word_sizes.push(ws);
         }
-        candidate_word_sizes.push(native_word_size);
-        candidate_word_sizes.push(4);
-        candidate_word_sizes.push(8);
+    }
+    candidate_word_sizes.push(native_word_size);
+    candidate_word_sizes.push(4);
+    candidate_word_sizes.push(8);
 
-        let mut seen = HashSet::new();
-        for word_size in candidate_word_sizes {
-            if !seen.insert(word_size) {
-                continue;
-            }
-
-            if let Ok(result) = parse_auxv_records(&bytes, word_size) {
-                return Some(result);
-            }
+    let mut seen = HashSet::new();
+    for word_size in candidate_word_sizes {
+        if !seen.insert(word_size) {
+            continue;
         }
 
-        eprintln!(
-            "Error parsing auxv: unexpected auxv format ({} bytes)",
-            bytes.len()
-        );
-        None
-    } else {
-        None
+        if let Ok(result) = parse_auxv_records(&bytes, word_size) {
+            return Some(result);
+        }
     }
+
+    eprintln!(
+        "Error parsing auxv: unexpected auxv format ({} bytes)",
+        bytes.len()
+    );
+    None
 }
 
 fn is_string_auxv_key(key: u64) -> bool {
@@ -484,22 +501,19 @@ pub fn resolve_gid(gid: u32) -> Option<String> {
     name.to_str().ok().map(str::to_string)
 }
 
-fn read_proc_string(pid: u64, addr: u64) -> Option<String> {
-    let mut file = File::open(format!("/proc/{}/mem", pid)).ok()?;
-    file.seek(SeekFrom::Start(addr)).ok()?;
-    let mut buf = vec![0u8; 256];
-    let n = file.read(&mut buf).ok()?;
-    buf.truncate(n);
+fn read_proc_string_from(source: &dyn ProcSource, addr: u64) -> Option<String> {
+    let buf = source.read_mem(addr, 256).ok()?;
+    let n = buf.len();
     let end = buf.iter().position(|&b| b == 0).unwrap_or(n);
     String::from_utf8(buf[..end].to_vec()).ok()
 }
 
-pub fn print_auxv(pid: u64) -> bool {
-    if let Some(auxv) = read_auxv(pid) {
-        print_proc_summary(pid);
+pub fn print_auxv_from(source: &dyn ProcSource) -> bool {
+    if let Some(auxv) = read_auxv_from(source) {
+        print_proc_summary_from(source);
         for (key, value) in auxv {
             if is_string_auxv_key(key) {
-                let s = read_proc_string(pid, value).unwrap_or_default();
+                let s = read_proc_string_from(source, value).unwrap_or_default();
                 println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, s);
             } else if let Some(flags) = decode_hwcap(key, value) {
                 println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, flags);
@@ -537,10 +551,18 @@ pub fn print_auxv(pid: u64) -> bool {
     }
 }
 
+pub fn print_auxv(pid: u64) -> bool {
+    print_auxv_from(&LiveProcess::new(pid))
+}
+
+pub fn print_proc_summary_from(source: &dyn ProcSource) {
+    print!("{}:\t", source.pid());
+    print_cmd_summary_from(source);
+}
+
 // Print the pid and a summary of command line arguments on a single line.
 pub fn print_proc_summary(pid: u64) {
-    print!("{}:\t", pid);
-    print_cmd_summary(pid);
+    print_proc_summary_from(&LiveProcess::new(pid));
 }
 
 #[derive(Debug)]
@@ -569,31 +591,21 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-// Print a summary of command line arguments on a single line.
-pub fn print_cmd_summary(pid: u64) {
-    match File::open(format!("/proc/{}/cmdline", pid)) {
-        Ok(file) => {
+pub fn print_cmd_summary_from(source: &dyn ProcSource) {
+    match source.read_cmdline() {
+        Ok(bytes) => {
             let mut summary = String::new();
-            for arg in BufReader::new(file).split(b'\0') {
-                match arg {
-                    Ok(arg) => {
-                        if !arg.is_empty() {
-                            if !summary.is_empty() {
-                                summary.push(' ');
-                            }
-                            summary.push_str(&String::from_utf8_lossy(&arg));
-                        }
+            for arg in bytes.split(|b| *b == b'\0') {
+                if !arg.is_empty() {
+                    if !summary.is_empty() {
+                        summary.push(' ');
                     }
-                    Err(e) => {
-                        println!("<error reading cmdline>");
-                        eprintln!("{}", e);
-                        return;
-                    }
+                    summary.push_str(&String::from_utf8_lossy(arg));
                 }
             }
             if summary.is_empty() {
-                let is_zombie = proc_state(pid) == Some('Z');
-                match std::fs::read_to_string(format!("/proc/{}/comm", pid)) {
+                let is_zombie = proc_state_from(source) == Some('Z');
+                match source.read_comm() {
                     Ok(comm) => {
                         let comm = comm.trim_end();
                         if comm.is_empty() {
@@ -627,18 +639,18 @@ pub fn print_cmd_summary(pid: u64) {
     }
 }
 
+// Print a summary of command line arguments on a single line.
+pub fn print_cmd_summary(pid: u64) {
+    print_cmd_summary_from(&LiveProcess::new(pid));
+}
+
+pub fn enumerate_tids_from(source: &dyn ProcSource) -> Vec<u64> {
+    source.list_tids().unwrap_or_default()
+}
+
 /// List all thread IDs for a given PID by reading `/proc/PID/task/`.
 pub fn enumerate_tids(pid: u64) -> Vec<u64> {
-    let task_dir = format!("/proc/{}/task", pid);
-    let Ok(entries) = std::fs::read_dir(&task_dir) else {
-        return Vec::new();
-    };
-    let mut tids: Vec<u64> = entries
-        .filter_map(|e| e.ok())
-        .filter_map(|e| e.file_name().to_str()?.parse::<u64>().ok())
-        .collect();
-    tids.sort();
-    tids
+    enumerate_tids_from(&LiveProcess::new(pid))
 }
 
 /// Parse a kernel list-format string like "0-3,5,7-8" into a sorted Vec of values.

@@ -83,7 +83,8 @@ fn main() {
             println!();
         }
         first = false;
-        if !ptools::print_env(pid) {
+        let source = ptools::LiveProcess::new(pid);
+        if !ptools::print_env_from(&source) {
             error = true;
         }
     }
