@@ -263,7 +263,11 @@ fn print_open_flags(flags: u64) {
     println!();
 }
 
-fn get_fdinfo_field(source: &dyn ProcSource, fd: u64, field: &str) -> Result<String, Box<dyn Error>> {
+fn get_fdinfo_field(
+    source: &dyn ProcSource,
+    fd: u64,
+    field: &str,
+) -> Result<String, Box<dyn Error>> {
     let contents = source.read_fdinfo(fd)?;
     let line = contents
         .lines()
