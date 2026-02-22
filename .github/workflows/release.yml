@@ -29,6 +29,9 @@ jobs:
       - name: Check out
         uses: actions/checkout@v6
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsystemd-dev
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -71,6 +74,9 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsystemd-dev
 
       - name: Install cargo-deb and cargo-generate-rpm
         run: |
