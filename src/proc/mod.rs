@@ -270,22 +270,6 @@ impl ProcHandle {
         Ok(self.source.read_net_file(name)?)
     }
 
-    /// Parse socket metadata from `/proc/[pid]/net/*` files, returning a map
-    /// keyed by inode number.
-    pub fn socket_info(&self) -> std::collections::HashMap<u64, net::SocketInfo> {
-        net::parse_socket_info(&*self.source)
-    }
-
-    /// Query socket details (options, TCP info, congestion control) for a
-    /// file descriptor by duplicating it via `pidfd_getfd` and calling
-    /// `getsockopt`.
-    ///
-    /// Returns `None` for coredumps, non-Linux platforms, or when the fd
-    /// cannot be duplicated.
-    pub fn socket_details(&self, fd: u64) -> Option<net::SocketDetails> {
-        net::query_socket_details(self.pid(), fd)
-    }
-
     // -- Parsed from /proc/[pid]/stat --------------------------------
 
     /// Process state parsed from `/proc/[pid]/stat`.
@@ -591,14 +575,24 @@ impl ProcHandle {
     /// file descriptor in the process.
     ///
     /// This is the primary entry point for tools that need to enumerate a
-    /// process's open files.  It combines `fds()`, `fd_path()`, `fdinfo()`,
-    /// `stat()`, `socket_info()`, and `socket_details()` into a single call.
+    /// process's open files.  It combines fd path/stat/fdinfo, socket info
+    /// from `/proc/net/*`, socket details via `getsockopt`, and peer process
+    /// resolution into a single call.
     pub fn file_descriptors(&self) -> Result<Vec<fd::FileDescriptor>, Error> {
         let fds = self.fds()?;
-        let sockets = self.socket_info();
+        let sockets = net::parse_socket_info(&*self.source);
+
+        // Compute TCP peer processes in bulk (system-wide /proc scan).
+        // Skip for coredumps or when no loopback TCP sockets exist.
+        let tcp_peers = if !self.is_core && net::has_loopback_tcp_peers(&sockets) {
+            net::derive_peer_processes(self.pid(), &sockets)
+        } else {
+            std::collections::HashMap::new()
+        };
+
         let mut result = Vec::with_capacity(fds.len());
         for fd_num in fds {
-            match self.gather_fd(fd_num, &sockets) {
+            match self.gather_fd(fd_num, &sockets, &tcp_peers) {
                 Ok(fd_desc) => result.push(fd_desc),
                 Err(e) => {
                     eprintln!(
@@ -619,6 +613,7 @@ impl ProcHandle {
         &self,
         fd_num: u64,
         sockets: &std::collections::HashMap<u64, net::SocketInfo>,
+        tcp_peers: &std::collections::HashMap<u64, net::PeerProcess>,
     ) -> Result<fd::FileDescriptor, Error> {
         let path = self.fd_path(fd_num)?;
         let link_text = path.to_string_lossy();
@@ -654,11 +649,20 @@ impl ProcHandle {
 
             if let Some(inode) = inode {
                 if let Some(sock_info) = sockets.get(&inode) {
-                    let details = self.socket_details(fd_num);
-                    socket = Some(fd::FdSocket {
-                        info: sock_info.clone(),
-                        details,
+                    let details = net::query_socket_details(self.pid(), fd_num);
+
+                    // Resolve peer process: TCP peers from bulk map, Unix via SO_PEERCRED
+                    let peer = tcp_peers.get(&inode).cloned().or_else(|| {
+                        if matches!(sock_info.family, nix::sys::socket::AddressFamily::Unix)
+                            && !self.is_core
+                        {
+                            net::unix_peer_process(self.pid(), fd_num)
+                        } else {
+                            None
+                        }
                     });
+
+                    socket = Some(net::Socket::from_parts(sock_info.clone(), details, peer));
                 }
             }
 

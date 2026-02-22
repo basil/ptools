@@ -14,23 +14,12 @@
 //   limitations under the License.
 //
 
-use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
+use nix::sys::socket::AddressFamily;
 use ptools::{
-    Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, SocketDetails,
-    SocketInfo, TcpState,
+    Error, FileDescriptor, FileType, PosixFileType, ProcHandle, Socket, TcpInfo, TcpState,
 };
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::fs::File;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::process::exit;
-
-#[derive(Clone)]
-struct PeerProcess {
-    pid: u64,
-    comm: String,
-}
 
 fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
     for line in extra_lines
@@ -114,232 +103,75 @@ fn inet_address_str(addr_fam: AddressFamily, addr: Option<SocketAddr>) -> String
     )
 }
 
-fn print_sockname(sock_info: &SocketInfo) {
+fn print_sockname(sock: &Socket) {
     println!(
         "        sockname: {}",
-        match sock_info.family {
-            AddressFamily::Inet => inet_address_str(sock_info.family, sock_info.local_addr),
-            AddressFamily::Inet6 => inet_address_str(sock_info.family, sock_info.local_addr),
+        match sock.family {
+            AddressFamily::Inet => inet_address_str(sock.family, sock.local_addr),
+            AddressFamily::Inet6 => inet_address_str(sock.family, sock.local_addr),
             addr_fam => address_family_str(addr_fam).to_string(),
         }
     );
 }
 
-fn print_tcp_info(info: &nix::libc::tcp_info) {
-    let snd_wscale = info.tcpi_snd_rcv_wscale & 0x0f;
-    let rcv_wscale = (info.tcpi_snd_rcv_wscale >> 4) & 0x0f;
+fn print_tcp_info(info: &TcpInfo) {
     println!(
         "        cwnd: {}  ssthresh: {}",
-        info.tcpi_snd_cwnd, info.tcpi_snd_ssthresh,
+        info.snd_cwnd, info.snd_ssthresh,
     );
     println!(
         "        snd_wscale: {}  rcv_wscale: {}",
-        snd_wscale, rcv_wscale,
+        info.snd_wscale, info.rcv_wscale,
     );
 
-    let rtt_ms = info.tcpi_rtt as f64 / 1000.0;
-    let rttvar_ms = info.tcpi_rttvar as f64 / 1000.0;
+    let rtt_ms = info.rtt as f64 / 1000.0;
+    let rttvar_ms = info.rttvar as f64 / 1000.0;
     println!("        rtt: {:.3}ms  rttvar: {:.3}ms", rtt_ms, rttvar_ms,);
 
     println!(
         "        snd_mss: {}  rcv_mss: {}  advmss: {}  pmtu: {}",
-        info.tcpi_snd_mss, info.tcpi_rcv_mss, info.tcpi_advmss, info.tcpi_pmtu,
+        info.snd_mss, info.rcv_mss, info.advmss, info.pmtu,
     );
     println!(
         "        unacked: {}  retrans: {}/{}  lost: {}",
-        info.tcpi_unacked, info.tcpi_retrans, info.tcpi_total_retrans, info.tcpi_lost,
+        info.unacked, info.retrans, info.total_retrans, info.lost,
     );
-    println!("        rcv_space: {}", info.tcpi_rcv_space);
+    println!("        rcv_space: {}", info.rcv_space);
 }
 
-fn print_peername(sock_info: &SocketInfo, peer: Option<&PeerProcess>) {
-    if let Some(peer) = peer {
+fn print_peername(sock: &Socket) {
+    if let Some(ref peer) = sock.peer_process {
         println!("        peer: {}[{}]", peer.comm, peer.pid);
     }
 
-    if let Some(addr) = sock_info.peer_addr {
+    if let Some(addr) = sock.peer_addr {
         println!(
             "        peername: {}",
-            inet_address_str(sock_info.family, Some(addr))
+            inet_address_str(sock.family, Some(addr))
         );
     }
 }
 
-fn print_tcp_details(details: Option<&SocketDetails>, sock_info: &SocketInfo) {
-    if let Some(details) = details {
-        if let Some(ref cc) = details.congestion_control {
-            println!("        congestion control: {}", cc);
-        }
+fn print_tcp_details(sock: &Socket) {
+    if let Some(ref cc) = sock.congestion_control {
+        println!("        congestion control: {}", cc);
     }
 
-    if let Some(state) = sock_info.tcp_state {
+    if let Some(state) = sock.tcp_state {
         println!("        state: {}", state);
     }
 
-    if let (Some(tx), Some(rx)) = (sock_info.tx_queue, sock_info.rx_queue) {
+    if let (Some(tx), Some(rx)) = (sock.tx_queue, sock.rx_queue) {
         if tx > 0 || rx > 0 {
             println!("        tx_queue: {}  rx_queue: {}", tx, rx);
         }
     }
 
-    if let Some(details) = details {
-        if sock_info.tcp_state.is_some() && !matches!(sock_info.tcp_state, Some(TcpState::Listen)) {
-            if let Some(ref info) = details.tcp_info {
-                print_tcp_info(info);
-            }
+    if sock.tcp_state.is_some() && !matches!(sock.tcp_state, Some(TcpState::Listen)) {
+        if let Some(ref info) = sock.tcp_info {
+            print_tcp_info(info);
         }
     }
-
-    // TODO Expand peer pid/comm resolution beyond current coverage (unix sockets and loopback TCP)
-    // to additional local and namespace edge cases.
-}
-
-fn read_comm(pid: u64) -> Option<String> {
-    fs::read_to_string(format!("/proc/{}/comm", pid))
-        .ok()
-        .map(|comm| comm.trim_end().to_string())
-}
-
-fn read_socket_inode(path: &Path) -> Option<u64> {
-    let link = fs::read_link(path).ok()?;
-    let text = link.to_str()?;
-    if !text.starts_with("socket:[") || !text.ends_with(']') {
-        return None;
-    }
-    text.trim_start_matches("socket:[")
-        .trim_end_matches(']')
-        .parse::<u64>()
-        .ok()
-}
-
-fn list_socket_owners() -> HashMap<u64, HashSet<u64>> {
-    let mut owners = HashMap::<u64, HashSet<u64>>::new();
-    let proc_entries = match fs::read_dir("/proc") {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("failed to read /proc for socket ownership lookup: {}", e);
-            return owners;
-        }
-    };
-
-    for entry in proc_entries.flatten() {
-        let pid = match entry.file_name().to_string_lossy().parse::<u64>() {
-            Ok(pid) => pid,
-            Err(_) => continue,
-        };
-
-        let fd_dir = format!("/proc/{}/fd", pid);
-        let Ok(fd_entries) = fs::read_dir(fd_dir) else {
-            continue;
-        };
-
-        for fd_entry in fd_entries.flatten() {
-            if let Some(inode) = read_socket_inode(&fd_entry.path()) {
-                owners.entry(inode).or_default().insert(pid);
-            }
-        }
-    }
-
-    owners
-}
-
-fn local_tcp_peer_inodes(sockets: &HashMap<u64, SocketInfo>) -> HashMap<u64, u64> {
-    let mut by_tuple = HashMap::<(AddressFamily, SocketAddr, SocketAddr), Vec<u64>>::new();
-    for sock in sockets.values() {
-        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
-            || !matches!(sock.sock_type, SockType::Stream)
-        {
-            continue;
-        }
-        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
-            continue;
-        };
-        by_tuple
-            .entry((sock.family, local_addr, peer_addr))
-            .or_default()
-            .push(sock.inode);
-    }
-
-    let mut peers = HashMap::new();
-    for sock in sockets.values() {
-        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
-            || !matches!(sock.sock_type, SockType::Stream)
-        {
-            continue;
-        }
-        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
-            continue;
-        };
-        if !(local_addr.ip().is_loopback() && peer_addr.ip().is_loopback()) {
-            continue;
-        }
-
-        if let Some(candidates) = by_tuple.get(&(sock.family, peer_addr, local_addr)) {
-            if let Some(peer_inode) = candidates
-                .iter()
-                .copied()
-                .find(|inode| *inode != sock.inode)
-            {
-                peers.insert(sock.inode, peer_inode);
-            }
-        }
-    }
-    peers
-}
-
-fn derive_peer_processes(
-    target_pid: u64,
-    sockets: &HashMap<u64, SocketInfo>,
-) -> HashMap<u64, PeerProcess> {
-    let mut peers = HashMap::new();
-    let owners = list_socket_owners();
-    let mut comm_cache = HashMap::<u64, String>::new();
-
-    for (inode, peer_inode) in local_tcp_peer_inodes(sockets) {
-        let Some(pids) = owners.get(&peer_inode) else {
-            continue;
-        };
-
-        let chosen_pid = pids
-            .iter()
-            .copied()
-            .find(|pid| *pid != target_pid)
-            .or_else(|| pids.iter().copied().next());
-        let Some(chosen_pid) = chosen_pid else {
-            continue;
-        };
-
-        let comm = if let Some(comm) = comm_cache.get(&chosen_pid) {
-            comm.clone()
-        } else {
-            let Some(comm) = read_comm(chosen_pid) else {
-                continue;
-            };
-            comm_cache.insert(chosen_pid, comm.clone());
-            comm
-        };
-
-        peers.insert(
-            inode,
-            PeerProcess {
-                pid: chosen_pid,
-                comm,
-            },
-        );
-    }
-
-    peers
-}
-
-fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
-    let fd_file = File::open(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
-    let creds = getsockopt(&fd_file, sockopt::PeerCredentials).ok()?;
-    let peer_pid = creds.pid() as u64;
-    let comm = read_comm(peer_pid)?;
-    Some(PeerProcess {
-        pid: peer_pid,
-        comm,
-    })
 }
 
 fn print_fd_details(fd: &FileDescriptor) {
@@ -365,7 +197,7 @@ fn print_fd_details(fd: &FileDescriptor) {
     }
 }
 
-fn print_file(fd: &FileDescriptor, pid: u64, peers: &HashMap<u64, PeerProcess>, non_verbose: bool) {
+fn print_file(fd: &FileDescriptor, non_verbose: bool) {
     if let Some(ref st) = fd.stat {
         // Full output -- stat succeeded (live process).
         print!(
@@ -395,25 +227,13 @@ fn print_file(fd: &FileDescriptor, pid: u64, peers: &HashMap<u64, PeerProcess>, 
         match fd.file_type {
             FileType::Posix(PosixFileType::Socket) => {
                 if let Some(ref sock) = fd.socket {
-                    let sock_info = &sock.info;
-                    print_sockname(sock_info);
-                    let peer =
-                        peers
-                            .get(&sock_info.inode)
-                            .cloned()
-                            .or_else(|| match sock_info.family {
-                                // SO_PEERCRED on duplicated fd -- live-only.
-                                AddressFamily::Unix => unix_peer_process(pid, fd.fd),
-                                _ => None,
-                            });
-                    print_peername(sock_info, peer.as_ref());
-                    println!("        {}", sock_info.sock_type);
-                    if let Some(ref details) = sock.details {
-                        if !details.options.is_empty() {
-                            println!("        {}", details.options.join(","));
-                        }
+                    print_sockname(sock);
+                    print_peername(sock);
+                    println!("        {}", sock.sock_type);
+                    if !sock.options.is_empty() {
+                        println!("        {}", sock.options.join(","));
                     }
-                    print_tcp_details(sock.details.as_ref(), sock_info);
+                    print_tcp_details(sock);
                 } else if let Some(ref sockprotoname) = fd.sockprotoname {
                     println!(
                         "        sockname: {}",
@@ -527,18 +347,8 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
         e
     })?;
 
-    // derive_peer_processes does system-wide /proc scan; skip when there are
-    // no sockets to match (always the case for coredump sources).
-    let has_sockets = file_descs.iter().any(|f| f.socket.is_some());
-    let peers = if has_sockets {
-        let sockets = handle.socket_info();
-        derive_peer_processes(pid, &sockets)
-    } else {
-        HashMap::new()
-    };
-
     for fd in &file_descs {
-        print_file(fd, pid, &peers, non_verbose);
+        print_file(fd, non_verbose);
     }
 
     Ok(())

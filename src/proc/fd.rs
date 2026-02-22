@@ -3,7 +3,7 @@ use nix::sys::stat::SFlag;
 use std::fmt;
 use std::path::PathBuf;
 
-use super::net::{SocketDetails, SocketInfo};
+use super::net::Socket;
 
 /// POSIX file type as identified by the `st_mode` bits from `stat(2)`.
 #[derive(Debug, PartialEq)]
@@ -124,12 +124,6 @@ pub struct FdStat {
     pub rdev_minor: u64,
 }
 
-/// Socket metadata bundled for a file descriptor.
-pub struct FdSocket {
-    pub info: SocketInfo,
-    pub details: Option<SocketDetails>,
-}
-
 /// Fully-populated file descriptor information gathered from the library.
 ///
 /// Produced by [`ProcHandle::file_descriptors()`](super::ProcHandle::file_descriptors).
@@ -142,7 +136,7 @@ pub struct FileDescriptor {
     pub open_flags: OpenFlags,
     pub mnt_id: Option<u64>,
     pub extra_lines: Vec<String>,
-    pub socket: Option<FdSocket>,
+    pub socket: Option<Socket>,
     pub sockprotoname: Option<String>,
 }
 

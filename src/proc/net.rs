@@ -4,6 +4,8 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
+#[cfg(target_os = "linux")]
+use super::fd::parse_socket_inode;
 use super::{Error, ProcSource};
 
 /// Socket type as reported in `/proc/[pid]/net/*`.
@@ -77,7 +79,7 @@ impl std::fmt::Display for TcpState {
 
 /// Parsed socket metadata from `/proc/[pid]/net/*`.
 #[derive(Clone)]
-pub struct SocketInfo {
+pub(crate) struct SocketInfo {
     pub family: AddressFamily,
     pub sock_type: SockType,
     pub inode: u64,
@@ -326,17 +328,108 @@ pub(crate) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, SocketI
 }
 
 /// Socket details queried via `getsockopt` on a duplicated file descriptor.
-///
-/// These details are only available for live processes where fd duplication
-/// via `pidfd_getfd` succeeds.
 #[derive(Clone)]
-pub struct SocketDetails {
-    /// Socket option flags and buffer sizes (e.g., "SO_REUSEADDR", "SO_SNDBUF(212992)").
+pub(crate) struct SocketDetails {
     pub options: Vec<String>,
-    /// TCP connection metrics from `TCP_INFO`.
     pub tcp_info: Option<nix::libc::tcp_info>,
-    /// TCP congestion control algorithm name from `TCP_CONGESTION`.
     pub congestion_control: Option<String>,
+}
+
+/// Structured TCP connection metrics extracted from `libc::tcp_info`.
+pub struct TcpInfo {
+    pub snd_cwnd: u32,
+    pub snd_ssthresh: u32,
+    pub snd_wscale: u8,
+    pub rcv_wscale: u8,
+    pub rtt: u32,
+    pub rttvar: u32,
+    pub snd_mss: u32,
+    pub rcv_mss: u32,
+    pub advmss: u32,
+    pub pmtu: u32,
+    pub unacked: u32,
+    pub retrans: u32,
+    pub total_retrans: u32,
+    pub lost: u32,
+    pub rcv_space: u32,
+}
+
+impl TcpInfo {
+    fn from_raw(raw: &nix::libc::tcp_info) -> Self {
+        TcpInfo {
+            snd_cwnd: raw.tcpi_snd_cwnd,
+            snd_ssthresh: raw.tcpi_snd_ssthresh,
+            snd_wscale: raw.tcpi_snd_rcv_wscale & 0x0f,
+            rcv_wscale: (raw.tcpi_snd_rcv_wscale >> 4) & 0x0f,
+            rtt: raw.tcpi_rtt,
+            rttvar: raw.tcpi_rttvar,
+            snd_mss: raw.tcpi_snd_mss,
+            rcv_mss: raw.tcpi_rcv_mss,
+            advmss: raw.tcpi_advmss,
+            pmtu: raw.tcpi_pmtu,
+            unacked: raw.tcpi_unacked,
+            retrans: raw.tcpi_retrans,
+            total_retrans: raw.tcpi_total_retrans,
+            lost: raw.tcpi_lost,
+            rcv_space: raw.tcpi_rcv_space,
+        }
+    }
+}
+
+/// Peer process for a socket connection.
+#[derive(Clone)]
+pub struct PeerProcess {
+    pub pid: u64,
+    pub comm: String,
+}
+
+/// Unified socket metadata combining `/proc/net/*` info, `getsockopt` details,
+/// and peer process resolution.
+pub struct Socket {
+    pub family: AddressFamily,
+    pub sock_type: SockType,
+    pub inode: u64,
+    pub local_addr: Option<SocketAddr>,
+    pub peer_addr: Option<SocketAddr>,
+    pub tcp_state: Option<TcpState>,
+    pub tx_queue: Option<u32>,
+    pub rx_queue: Option<u32>,
+    pub options: Vec<String>,
+    pub tcp_info: Option<TcpInfo>,
+    pub congestion_control: Option<String>,
+    pub peer_process: Option<PeerProcess>,
+}
+
+impl Socket {
+    pub(crate) fn from_parts(
+        info: SocketInfo,
+        details: Option<SocketDetails>,
+        peer: Option<PeerProcess>,
+    ) -> Self {
+        let (tcp_info, congestion_control, options) = if let Some(d) = details {
+            (
+                d.tcp_info.map(|raw| TcpInfo::from_raw(&raw)),
+                d.congestion_control,
+                d.options,
+            )
+        } else {
+            (None, None, Vec::new())
+        };
+        Socket {
+            family: info.family,
+            sock_type: info.sock_type,
+            inode: info.inode,
+            local_addr: info.local_addr,
+            peer_addr: info.peer_addr,
+            tcp_state: info.tcp_state,
+            tx_queue: info.tx_queue,
+            rx_queue: info.rx_queue,
+            options,
+            tcp_info,
+            congestion_control,
+            peer_process: peer,
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -450,6 +543,179 @@ pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
         tcp_info: query_tcp_info(&sock_fd),
         congestion_control: query_tcp_congestion_control(&sock_fd),
     })
+}
+
+// -- Peer process resolution --------------------------------------------------
+
+#[cfg(target_os = "linux")]
+pub(crate) fn read_comm(pid: u64) -> Option<String> {
+    std::fs::read_to_string(format!("/proc/{}/comm", pid))
+        .ok()
+        .map(|comm| comm.trim_end().to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn read_comm(_pid: u64) -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn list_socket_owners() -> HashMap<u64, std::collections::HashSet<u64>> {
+    let mut owners = HashMap::<u64, std::collections::HashSet<u64>>::new();
+    let proc_entries = match std::fs::read_dir("/proc") {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!("failed to read /proc for socket ownership lookup: {}", e);
+            return owners;
+        }
+    };
+
+    for entry in proc_entries.flatten() {
+        let pid = match entry.file_name().to_string_lossy().parse::<u64>() {
+            Ok(pid) => pid,
+            Err(_) => continue,
+        };
+
+        let fd_dir = format!("/proc/{}/fd", pid);
+        let Ok(fd_entries) = std::fs::read_dir(fd_dir) else {
+            continue;
+        };
+
+        for fd_entry in fd_entries.flatten() {
+            if let Some(inode) = std::fs::read_link(fd_entry.path())
+                .ok()
+                .and_then(|link| parse_socket_inode(&link.to_string_lossy()))
+            {
+                owners.entry(inode).or_default().insert(pid);
+            }
+        }
+    }
+
+    owners
+}
+
+#[cfg(target_os = "linux")]
+fn local_tcp_peer_inodes(sockets: &HashMap<u64, SocketInfo>) -> HashMap<u64, u64> {
+    let mut by_tuple = HashMap::<(AddressFamily, SocketAddr, SocketAddr), Vec<u64>>::new();
+    for sock in sockets.values() {
+        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
+            || !matches!(sock.sock_type, SockType::Stream)
+        {
+            continue;
+        }
+        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
+            continue;
+        };
+        by_tuple
+            .entry((sock.family, local_addr, peer_addr))
+            .or_default()
+            .push(sock.inode);
+    }
+
+    let mut peers = HashMap::new();
+    for sock in sockets.values() {
+        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
+            || !matches!(sock.sock_type, SockType::Stream)
+        {
+            continue;
+        }
+        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
+            continue;
+        };
+        if !(local_addr.ip().is_loopback() && peer_addr.ip().is_loopback()) {
+            continue;
+        }
+
+        if let Some(candidates) = by_tuple.get(&(sock.family, peer_addr, local_addr)) {
+            if let Some(peer_inode) = candidates
+                .iter()
+                .copied()
+                .find(|inode| *inode != sock.inode)
+            {
+                peers.insert(sock.inode, peer_inode);
+            }
+        }
+    }
+    peers
+}
+
+pub(crate) fn has_loopback_tcp_peers(sockets: &HashMap<u64, SocketInfo>) -> bool {
+    sockets.values().any(|sock| {
+        matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
+            && matches!(sock.sock_type, SockType::Stream)
+            && sock.local_addr.is_some_and(|a| a.ip().is_loopback())
+            && sock.peer_addr.is_some_and(|a| a.ip().is_loopback())
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn derive_peer_processes(
+    target_pid: u64,
+    sockets: &HashMap<u64, SocketInfo>,
+) -> HashMap<u64, PeerProcess> {
+    let mut peers = HashMap::new();
+    let owners = list_socket_owners();
+    let mut comm_cache = HashMap::<u64, String>::new();
+
+    for (inode, peer_inode) in local_tcp_peer_inodes(sockets) {
+        let Some(pids) = owners.get(&peer_inode) else {
+            continue;
+        };
+
+        let chosen_pid = pids
+            .iter()
+            .copied()
+            .find(|pid| *pid != target_pid)
+            .or_else(|| pids.iter().copied().next());
+        let Some(chosen_pid) = chosen_pid else {
+            continue;
+        };
+
+        let comm = if let Some(comm) = comm_cache.get(&chosen_pid) {
+            comm.clone()
+        } else {
+            let Some(comm) = read_comm(chosen_pid) else {
+                continue;
+            };
+            comm_cache.insert(chosen_pid, comm.clone());
+            comm
+        };
+
+        peers.insert(
+            inode,
+            PeerProcess {
+                pid: chosen_pid,
+                comm,
+            },
+        );
+    }
+
+    peers
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn derive_peer_processes(
+    _target_pid: u64,
+    _sockets: &HashMap<u64, SocketInfo>,
+) -> HashMap<u64, PeerProcess> {
+    HashMap::new()
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
+    let sock_fd = duplicate_target_fd(pid, fd)?;
+    let creds = getsockopt(&sock_fd, sockopt::PeerCredentials).ok()?;
+    let peer_pid = creds.pid() as u64;
+    let comm = read_comm(peer_pid)?;
+    Some(PeerProcess {
+        pid: peer_pid,
+        comm,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn unix_peer_process(_pid: u64, _fd: u64) -> Option<PeerProcess> {
+    None
 }
 
 #[cfg(test)]
