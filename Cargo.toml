@@ -15,6 +15,7 @@ lexopt = "0.3.1"
 nix = { version = "0.30.1", features = ["event", "fs", "process", "sched", "signal", "socket"] }
 
 [build-dependencies]
+pkg-config = "0.3.32"
 roff = "0.2.2"
 
 [profile.release]

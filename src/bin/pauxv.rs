@@ -17,11 +17,11 @@
 use std::process::exit;
 
 struct Args {
-    pid: Vec<u64>,
+    operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pauxv PID...");
+    eprintln!("Usage: pauxv [pid | core]...");
     eprintln!("Print process auxiliary vector.");
     eprintln!();
     eprintln!("Options:");
@@ -32,7 +32,9 @@ fn print_usage() {
 fn parse_args() -> Args {
     use lexopt::prelude::*;
 
-    let mut args = Args { pid: Vec::new() };
+    let mut args = Args {
+        operands: Vec::new(),
+    };
     let mut parser = lexopt::Parser::from_env();
 
     while let Some(arg) = parser.next().unwrap_or_else(|e| {
@@ -49,14 +51,7 @@ fn parse_args() -> Args {
                 exit(0);
             }
             Value(val) => {
-                let s = val.to_string_lossy();
-                match s.parse::<u64>() {
-                    Ok(pid) if pid >= 1 => args.pid.push(pid),
-                    _ => {
-                        eprintln!("pauxv: invalid PID '{s}'");
-                        exit(2);
-                    }
-                }
+                args.operands.push(val.to_string_lossy().into_owned());
             }
             _ => {
                 eprintln!("pauxv: unexpected argument: {arg:?}");
@@ -65,8 +60,8 @@ fn parse_args() -> Args {
         }
     }
 
-    if args.pid.is_empty() {
-        eprintln!("pauxv: at least one PID required");
+    if args.operands.is_empty() {
+        eprintln!("pauxv: at least one PID or core required");
         exit(2);
     }
     args
@@ -78,13 +73,20 @@ fn main() {
 
     let mut error = false;
     let mut first = true;
-    for &pid in &args.pid {
+    for operand in &args.operands {
         if !first {
             println!();
         }
         first = false;
-        let source = ptools::LiveProcess::new(pid);
-        if !ptools::print_auxv_from(&source) {
+        let source = match ptools::resolve_operand(operand) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("pauxv: {e}");
+                error = true;
+                continue;
+            }
+        };
+        if !ptools::print_auxv_from(source.as_ref()) {
             error = true;
         }
     }

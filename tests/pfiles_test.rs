@@ -467,7 +467,7 @@ fn pfiles_rejects_pid_zero() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_contains(&stderr, "invalid PID");
+    assert_contains(&stderr, "PID must be >= 1");
 }
 
 #[test]
@@ -1075,5 +1075,5 @@ fn pfiles_exits_nonzero_when_any_pid_fails() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_contains(&stderr, "No such directory /proc/999999999/");
+    assert_contains(&stderr, "Unable to read /proc/999999999/fd/");
 }

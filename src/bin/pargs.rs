@@ -91,17 +91,17 @@ struct Args {
     args: bool,
     env: bool,
     auxv: bool,
-    pid: Vec<u64>,
+    operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pargs [-l] [-a|--args] [-e|--env] [-x|--auxv] PID...");
-    eprintln!("Print process arguments.");
+    eprintln!("Usage: pargs [-l] [-a|--args] [-e|--env] [-x|--auxv] [pid | core]...");
+    eprintln!("Print process arguments, environment variables, or auxiliary vector.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -l               Display arguments as a single command line");
     eprintln!("  -a, --args       Print process arguments (default)");
     eprintln!("  -e, --env        Print process environment variables");
+    eprintln!("  -l               Display arguments as a single command line");
     eprintln!("  -x, --auxv       Print process auxiliary vector");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
@@ -115,7 +115,7 @@ fn parse_args() -> Args {
         args: false,
         env: false,
         auxv: false,
-        pid: Vec::new(),
+        operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
 
@@ -137,14 +137,7 @@ fn parse_args() -> Args {
             Short('e') | Long("env") => args.env = true,
             Short('x') | Long("auxv") => args.auxv = true,
             Value(val) => {
-                let s = val.to_string_lossy();
-                match s.parse::<u64>() {
-                    Ok(pid) if pid >= 1 => args.pid.push(pid),
-                    _ => {
-                        eprintln!("pargs: invalid PID '{s}'");
-                        exit(2);
-                    }
-                }
+                args.operands.push(val.to_string_lossy().into_owned());
             }
             _ => {
                 eprintln!("pargs: unexpected argument: {arg:?}");
@@ -158,8 +151,8 @@ fn parse_args() -> Args {
         exit(2);
     }
 
-    if args.pid.is_empty() {
-        eprintln!("pargs: at least one PID required");
+    if args.operands.is_empty() {
+        eprintln!("pargs: at least one PID or core required");
         exit(2);
     }
     args
@@ -173,19 +166,26 @@ fn main() {
 
     let mut error = false;
     let mut first = true;
-    for &pid in &args.pid {
+    for operand in &args.operands {
         if !first {
             println!();
         }
         first = false;
-        let source = ptools::LiveProcess::new(pid);
+        let source = match ptools::resolve_operand(operand) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("pargs: {e}");
+                error = true;
+                continue;
+            }
+        };
         let mut section = false;
         if want_args {
             if args.line {
-                if !print_cmdline(&source) {
+                if !print_cmdline(source.as_ref()) {
                     error = true;
                 }
-            } else if !print_args(&source) {
+            } else if !print_args(source.as_ref()) {
                 error = true;
             }
             section = true;
@@ -194,7 +194,7 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_env_from(&source) {
+            if !ptools::print_env_from(source.as_ref()) {
                 error = true;
             }
             section = true;
@@ -203,7 +203,7 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_auxv_from(&source) {
+            if !ptools::print_auxv_from(source.as_ref()) {
                 error = true;
             }
         }

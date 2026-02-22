@@ -17,7 +17,7 @@
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
-use ptools::{LiveProcess, ParseError, ProcSource};
+use ptools::{ParseError, ProcSource};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
@@ -1299,11 +1299,6 @@ fn read_umask(source: &dyn ProcSource) -> Result<String, Box<dyn Error>> {
 
 fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
     let pid = source.pid();
-    let proc_dir = format!("/proc/{}/", pid);
-    if !Path::new(&proc_dir).exists() {
-        eprintln!("No such directory {}", &proc_dir);
-        return false;
-    }
 
     ptools::print_proc_summary_from(source);
     match read_nofile_rlimit(source) {
@@ -1339,11 +1334,11 @@ fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
 
 struct Args {
     non_verbose: bool,
-    pid: Vec<u64>,
+    operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pfiles [-n] PID...");
+    eprintln!("Usage: pfiles [-n] [pid | core]...");
     eprintln!("Print information for all open files in each process.");
     eprintln!();
     eprintln!("Options:");
@@ -1357,7 +1352,7 @@ fn parse_args() -> Args {
 
     let mut args = Args {
         non_verbose: false,
-        pid: Vec::new(),
+        operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
 
@@ -1376,14 +1371,7 @@ fn parse_args() -> Args {
             }
             Short('n') => args.non_verbose = true,
             Value(val) => {
-                let s = val.to_string_lossy();
-                match s.parse::<u64>() {
-                    Ok(pid) if pid >= 1 => args.pid.push(pid),
-                    _ => {
-                        eprintln!("pfiles: invalid PID '{s}'");
-                        exit(2);
-                    }
-                }
+                args.operands.push(val.to_string_lossy().into_owned());
             }
             _ => {
                 eprintln!("pfiles: unexpected argument: {arg:?}");
@@ -1392,8 +1380,8 @@ fn parse_args() -> Args {
         }
     }
 
-    if args.pid.is_empty() {
-        eprintln!("pfiles: at least one PID required");
+    if args.operands.is_empty() {
+        eprintln!("pfiles: at least one PID or core required");
         exit(2);
     }
     args
@@ -1405,13 +1393,20 @@ fn main() {
 
     let mut error = false;
     let mut first = true;
-    for &pid in &args.pid {
+    for operand in &args.operands {
         if !first {
             println!();
         }
         first = false;
-        let source = LiveProcess::new(pid);
-        if !print_files(&source, args.non_verbose) {
+        let source = match ptools::resolve_operand(operand) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("pfiles: {e}");
+                error = true;
+                continue;
+            }
+        };
+        if !print_files(source.as_ref(), args.non_verbose) {
             error = true;
         }
     }

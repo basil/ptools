@@ -16,15 +16,15 @@
 
 use std::process::exit;
 
-use ptools::{resolve_gid, resolve_uid, LiveProcess, ProcSource};
+use ptools::{resolve_gid, resolve_uid, ProcSource};
 
 struct Args {
     all: bool,
-    pid: Vec<u64>,
+    operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pcred [-a] PID...");
+    eprintln!("Usage: pcred [-a] [pid | core]...");
     eprintln!("Print process credentials.");
     eprintln!();
     eprintln!("Options:");
@@ -38,7 +38,7 @@ fn parse_args() -> Args {
 
     let mut args = Args {
         all: false,
-        pid: Vec::new(),
+        operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
 
@@ -59,14 +59,7 @@ fn parse_args() -> Args {
                 exit(0);
             }
             Value(val) => {
-                let s = val.to_string_lossy();
-                match s.parse::<u64>() {
-                    Ok(pid) if pid >= 1 => args.pid.push(pid),
-                    _ => {
-                        eprintln!("pcred: invalid PID '{s}'");
-                        exit(2);
-                    }
-                }
+                args.operands.push(val.to_string_lossy().into_owned());
             }
             _ => {
                 eprintln!("pcred: unexpected argument: {arg:?}");
@@ -75,8 +68,8 @@ fn parse_args() -> Args {
         }
     }
 
-    if args.pid.is_empty() {
-        eprintln!("pcred: at least one PID required");
+    if args.operands.is_empty() {
+        eprintln!("pcred: at least one PID or core required");
         exit(2);
     }
     args
@@ -226,13 +219,20 @@ fn main() {
 
     let mut error = false;
     let mut first = true;
-    for &pid in &args.pid {
+    for operand in &args.operands {
         if !first {
             println!();
         }
         first = false;
-        let source = LiveProcess::new(pid);
-        if !print_cred(&source, args.all) {
+        let source = match ptools::resolve_operand(operand) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("pcred: {e}");
+                error = true;
+                continue;
+            }
+        };
+        if !print_cred(source.as_ref(), args.all) {
             error = true;
         }
     }

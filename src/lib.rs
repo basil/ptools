@@ -25,9 +25,30 @@ use std::fs::File;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::mem::size_of;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use nix::libc;
+
+/// Resolve a positional operand to a `ProcSource`.
+///
+/// If the operand contains a `/` or exists as a path on disk, it is treated
+/// as a coredump file path; otherwise it is parsed as a PID.
+pub fn resolve_operand(arg: &str) -> Result<Box<dyn ProcSource>, String> {
+    if arg.contains('/') || Path::new(arg).exists() {
+        let path = PathBuf::from(arg);
+        CoredumpSource::from_corefile(&path)
+            .map(|s| Box::new(s) as Box<dyn ProcSource>)
+            .map_err(|e| e.to_string())
+    } else {
+        let pid = arg
+            .parse::<u64>()
+            .map_err(|e| format!("invalid PID '{}': {}", arg, e))?;
+        if pid == 0 {
+            return Err("PID must be >= 1".to_string());
+        }
+        Ok(Box::new(LiveProcess::new(pid)))
+    }
+}
 
 /// Reset SIGPIPE to the default behavior (terminate the process) so that
 /// writing to a closed pipe exits silently instead of panicking.  Rust

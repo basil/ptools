@@ -14,6 +14,7 @@ struct ManPage<'a> {
     description: &'a str,
     synopsis: &'a str,
     options: &'a [(&'a str, &'a str)],
+    operands: &'a [(&'a str, &'a str)],
     examples: &'a [Example<'a>],
     exit_status: &'a str,
     files: &'a str,
@@ -26,6 +27,14 @@ const DEFAULT_EXIT_STATUS: &str =
      permission denied, or invalid option).";
 
 const DEFAULT_FILES: &str = "/proc/pid/*\tProcess information and control files.";
+
+const CORE_OPERANDS: &[(&str, &str)] = &[
+    ("pid", "Process ID list."),
+    (
+        "core",
+        "Process core file, as produced by systemd-coredump(8).",
+    ),
+];
 
 fn render_man_page(page: &ManPage, out_dir: &Path) {
     let version = env!("CARGO_PKG_VERSION");
@@ -45,6 +54,14 @@ fn render_man_page(page: &ManPage, out_dir: &Path) {
             roff.control("TP", []);
             roff.text([bold(*flag)]);
             roff.text([roman(*help)]);
+        }
+    }
+    if !page.operands.is_empty() {
+        roff.control("SH", ["OPERANDS"]);
+        for (name, desc) in page.operands {
+            roff.control("TP", []);
+            roff.text([bold(*name)]);
+            roff.text([roman(*desc)]);
         }
     }
     if !page.examples.is_empty() {
@@ -90,18 +107,24 @@ fn render_man_page(page: &ManPage, out_dir: &Path) {
 }
 
 fn main() {
+    pkg_config::Config::new()
+        .atleast_version("246")
+        .probe("libsystemd")
+        .expect("libsystemd not found (install systemd-devel or libsystemd-dev)");
+
     let out_dir = Path::new("target/man");
     fs::create_dir_all(out_dir).unwrap();
 
     render_man_page(
         &ManPage {
             name: "pargs",
-            about: "print process arguments",
-            description: "Examine a target process and print arguments, environment variables \
-                          and values, or the process auxiliary vector. \
+            about: "print process arguments, environment variables, or auxiliary vector",
+            description: "Examine a target process or process core file \
+                          and print arguments, environment variables and values, or the \
+                          process auxiliary vector. \
                           The pauxv command is equivalent to running pargs(1) with the -x option. \
                           The penv command is equivalent to running pargs(1) with the -e option.",
-            synopsis: "[-l] [-a|--args] [-e|--env] [-x|--auxv] PID...",
+            synopsis: "[-l] [-a|--args] [-e|--env] [-x|--auxv] [pid | core]...",
             options: &[
                 (
                     "-l",
@@ -122,10 +145,11 @@ fn main() {
                     "Print the process auxiliary vector as contained in /proc/pid/auxv.",
                 ),
             ],
+            operands: CORE_OPERANDS,
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "pauxv(1), penv(1), proc(5)",
+            see_also: "pauxv(1), penv(1), coredumpctl(1), proc(5)",
             warnings: "",
         },
         out_dir,
@@ -135,14 +159,16 @@ fn main() {
         &ManPage {
             name: "pauxv",
             about: "print process auxiliary vector",
-            description: "Examine a target process and print the auxiliary vector. \
+            description: "Examine a target process or process core file \
+                          and print the process auxiliary vector. \
                           This command is equivalent to running pargs(1) with the -x option.",
-            synopsis: "PID...",
+            synopsis: "[pid | core]...",
             options: &[],
+            operands: CORE_OPERANDS,
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "pargs(1), penv(1), proc(5)",
+            see_also: "pargs(1), penv(1), coredumpctl(1), proc(5)",
             warnings: "",
         },
         out_dir,
@@ -152,14 +178,16 @@ fn main() {
         &ManPage {
             name: "penv",
             about: "print process environment variables",
-            description: "Examine a target process and print environment variables and values. \
+            description: "Examine a target process or process core file \
+                          and print environment variables and values. \
                           This command is equivalent to running pargs(1) with the -e option.",
-            synopsis: "PID...",
+            synopsis: "[pid | core]...",
             options: &[],
+            operands: CORE_OPERANDS,
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "pargs(1), pauxv(1), environ(7), proc(5)",
+            see_also: "pargs(1), pauxv(1), coredumpctl(1), environ(7), proc(5)",
             warnings: "",
         },
         out_dir,
@@ -170,21 +198,23 @@ fn main() {
             name: "pcred",
             about: "print process credentials",
             description: "Print the credentials (effective, real, saved UIDs and GIDs) \
-                          of each process. By default, if the effective, real, and \
-                          saved-set user (group) IDs are identical, they are printed in \
-                          condensed form as e/r/suid (e/r/sgid); otherwise they are \
-                          printed individually. Supplementary groups are also displayed.",
-            synopsis: "[-a] PID...",
+                          of each process or process core file. By default, if the \
+                          effective, real, and saved-set user (group) IDs are identical, \
+                          they are printed in condensed form as e/r/suid (e/r/sgid); \
+                          otherwise they are printed individually. Supplementary groups \
+                          are also displayed.",
+            synopsis: "[-a] [pid | core]...",
             options: &[(
                 "-a, --all",
                 "Report all credential information separately. By default, if the \
                  effective, real, and saved-set user (group) IDs are identical, they \
                  are reported in condensed form.",
             )],
+            operands: CORE_OPERANDS,
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "pfiles(1), proc(5), credentials(7)",
+            see_also: "pfiles(1), coredumpctl(1), proc(5), credentials(7)",
             warnings: "",
         },
         out_dir,
@@ -195,24 +225,26 @@ fn main() {
             name: "pfiles",
             about: "report open file information",
             description: "Print fstat(2) and fcntl(2) information for all open files in each \
-                          process. For network endpoints, provide local address information and \
-                          peer address information when connected. For sockets, provide the \
-                          socket type, socket options, and send and receive buffer sizes. Also \
-                          print a path to the file when that information is available from \
-                          /proc/pid/fd. This is not necessarily the same name used to open the \
-                          file. In addition, print the current soft and hard RLIMIT_NOFILE \
-                          limits and the process umask. See proc(5) for more information.",
-            synopsis: "[-n] PID...",
+                          process or process core file. For network endpoints, provide local \
+                          address information and peer address information when connected. \
+                          For sockets, provide the socket type, socket options, and send and \
+                          receive buffer sizes. Also print a path to the file when that \
+                          information is available from /proc/pid/fd. This is not necessarily \
+                          the same name used to open the file. In addition, print the current \
+                          soft and hard RLIMIT_NOFILE limits and the process umask. See \
+                          proc(5) for more information.",
+            synopsis: "[-n] [pid | core]...",
             options: &[(
                 "-n",
                 "Set non-verbose mode. Do not display verbose information for each file \
                  descriptor. Instead, limit output to the information that the process \
                  would retrieve by applying fstat(2) to each of its file descriptors.",
             )],
+            operands: CORE_OPERANDS,
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "fstat(2), fcntl(2), proc(5)",
+            see_also: "fstat(2), fcntl(2), coredumpctl(1), proc(5)",
             warnings: "",
         },
         out_dir,
@@ -222,16 +254,18 @@ fn main() {
         &ManPage {
             name: "psig",
             about: "list process signal actions",
-            description: "List the signal actions and handlers of each process. For each \
-                          signal, print whether the signal is caught, ignored, or handled by \
-                          default, and whether the signal is blocked or pending. Real-time \
-                          signals (SIGRTMIN through SIGRTMAX) are also displayed.",
-            synopsis: "PID...",
+            description: "List the signal actions and handlers of each process or process \
+                          core file. For each signal, print whether the signal is caught, \
+                          ignored, or handled by default, and whether the signal is blocked \
+                          or pending. Real-time signals (SIGRTMIN through SIGRTMAX) are also \
+                          displayed.",
+            synopsis: "[pid | core]...",
             options: &[],
+            operands: CORE_OPERANDS,
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
-            see_also: "kill(1), signal(7), proc(5)",
+            see_also: "kill(1), signal(7), coredumpctl(1), proc(5)",
             warnings: "",
         },
         out_dir,
@@ -244,6 +278,7 @@ fn main() {
             description: "Stop each process by sending SIGSTOP.",
             synopsis: "PID...",
             options: &[],
+            operands: &[],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -264,6 +299,7 @@ fn main() {
             description: "Set running each process by sending SIGCONT (the inverse of pstop(1)).",
             synopsis: "PID...",
             options: &[],
+            operands: &[],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -287,6 +323,7 @@ fn main() {
                  process is a child of the calling process, the wait status is also \
                  displayed.",
             )],
+            operands: &[],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -300,7 +337,7 @@ fn main() {
         &ManPage {
             name: "ptree",
             about: "print process trees",
-            description: "Print process trees containing the specified pids or users, with \
+            description: "Print process trees containing the specified PIDs or users, with \
                           child processes indented from their respective parent processes. An \
                           argument of all digits is taken to be a process ID; otherwise it is \
                           assumed to be a user login name. The default is all processes.",
@@ -317,6 +354,7 @@ fn main() {
                      ASCII line drawing characters are used.",
                 ),
             ],
+            operands: &[],
             examples: &[
                 Example {
                     title: "Example 1 Using ptree",
@@ -379,6 +417,7 @@ $ ptree -ag `pgrep ssh`
                  bound if the thread's CPU affinity mask includes any CPU on \
                  that node, or none otherwise.",
             )],
+            operands: &[],
             examples: &[
                 Example {
                     title: "Example 1 Display home nodes",
