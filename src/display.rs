@@ -2,7 +2,7 @@ use crate::proc::auxv::{decode_hwcap, read_auxv, AuxvType};
 use crate::proc::cred::{resolve_gid, resolve_uid};
 use crate::proc::{Error, ProcHandle};
 
-pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
+pub fn print_env_from(handle: &mut ProcHandle) -> Result<(), Error> {
     // This contains the environ as it was when the proc was started. To get the current
     // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
@@ -27,7 +27,7 @@ pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
 }
 
 pub fn print_env(pid: u64) -> Result<(), Error> {
-    print_env_from(&ProcHandle::from_pid(pid))
+    print_env_from(&mut ProcHandle::from_pid(pid))
 }
 
 #[allow(clippy::unnecessary_cast)]

@@ -158,7 +158,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let mut handle = match ptools::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("pargs: {e}");
@@ -166,9 +166,6 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.warnings() {
-            eprintln!("{w}");
-        }
         let mut section = false;
         if want_args {
             if args.line {
@@ -184,7 +181,7 @@ fn main() {
             if section {
                 println!();
             }
-            if let Err(e) = ptools::print_env_from(&handle) {
+            if let Err(e) = ptools::print_env_from(&mut handle) {
                 eprintln!("pargs: {}: {e}", handle.pid());
                 error = true;
             }
@@ -198,6 +195,9 @@ fn main() {
                 eprintln!("pargs: {}: {e}", handle.pid());
                 error = true;
             }
+        }
+        for w in handle.warnings() {
+            eprintln!("{w}");
         }
     }
     if error {

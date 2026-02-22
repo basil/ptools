@@ -433,7 +433,7 @@ impl ProcHandle {
     /// `(key, value)` pairs.  Entries that lack an `=` or have an
     /// empty key are silently skipped (processes like sshd can overwrite
     /// their environ memory with status info, leaving garbage).
-    pub fn environ(&self) -> Result<Vec<(OsString, OsString)>, Error> {
+    pub fn environ(&mut self) -> Result<Vec<(OsString, OsString)>, Error> {
         let bytes = self.source.read_environ()?;
         let mut vars = Vec::new();
         for chunk in bytes.split(|b| *b == b'\0') {
@@ -445,6 +445,11 @@ impl ProcHandle {
                     let key = OsString::from(std::ffi::OsStr::from_bytes(&chunk[..pos]));
                     let value = OsString::from(std::ffi::OsStr::from_bytes(&chunk[pos + 1..]));
                     vars.push((key, value));
+                } else {
+                    self.warnings.push(format!(
+                        "warning: skipping environ entry with empty key for pid {}",
+                        self.pid()
+                    ));
                 }
             }
         }
