@@ -23,6 +23,8 @@ fn run_process(pid: u64) -> bool {
     let nix_pid = Pid::from_raw(pid as i32);
     let handle = ptools::ProcHandle::from_pid(pid);
 
+    use ptools::ProcessState;
+
     // Advisory pre-check: the state can change between this read and the
     // kill(2) below (TOCTOU), but that is harmless -- SIGCONT on a
     // ptrace-stopped process is a no-op, and on a running process it is
@@ -32,16 +34,16 @@ fn run_process(pid: u64) -> bool {
             eprintln!("prun: process {} does not exist", pid);
             return false;
         }
-        Some('t') => {
+        Some(ProcessState::TracingStop) => {
             eprintln!(
                 "prun: process {} is ptrace-stopped by a debugger; SIGCONT has no effect",
                 pid
             );
             return false;
         }
-        Some('T') => {} // stopped -- this is the expected case
-        Some(_) => {
-            eprintln!("prun: process {} is not stopped", pid);
+        Some(ProcessState::Stopped) => {} // stopped -- this is the expected case
+        Some(state) => {
+            eprintln!("prun: process {} is not stopped ({})", pid, state);
             return false;
         }
     }

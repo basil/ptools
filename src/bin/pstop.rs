@@ -24,14 +24,16 @@ use nix::unistd::Pid;
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
 fn verify_stopped(pid: u64) -> bool {
+    use ptools::ProcessState;
+
     let handle = ptools::ProcHandle::from_pid(pid);
     let mut backoff = Duration::from_millis(10);
     let cap = Duration::from_millis(100);
     let mut warned_d = false;
     loop {
         match handle.state() {
-            Some('T') => return true,
-            Some('t') => {
+            Some(ProcessState::Stopped) => return true,
+            Some(ProcessState::TracingStop) => {
                 eprintln!(
                     "pstop: process {} is stopped under a debugger, not by us",
                     pid
@@ -42,7 +44,7 @@ fn verify_stopped(pid: u64) -> bool {
                 eprintln!("pstop: process {} has exited", pid);
                 return false;
             }
-            Some('D') => {
+            Some(ProcessState::DiskSleep) => {
                 if !warned_d {
                     eprintln!(
                         "pstop: process {} is in uninterruptible sleep; \

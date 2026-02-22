@@ -110,13 +110,13 @@ impl ProcHandle {
 
     // -- Parsed from /proc/[pid]/stat --------------------------------
 
-    /// Process state character (R, S, D, Z, T, t, ...).
-    pub fn state(&self) -> Option<char> {
+    /// Process state parsed from `/proc/[pid]/stat`.
+    pub fn state(&self) -> Option<ProcessState> {
         let stat = self.source.read_stat().ok()?;
         // Use rfind to handle comm fields containing parentheses.
         let after_comm = stat.rfind(')')? + 1;
         let rest = stat[after_comm..].trim_start();
-        rest.chars().next()
+        rest.chars().next().map(ProcessState::from_char)
     }
 
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
@@ -436,6 +436,53 @@ impl ProcHandle {
     }
 }
 
+/// Process state from `/proc/[pid]/stat`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessState {
+    Running,
+    Sleeping,
+    DiskSleep,
+    Zombie,
+    Stopped,
+    TracingStop,
+    Dead,
+    Idle,
+    /// A state character not covered by the known variants.
+    Other(char),
+}
+
+impl ProcessState {
+    fn from_char(c: char) -> Self {
+        match c {
+            'R' => Self::Running,
+            'S' => Self::Sleeping,
+            'D' => Self::DiskSleep,
+            'Z' => Self::Zombie,
+            'T' => Self::Stopped,
+            't' => Self::TracingStop,
+            'X' | 'x' => Self::Dead,
+            'I' => Self::Idle,
+            other => Self::Other(other),
+        }
+    }
+}
+
+impl std::fmt::Display for ProcessState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Running => write!(f, "running"),
+            Self::Sleeping => write!(f, "sleeping"),
+            Self::DiskSleep => write!(f, "uninterruptible sleep"),
+            Self::Zombie => write!(f, "zombie"),
+            Self::Stopped => write!(f, "stopped"),
+            Self::TracingStop => write!(f, "tracing stop"),
+            Self::Dead => write!(f, "dead"),
+            Self::Idle => write!(f, "idle"),
+            Self::Other(c) => write!(f, "unknown state '{}'", c),
+        }
+    }
+}
+
 /// Signal disposition masks parsed from /proc/[pid]/status.
 pub struct SignalMasks {
     pub ignored: Vec<bool>,
@@ -593,8 +640,8 @@ pub fn resolve_operand_with_tid(arg: &str) -> Result<(ProcHandle, Option<u64>), 
     }
 }
 
-/// Read the state character from /proc/[pid]/stat.
-pub fn proc_state(pid: u64) -> Option<char> {
+/// Read the process state from /proc/[pid]/stat.
+pub fn proc_state(pid: u64) -> Option<ProcessState> {
     ProcHandle::from_pid(pid).state()
 }
 
