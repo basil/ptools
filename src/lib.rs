@@ -22,6 +22,7 @@ pub use display::*;
 pub use proc::auxv;
 pub use proc::cred::{resolve_gid, resolve_uid, ProcCred};
 pub use proc::numa::{cpu_to_node, numa_node_cpus, numa_online_nodes, parse_list_format, CpuSet};
+pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{
     enumerate_tids, proc_state, resolve_operand, resolve_operand_with_tid, ParseError, ProcHandle,
     ProcessState, SignalMasks,

@@ -3,6 +3,7 @@ pub(crate) mod coredump;
 pub mod cred;
 pub(crate) mod live;
 pub mod numa;
+pub mod signal;
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -13,6 +14,7 @@ use std::path::{Path, PathBuf};
 use coredump::CoredumpSource;
 use cred::{parse_cred, ProcCred};
 use live::LiveProcess;
+use signal::{intersect_blocked_masks, parse_signal_set, SignalSet};
 
 /// Abstraction over process data sources.
 ///
@@ -201,16 +203,11 @@ impl ProcHandle {
 
     /// Parse signal masks (SigIgn/SigCgt/SigBlk/SigPnd/ShdPnd) from status.
     /// The blocked mask is the intersection across all threads.
-    pub fn signal_masks(&self) -> Option<SignalMasks> {
-        let pid = self.pid();
+    pub fn signal_masks(&self) -> Result<SignalMasks, ParseError> {
         let status = self
             .source
             .read_status()
-            .map_err(|e| {
-                eprintln!("Error reading /proc/{}/status: {}", pid, e);
-                e
-            })
-            .ok()?;
+            .map_err(|e| ParseError::in_file("status", &e.to_string()))?;
 
         let mut sig_ign = None;
         let mut sig_cgt = None;
@@ -232,28 +229,12 @@ impl ProcHandle {
             }
         }
 
-        let sig_ign_hex = match sig_ign {
-            Some(x) => x,
-            None => {
-                eprintln!("Error parsing /proc/{}/status: missing SigIgn", pid);
-                return None;
-            }
-        };
-        let sig_cgt_hex = match sig_cgt {
-            Some(x) => x,
-            None => {
-                eprintln!("Error parsing /proc/{}/status: missing SigCgt", pid);
-                return None;
-            }
-        };
+        let sig_ign_hex = sig_ign.ok_or_else(|| ParseError::in_file("status", "missing SigIgn"))?;
+        let sig_cgt_hex = sig_cgt.ok_or_else(|| ParseError::in_file("status", "missing SigCgt"))?;
 
-        let parse = |name: &str, hex: &str| -> Option<Vec<bool>> {
+        let parse = |name: &str, hex: &str| -> Result<SignalSet, ParseError> {
             parse_signal_set(hex)
-                .map_err(|e| {
-                    eprintln!("Error parsing /proc/{}/status {}: {}", pid, name, e);
-                    e
-                })
-                .ok()
+                .map_err(|e| ParseError::in_file("status", &format!("invalid {}: {}", name, e)))
         };
 
         let ignored = parse("SigIgn", &sig_ign_hex)?;
@@ -264,17 +245,17 @@ impl ProcHandle {
         let blocked = self
             .thread_blocked_masks()
             .map(|masks| intersect_blocked_masks(&masks))
-            .or_else(|| sig_blk.and_then(|s| parse("SigBlk", &s)))
+            .or_else(|| sig_blk.and_then(|s| parse_signal_set(&s).ok()))
             .unwrap_or_default();
 
         let pending = sig_pnd
-            .and_then(|s| parse("SigPnd", &s))
+            .and_then(|s| parse_signal_set(&s).ok())
             .unwrap_or_default();
         let shared_pending = shd_pnd
-            .and_then(|s| parse("ShdPnd", &s))
+            .and_then(|s| parse_signal_set(&s).ok())
             .unwrap_or_default();
 
-        Some(SignalMasks {
+        Ok(SignalMasks {
             ignored,
             caught,
             blocked,
@@ -284,7 +265,7 @@ impl ProcHandle {
     }
 
     /// Per-thread blocked masks (SigBlk from each thread's status).
-    pub fn thread_blocked_masks(&self) -> Option<Vec<Vec<bool>>> {
+    fn thread_blocked_masks(&self) -> Option<Vec<SignalSet>> {
         let tids = self.source.list_tids().ok()?;
 
         // Warn if the source reports fewer threads than actually existed.
@@ -485,62 +466,12 @@ impl std::fmt::Display for ProcessState {
 
 /// Signal disposition masks parsed from /proc/[pid]/status.
 pub struct SignalMasks {
-    pub ignored: Vec<bool>,
-    pub caught: Vec<bool>,
+    pub ignored: SignalSet,
+    pub caught: SignalSet,
     /// Intersection of SigBlk across all threads.
-    pub blocked: Vec<bool>,
-    pub pending: Vec<bool>,
-    pub shared_pending: Vec<bool>,
-}
-
-/// Parse a hex signal mask (e.g. from SigIgn) into a boolean vector indexed by signal number.
-pub fn parse_signal_set(hex: &str) -> Result<Vec<bool>, String> {
-    let trimmed = hex.trim();
-    if trimmed.is_empty() {
-        return Err("empty signal mask".to_string());
-    }
-
-    let mut bits = vec![false; 1];
-    for (nibble_idx, ch) in trimmed.bytes().rev().enumerate() {
-        let nibble = match ch {
-            b'0'..=b'9' => ch - b'0',
-            b'a'..=b'f' => 10 + (ch - b'a'),
-            b'A'..=b'F' => 10 + (ch - b'A'),
-            _ => {
-                return Err(format!("invalid hex digit '{}'", ch as char));
-            }
-        };
-
-        for bit in 0..4 {
-            if (nibble & (1 << bit)) == 0 {
-                continue;
-            }
-            let sig = nibble_idx * 4 + bit as usize + 1;
-            if sig >= bits.len() {
-                bits.resize(sig + 1, false);
-            }
-            bits[sig] = true;
-        }
-    }
-
-    Ok(bits)
-}
-
-/// Compute the intersection of per-thread blocked masks.
-pub fn intersect_blocked_masks(masks: &[Vec<bool>]) -> Vec<bool> {
-    let Some(first) = masks.first() else {
-        return Vec::new();
-    };
-    let max_len = masks.iter().map(|m| m.len()).max().unwrap_or(0);
-    let mut result = vec![false; max_len];
-    for i in 0..max_len {
-        result[i] = masks.iter().all(|m| i < m.len() && m[i]);
-    }
-    // If there's only one thread, just return its mask directly.
-    if masks.len() == 1 {
-        return first.clone();
-    }
-    result
+    pub blocked: SignalSet,
+    pub pending: SignalSet,
+    pub shared_pending: SignalSet,
 }
 
 impl ProcHandle {

@@ -15,7 +15,7 @@
 //
 
 use nix::libc;
-use ptools::ProcHandle;
+use ptools::{ProcHandle, SignalSet};
 
 #[derive(Copy, Clone)]
 enum SignalAction {
@@ -24,61 +24,10 @@ enum SignalAction {
     Caught,
 }
 
-fn has_signal(m: &[bool], sig: usize) -> bool {
-    sig < m.len() && m[sig]
-}
-
-fn signal_name(sig: usize, rtmin: usize, rtmax: usize) -> String {
-    if (rtmin..=rtmax).contains(&sig) {
-        if sig == rtmin {
-            return "RTMIN".to_string();
-        }
-        if sig == rtmax {
-            return "RTMAX".to_string();
-        }
-        return format!("RTMIN+{}", sig - rtmin);
-    }
-
-    match sig as i32 {
-        libc::SIGHUP => "HUP".to_string(),
-        libc::SIGINT => "INT".to_string(),
-        libc::SIGQUIT => "QUIT".to_string(),
-        libc::SIGILL => "ILL".to_string(),
-        libc::SIGTRAP => "TRAP".to_string(),
-        libc::SIGABRT => "ABRT".to_string(),
-        libc::SIGBUS => "BUS".to_string(),
-        libc::SIGFPE => "FPE".to_string(),
-        libc::SIGKILL => "KILL".to_string(),
-        libc::SIGUSR1 => "USR1".to_string(),
-        libc::SIGSEGV => "SEGV".to_string(),
-        libc::SIGUSR2 => "USR2".to_string(),
-        libc::SIGPIPE => "PIPE".to_string(),
-        libc::SIGALRM => "ALRM".to_string(),
-        libc::SIGTERM => "TERM".to_string(),
-        libc::SIGSTKFLT => "STKFLT".to_string(),
-        libc::SIGCHLD => "CLD".to_string(),
-        libc::SIGCONT => "CONT".to_string(),
-        libc::SIGSTOP => "STOP".to_string(),
-        libc::SIGTSTP => "TSTP".to_string(),
-        libc::SIGTTIN => "TTIN".to_string(),
-        libc::SIGTTOU => "TTOU".to_string(),
-        libc::SIGURG => "URG".to_string(),
-        libc::SIGXCPU => "XCPU".to_string(),
-        libc::SIGXFSZ => "XFSZ".to_string(),
-        libc::SIGVTALRM => "VTALRM".to_string(),
-        libc::SIGPROF => "PROF".to_string(),
-        libc::SIGWINCH => "WINCH".to_string(),
-        libc::SIGIO => "POLL".to_string(),
-        libc::SIGPWR => "PWR".to_string(),
-        libc::SIGSYS => "SYS".to_string(),
-        _ => format!("SIG{}", sig),
-    }
-}
-
-fn action_for_signal(sig: usize, sig_ign: &[bool], sig_cgt: &[bool]) -> SignalAction {
-    if has_signal(sig_ign, sig) {
+fn action_for_signal(sig: usize, sig_ign: &SignalSet, sig_cgt: &SignalSet) -> SignalAction {
+    if sig_ign.contains(sig) {
         SignalAction::Ignored
-    } else if has_signal(sig_cgt, sig) {
+    } else if sig_cgt.contains(sig) {
         SignalAction::Caught
     } else {
         SignalAction::Default
@@ -96,8 +45,12 @@ fn action_text(action: SignalAction) -> &'static str {
 fn print_signal_actions(handle: &ProcHandle) -> bool {
     ptools::print_proc_summary_from(handle);
 
-    let Some(masks) = handle.signal_masks() else {
-        return false;
+    let masks = match handle.signal_masks() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("psig: {}", e);
+            return false;
+        }
     };
 
     let rtmin = libc::SIGRTMIN() as usize;
@@ -107,15 +60,15 @@ fn print_signal_actions(handle: &ProcHandle) -> bool {
         64,
         std::cmp::max(
             rtmax,
-            std::cmp::max(masks.ignored.len(), masks.caught.len()).saturating_sub(1),
+            std::cmp::max(masks.ignored.max_signal(), masks.caught.max_signal()),
         ),
     );
 
     for sig in 1..=max_sig {
-        let name = signal_name(sig, rtmin, rtmax);
+        let name = ptools::signal_name(sig, rtmin, rtmax);
         let action = action_for_signal(sig, &masks.ignored, &masks.caught);
-        let blocked = has_signal(&masks.blocked, sig);
-        let pending = has_signal(&masks.pending, sig) || has_signal(&masks.shared_pending, sig);
+        let blocked = masks.blocked.contains(sig);
+        let pending = masks.pending.contains(sig) || masks.shared_pending.contains(sig);
 
         let mut extra = Vec::new();
         if blocked {
