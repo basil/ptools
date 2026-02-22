@@ -57,7 +57,8 @@ impl ProcSource for LiveProcess {
     }
 
     fn read_comm(&self) -> io::Result<String> {
-        std::fs::read_to_string(format!("/proc/{}/comm", self.pid))
+        let comm = std::fs::read_to_string(format!("/proc/{}/comm", self.pid))?;
+        Ok(comm.trim_end().to_string())
     }
 
     fn read_cmdline(&self) -> io::Result<Vec<u8>> {

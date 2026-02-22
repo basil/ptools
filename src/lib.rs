@@ -622,8 +622,7 @@ pub fn print_cmd_summary_from(source: &dyn ProcSource) {
             if summary.is_empty() {
                 let is_zombie = proc_state_from(source) == Some('Z');
                 match source.read_comm() {
-                    Ok(comm) => {
-                        let comm = comm.trim_end();
+                    Ok(ref comm) => {
                         if comm.is_empty() {
                             print!("<unknown>");
                         } else {

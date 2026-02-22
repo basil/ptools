@@ -239,9 +239,7 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_comm(&self) -> io::Result<String> {
-        let comm = self.get_field_str("COREDUMP_COMM")?;
-        // /proc/[pid]/comm has a trailing newline
-        Ok(format!("{}\n", comm))
+        self.get_field_str("COREDUMP_COMM").map(str::to_string)
     }
 
     fn read_cmdline(&self) -> io::Result<Vec<u8>> {
