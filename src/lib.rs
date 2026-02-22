@@ -21,6 +21,7 @@ pub mod proc;
 pub use display::*;
 pub use proc::auxv;
 pub use proc::cred::{resolve_gid, resolve_uid, ProcCred};
+pub use proc::net::{SockType, SocketInfo, TcpState};
 pub use proc::numa::{cpu_to_node, numa_node_cpus, numa_online_nodes, parse_list_format, CpuSet};
 pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{

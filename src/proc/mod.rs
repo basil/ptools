@@ -2,6 +2,7 @@ pub mod auxv;
 pub(crate) mod coredump;
 pub mod cred;
 pub(crate) mod live;
+pub(crate) mod net;
 pub mod numa;
 pub mod signal;
 
@@ -167,6 +168,12 @@ impl ProcHandle {
 
     pub fn net_file(&self, name: &str) -> Result<String, Error> {
         Ok(self.source.read_net_file(name)?)
+    }
+
+    /// Parse socket metadata from `/proc/[pid]/net/*` files, returning a map
+    /// keyed by inode number.
+    pub fn socket_info(&self) -> std::collections::HashMap<u64, net::SocketInfo> {
+        net::parse_socket_info(&*self.source)
     }
 
     // -- Parsed from /proc/[pid]/stat --------------------------------
