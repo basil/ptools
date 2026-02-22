@@ -15,8 +15,8 @@ pub fn print_env_from(handle: &ProcHandle) -> bool {
     //
     // TODO Long term, we might want to print the current environment if we can, and print a warning
     // + the contents of /proc/[pid]/environ if we can't
-    let bytes = match handle.environ_bytes() {
-        Ok(bytes) => bytes,
+    let vars = match handle.environ() {
+        Ok(vars) => vars,
         Err(e) => {
             eprintln!("Error opening /proc/{}/environ: {}", handle.pid(), e);
             return false;
@@ -25,21 +25,13 @@ pub fn print_env_from(handle: &ProcHandle) -> bool {
 
     print_proc_summary_from(handle);
 
-    let mut i = 0;
-    for chunk in bytes.split(|b| *b == b'\0') {
-        if chunk.is_empty() {
-            continue;
-        }
-        let arg = String::from_utf8_lossy(chunk);
-        // Skip entries that aren't valid env vars (KEY=VALUE with non-empty KEY).
-        // Processes like sshd overwrite their environ memory with status info,
-        // leaving garbage and null bytes in /proc/[pid]/environ.
-        if let Some(pos) = arg.find('=') {
-            if pos > 0 {
-                println!("envp[{}]: {}", i, arg);
-                i += 1;
-            }
-        }
+    for (i, (key, value)) in vars.iter().enumerate() {
+        println!(
+            "envp[{}]: {}={}",
+            i,
+            key.to_string_lossy(),
+            value.to_string_lossy()
+        );
     }
     true
 }

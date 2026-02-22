@@ -5,7 +5,9 @@ pub(crate) mod live;
 pub mod numa;
 
 use std::error::Error;
+use std::ffi::OsString;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use coredump::CoredumpSource;
@@ -72,10 +74,6 @@ impl ProcHandle {
 
     pub fn cmdline_bytes(&self) -> io::Result<Vec<u8>> {
         self.source.read_cmdline()
-    }
-
-    pub fn environ_bytes(&self) -> io::Result<Vec<u8>> {
-        self.source.read_environ()
     }
 
     pub fn auxv_bytes(&self) -> io::Result<Vec<u8>> {
@@ -363,6 +361,30 @@ impl ProcHandle {
             args.pop();
         }
         Ok(args)
+    }
+
+    /// Read environment variables and parse into key-value pairs.
+    ///
+    /// Splits the raw NUL-delimited environ blob on `=` to produce
+    /// `(key, value)` pairs.  Entries that lack an `=` or have an
+    /// empty key are silently skipped (processes like sshd can overwrite
+    /// their environ memory with status info, leaving garbage).
+    pub fn environ(&self) -> io::Result<Vec<(OsString, OsString)>> {
+        let bytes = self.source.read_environ()?;
+        let mut vars = Vec::new();
+        for chunk in bytes.split(|b| *b == b'\0') {
+            if chunk.is_empty() {
+                continue;
+            }
+            if let Some(pos) = chunk.iter().position(|b| *b == b'=') {
+                if pos > 0 {
+                    let key = OsString::from(std::ffi::OsStr::from_bytes(&chunk[..pos]));
+                    let value = OsString::from(std::ffi::OsStr::from_bytes(&chunk[pos + 1..]));
+                    vars.push((key, value));
+                }
+            }
+        }
+        Ok(vars)
     }
 
     /// Parse the "flags:" field from fdinfo as an octal file-flags value.
