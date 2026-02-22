@@ -431,11 +431,14 @@ $ ptree -ag `pgrep ssh`
             name: "plgrp",
             about: "display home NUMA node and thread affinities",
             description: "Display the home NUMA node for each thread in the specified \
-                          processes. The home node is the NUMA node of the CPU on which the \
-                          thread is currently running. With the -a option, also display \
-                          whether each thread's CPU affinity includes CPUs on the requested \
-                          nodes.",
-            synopsis: "[-a node_list] pid[/tid] ...",
+                          processes or process core files. The home node is the NUMA node \
+                          of the CPU on which the thread is currently running. With the -a \
+                          option, also display whether each thread's CPU affinity includes \
+                          CPUs on the requested nodes. For core files, the HOME column \
+                          shows ? because the running CPU is not captured by \
+                          systemd-coredump(8), and CPU affinity is derived from \
+                          Cpus_allowed_list in the saved process status.",
+            synopsis: "[-a node_list] [pid[/tid] | core] ...",
             options: &[(
                 "-a node_list",
                 "Display affinity information for the specified NUMA nodes. \
@@ -445,7 +448,20 @@ $ ptree -ag `pgrep ssh`
                  bound if the thread's CPU affinity mask includes any CPU on \
                  that node, or none otherwise.",
             )],
-            operands: &[],
+            operands: &[
+                (
+                    "pid[/tid]",
+                    "Process ID, optionally followed by a slash and a thread ID \
+                     to display a single thread.",
+                ),
+                (
+                    "core",
+                    "Process core file, as produced by systemd-coredump(8). The core file \
+                     does not need to exist on disk; if it has been removed, the \
+                     corresponding systemd journal entry will be used instead. See \
+                     NOTES below.",
+                ),
+            ],
             examples: &[
                 Example {
                     title: "Example 1 Display home nodes",
@@ -468,9 +484,13 @@ $ plgrp -a 0-2 101398
             exit_status: DEFAULT_EXIT_STATUS,
             files: "/proc/pid/task/tid/stat\tThread scheduling information.\n\
                     /sys/devices/system/node/\tNUMA topology information.",
-            notes: "",
-            see_also: "taskset(1), numactl(8), sched_getaffinity(2), proc(5)",
-            warnings: "",
+            notes: CORE_NOTES,
+            see_also: "taskset(1), numactl(8), coredumpctl(1), sched_getaffinity(2), proc(5)",
+            warnings: "For core files, the HOME column always shows ? because \
+                       systemd-coredump(8) does not capture which CPU each thread \
+                       was running on at the time of the crash. Only the main thread \
+                       is available from core files; information for other threads \
+                       is not displayed.",
         },
         out_dir,
     );

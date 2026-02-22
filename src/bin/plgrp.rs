@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+use std::path::PathBuf;
 use std::process;
 
 use nix::sched::{sched_getaffinity, CpuSet};
@@ -21,8 +22,13 @@ use nix::unistd::Pid;
 
 use ptools::{
     cpu_to_node, enumerate_tids_from, numa_node_cpus, numa_online_nodes, parse_pid_spec,
-    LiveProcess, ProcSource,
+    CoredumpSource, LiveProcess, ProcSource,
 };
+
+enum Operand {
+    Live(ptools::PidSpec),
+    Core(Box<dyn ProcSource>),
+}
 
 /// Get the CPU number a thread is currently running on (field 39 of /proc/PID/task/TID/stat).
 fn get_thread_cpu(source: &dyn ProcSource, tid: u64) -> Option<u32> {
@@ -117,14 +123,31 @@ fn thread_has_affinity_for_node(affinity: &CpuSet, node: u32) -> bool {
         .any(|&cpu| affinity.is_set(cpu as usize).unwrap_or(false))
 }
 
+/// Check whether a list of allowed CPUs includes any CPU on the given node.
+fn cpus_include_node(allowed: &[u32], node: u32) -> bool {
+    let Ok(cpus) = numa_node_cpus(node) else {
+        return false;
+    };
+    cpus.iter().any(|cpu| allowed.contains(cpu))
+}
+
+/// Extract Cpus_allowed_list from /proc status and parse it.
+fn get_affinity_from_status(source: &dyn ProcSource, tid: u64) -> Option<Vec<u32>> {
+    let status = source.read_tid_status(tid).ok()?;
+    let line = status
+        .lines()
+        .find_map(|l| l.strip_prefix("Cpus_allowed_list:"))?;
+    ptools::parse_list_format(line.trim()).ok()
+}
+
 struct Args {
     affinity_nodes: Option<Vec<u32>>,
     had_bad_nodes: bool,
-    specs: Vec<ptools::PidSpec>,
+    operands: Vec<Operand>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: plgrp [-a node_list] pid[/tid] ...");
+    eprintln!("Usage: plgrp [-a node_list] [pid[/tid] | core] ...");
     eprintln!("Display home NUMA node and thread affinities.");
     eprintln!();
     eprintln!("Options:");
@@ -139,7 +162,7 @@ fn parse_args() -> Args {
     let mut args = Args {
         affinity_nodes: None,
         had_bad_nodes: false,
-        specs: Vec::new(),
+        operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
 
@@ -176,10 +199,18 @@ fn parse_args() -> Args {
             Value(val) => {
                 let s = val.to_string_lossy();
                 match parse_pid_spec(&s) {
-                    Ok(spec) => args.specs.push(spec),
-                    Err(e) => {
-                        eprintln!("plgrp: {e}");
-                        process::exit(2);
+                    Ok(spec) => args.operands.push(Operand::Live(spec)),
+                    Err(_) => {
+                        let path = PathBuf::from(&*s);
+                        match CoredumpSource::from_corefile(&path) {
+                            Ok(source) => {
+                                args.operands.push(Operand::Core(Box::new(source)));
+                            }
+                            Err(e) => {
+                                eprintln!("plgrp: {}: {e}", path.display());
+                                process::exit(2);
+                            }
+                        }
                     }
                 }
             }
@@ -190,38 +221,65 @@ fn parse_args() -> Args {
         }
     }
 
-    if args.specs.is_empty() {
-        eprintln!("plgrp: at least one pid[/tid] required");
+    if args.operands.is_empty() {
+        eprintln!("plgrp: at least one pid[/tid] or core required");
         process::exit(2);
     }
     args
 }
 
-fn print_thread(source: &dyn ProcSource, tid: u64, affinity_nodes: &Option<Vec<u32>>) -> bool {
+fn print_thread(
+    source: &dyn ProcSource,
+    tid: u64,
+    affinity_nodes: &Option<Vec<u32>>,
+    is_coredump: bool,
+) -> bool {
     let pid = source.pid();
-    let Some(cpu) = get_thread_cpu(source, tid) else {
-        eprintln!("plgrp: cannot read CPU for {}/{}", pid, tid);
-        return false;
+    let home = if is_coredump {
+        "?".to_string()
+    } else {
+        match get_thread_cpu(source, tid) {
+            Some(cpu) => cpu_to_node(cpu)
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".to_string()),
+            None => {
+                eprintln!("plgrp: cannot read CPU for {}/{}", pid, tid);
+                return false;
+            }
+        }
     };
-    let home = cpu_to_node(cpu)
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "?".to_string());
 
     let pid_tid = format!("{}/{}", pid, tid);
     if let Some(nodes) = affinity_nodes {
-        let affinity = get_thread_affinity(tid);
-        let aff_str: String = nodes
-            .iter()
-            .map(|&n| {
-                let label = match &affinity {
-                    Some(cpuset) if thread_has_affinity_for_node(cpuset, n) => "bound",
-                    Some(_) => "none",
-                    None => "?",
-                };
-                format!("{}/{}", n, label)
-            })
-            .collect::<Vec<_>>()
-            .join(",");
+        let aff_str: String = if is_coredump {
+            let allowed = get_affinity_from_status(source, tid);
+            nodes
+                .iter()
+                .map(|&n| {
+                    let label = match &allowed {
+                        Some(cpus) if cpus_include_node(cpus, n) => "bound",
+                        Some(_) => "none",
+                        None => "?",
+                    };
+                    format!("{}/{}", n, label)
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        } else {
+            let affinity = get_thread_affinity(tid);
+            nodes
+                .iter()
+                .map(|&n| {
+                    let label = match &affinity {
+                        Some(cpuset) if thread_has_affinity_for_node(cpuset, n) => "bound",
+                        Some(_) => "none",
+                        None => "?",
+                    };
+                    format!("{}/{}", n, label)
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        };
         println!("{:>14}  {:>4}  {}", pid_tid, home, aff_str);
     } else {
         println!("{:>14}  {:>4}", pid_tid, home);
@@ -240,22 +298,56 @@ fn main() {
     }
 
     let mut error = false;
-    for spec in &args.specs {
-        let source = LiveProcess::new(spec.pid);
-        if let Some(tid) = spec.tid {
-            if !print_thread(&source, tid, &args.affinity_nodes) {
-                error = true;
+    for operand in &args.operands {
+        match operand {
+            Operand::Live(spec) => {
+                let source = LiveProcess::new(spec.pid);
+                if let Some(tid) = spec.tid {
+                    if !print_thread(&source, tid, &args.affinity_nodes, false) {
+                        error = true;
+                    }
+                } else {
+                    let tids = enumerate_tids_from(&source);
+                    if tids.is_empty() {
+                        eprintln!("plgrp: cannot read threads for PID {}", spec.pid);
+                        error = true;
+                        continue;
+                    }
+                    for tid in tids {
+                        if !print_thread(&source, tid, &args.affinity_nodes, false) {
+                            error = true;
+                        }
+                    }
+                }
             }
-        } else {
-            let tids = enumerate_tids_from(&source);
-            if tids.is_empty() {
-                eprintln!("plgrp: cannot read threads for PID {}", spec.pid);
-                error = true;
-                continue;
-            }
-            for tid in tids {
-                if !print_thread(&source, tid, &args.affinity_nodes) {
+            Operand::Core(source) => {
+                let tids = enumerate_tids_from(source.as_ref());
+                if tids.is_empty() {
+                    eprintln!("plgrp: cannot read threads for PID {}", source.pid());
                     error = true;
+                    continue;
+                }
+                // Warn if the process had more threads than are available.
+                if let Ok(status) = source.read_status() {
+                    if let Some(n) = status
+                        .lines()
+                        .find_map(|l| l.strip_prefix("Threads:"))
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                    {
+                        if n > tids.len() {
+                            eprintln!(
+                                "warning: process had {} threads but only {} available; \
+                                 output may be incomplete",
+                                n,
+                                tids.len()
+                            );
+                        }
+                    }
+                }
+                for tid in tids {
+                    if !print_thread(source.as_ref(), tid, &args.affinity_nodes, true) {
+                        error = true;
+                    }
                 }
             }
         }
