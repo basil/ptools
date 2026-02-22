@@ -17,6 +17,8 @@ use cred::{parse_cred, ProcCred};
 use live::LiveProcess;
 use signal::{intersect_blocked_masks, parse_signal_set, SignalSet};
 
+use auxv::{AuxvEntry, AuxvType};
+
 /// Abstraction over process data sources.
 ///
 /// A live process reads from `/proc/[pid]/...`; a coredump backend
@@ -105,8 +107,19 @@ impl ProcHandle {
         self.source.pid()
     }
 
-    pub fn auxv_bytes(&self) -> Result<Vec<u8>, Error> {
+    fn auxv_bytes(&self) -> Result<Vec<u8>, Error> {
         Ok(self.source.read_auxv()?)
+    }
+
+    /// Parse and return all auxiliary vector entries.
+    pub fn auxv(&self) -> Result<Vec<AuxvEntry>, Error> {
+        auxv::read_auxv(self)
+    }
+
+    /// Look up a specific auxv value by type.
+    pub fn auxv_val(&self, key: AuxvType) -> Result<Option<u64>, Error> {
+        let entries = self.auxv()?;
+        Ok(entries.iter().find(|e| e.key == key).map(|e| e.value))
     }
 
     pub fn comm(&self) -> Result<String, Error> {

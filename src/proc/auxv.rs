@@ -207,7 +207,7 @@ pub fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
 }
 
 /// Read and parse the auxiliary vector from a process handle.
-pub fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Error> {
+pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Error> {
     let bytes = handle.auxv_bytes()?;
 
     if bytes.is_empty() {

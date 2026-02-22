@@ -1,4 +1,4 @@
-use crate::proc::auxv::{decode_hwcap, read_auxv, AuxvType};
+use crate::proc::auxv::{decode_hwcap, AuxvType};
 use crate::proc::cred::{resolve_gid, resolve_uid};
 use crate::proc::{Error, ProcHandle};
 
@@ -32,7 +32,7 @@ pub fn print_env(pid: u64) -> Result<(), Error> {
 
 #[allow(clippy::unnecessary_cast)]
 pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
-    let auxv = read_auxv(handle)?;
+    let auxv = handle.auxv()?;
 
     print_proc_summary_from(handle);
     for entry in &auxv {
