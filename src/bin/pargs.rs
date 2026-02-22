@@ -193,7 +193,8 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_env_from(&handle) {
+            if let Err(e) = ptools::print_env_from(&handle) {
+                eprintln!("pargs: {}: {e}", handle.pid());
                 error = true;
             }
             section = true;
@@ -202,7 +203,8 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_auxv_from(&handle) {
+            if let Err(e) = ptools::print_auxv_from(&handle) {
+                eprintln!("pargs: {}: {e}", handle.pid());
                 error = true;
             }
         }
