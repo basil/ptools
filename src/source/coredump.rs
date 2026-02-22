@@ -92,7 +92,7 @@ impl Drop for Journal {
 /// initial metadata (pid, comm, exe, etc.). Rich fields (environ, cmdline,
 /// auxv, open fds, limits, proc status) are filled in from the systemd
 /// journal entry matching the coredump.
-pub(crate) struct CoredumpSource {
+pub(super) struct CoredumpSource {
     pid: u64,
     fields: HashMap<String, Vec<u8>>,
     warnings: Vec<String>,
@@ -125,7 +125,7 @@ impl CoredumpSource {
     /// (pid, comm, exe, uid, gid, signal, etc.). Then queries the systemd
     /// journal for the matching coredump entry to fill in rich fields like
     /// `COREDUMP_PROC_STATUS`, `COREDUMP_ENVIRON`, `COREDUMP_CMDLINE`, etc.
-    pub(crate) fn from_corefile(path: &Path) -> io::Result<Self> {
+    pub(super) fn from_corefile(path: &Path) -> io::Result<Self> {
         let file_exists = path.exists();
 
         // Read what we can from extended attributes (only possible if
@@ -186,7 +186,7 @@ impl CoredumpSource {
     }
 
     /// Return any warnings generated during construction.
-    pub(crate) fn warnings(&self) -> &[String] {
+    pub(super) fn warnings(&self) -> &[String] {
         &self.warnings
     }
 

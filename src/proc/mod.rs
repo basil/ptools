@@ -1,8 +1,6 @@
 pub(crate) mod auxv;
-pub(crate) mod coredump;
 pub(crate) mod cred;
 pub(crate) mod fd;
-pub(crate) mod live;
 pub(crate) mod net;
 pub(crate) mod numa;
 pub(crate) mod signal;
@@ -13,41 +11,9 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use coredump::CoredumpSource;
+use crate::source::ProcSource;
 use cred::{parse_cred, ProcCred};
-use live::LiveProcess;
 use signal::{intersect_blocked_masks, parse_signal_set, SignalSet};
-
-/// Abstraction over process data sources.
-///
-/// A live process reads from `/proc/[pid]/...`; a coredump backend
-/// supplies the same data from journal fields or ELF notes.
-pub(crate) trait ProcSource {
-    fn pid(&self) -> u64;
-
-    // Per-process files
-    fn read_stat(&self) -> io::Result<String>;
-    fn read_status(&self) -> io::Result<String>;
-    fn read_comm(&self) -> io::Result<String>;
-    fn read_cmdline(&self) -> io::Result<Vec<u8>>;
-    fn read_environ(&self) -> io::Result<Vec<u8>>;
-    fn read_auxv(&self) -> io::Result<Vec<u8>>;
-    fn read_exe(&self) -> io::Result<PathBuf>;
-    fn read_limits(&self) -> io::Result<String>;
-
-    // Per-thread
-    fn list_tids(&self) -> io::Result<Vec<u64>>;
-    fn read_tid_stat(&self, tid: u64) -> io::Result<String>;
-    fn read_tid_status(&self, tid: u64) -> io::Result<String>;
-
-    // Per-fd
-    fn list_fds(&self) -> io::Result<Vec<u64>>;
-    fn read_fd_link(&self, fd: u64) -> io::Result<PathBuf>;
-    fn read_fdinfo(&self, fd: u64) -> io::Result<String>;
-
-    // Network namespace
-    fn read_net_file(&self, name: &str) -> io::Result<String>;
-}
 
 /// A resource limit value (soft or hard).
 ///
@@ -641,7 +607,7 @@ pub struct SignalMasks {
 impl ProcHandle {
     pub fn from_pid(pid: u64) -> Self {
         ProcHandle {
-            source: Box::new(LiveProcess::new(pid)),
+            source: crate::source::open_live(pid),
             warnings: Vec::new(),
             is_core: false,
         }
@@ -682,10 +648,9 @@ fn parse_pid_spec(s: &str) -> Result<PidSpec, Error> {
 
 /// Grab a process from a coredump
 fn grab_core(path: &Path) -> Result<ProcHandle, Error> {
-    let source = CoredumpSource::from_corefile(path)?;
-    let warnings = source.warnings().to_vec();
+    let (source, warnings) = crate::source::open_coredump(path)?;
     Ok(ProcHandle {
-        source: Box::new(source),
+        source,
         warnings,
         is_core: true,
     })

@@ -16,6 +16,7 @@
 
 mod display;
 mod proc;
+mod source;
 
 // Re-export public API at crate root.
 pub use display::{

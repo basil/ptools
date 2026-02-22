@@ -4,12 +4,12 @@ use std::path::PathBuf;
 use super::ProcSource;
 
 /// Live-process backend: reads everything from `/proc/[pid]/...`.
-pub(crate) struct LiveProcess {
+pub(super) struct LiveProcess {
     pid: u64,
 }
 
 impl LiveProcess {
-    pub(crate) fn new(pid: u64) -> Self {
+    pub(super) fn new(pid: u64) -> Self {
         LiveProcess { pid }
     }
 }

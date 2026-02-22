@@ -6,7 +6,8 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 #[cfg(target_os = "linux")]
 use super::fd::parse_socket_inode;
-use super::{Error, ProcSource};
+use super::Error;
+use crate::source::ProcSource;
 
 /// Socket type as reported in `/proc/[pid]/net/*`.
 ///
