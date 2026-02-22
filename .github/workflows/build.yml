@@ -76,3 +76,70 @@ jobs:
             --object target/debug/pfiles --object target/debug/plgrp --object target/debug/prun \
             --object target/debug/psig --object target/debug/pstop --object target/debug/ptree \
             --object target/debug/pwait
+
+  build-i686:
+    name: Build (i686)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      PKG_CONFIG_ALLOW_CROSS: 1
+      PKG_CONFIG_PATH: /usr/lib/i386-linux-gnu/pkgconfig
+      CARGO_BUILD_TARGET: i686-unknown-linux-gnu
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Install i686 cross-compilation dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib libsystemd-dev:i386
+
+      - name: Install Rust i686 target
+        run: rustup target add i686-unknown-linux-gnu
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check Markdown
+        uses: DavidAnson/markdownlint-cli2-action@v22
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Test
+        run: cargo test --verbose
+
+      - name: Install coverage tooling
+        run: rustup component add llvm-tools-preview
+
+      - name: Build instrumented binaries for E2E coverage
+        run: |
+          RUSTFLAGS='-C instrument-coverage' \
+          cargo build --all-features --workspace --bins --examples
+
+      - name: Run coverage tests
+        run: |
+          mkdir -p target/coverage
+          RUSTFLAGS='-C instrument-coverage' \
+          LLVM_PROFILE_FILE='target/coverage/ptools-%p-%m.profraw' \
+          cargo test --all-features --workspace --tests --bins
+
+      - name: Report coverage
+        shell: bash
+        run: |
+          target_dir="target/i686-unknown-linux-gnu/debug"
+          host_target=$(rustc -vV | awk '/host:/ {print $2}')
+          llvm_bin="$(rustc --print sysroot)/lib/rustlib/${host_target}/bin"
+          "${llvm_bin}/llvm-profdata" merge -sparse target/coverage/*.profraw -o target/coverage/ptools.profdata
+          "${llvm_bin}/llvm-cov" report \
+            --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
+            --instr-profile=target/coverage/ptools.profdata \
+            "${target_dir}/pargs" --object "${target_dir}/pauxv" --object "${target_dir}/penv" \
+            --object "${target_dir}/pfiles" --object "${target_dir}/plgrp" --object "${target_dir}/prun" \
+            --object "${target_dir}/psig" --object "${target_dir}/pstop" --object "${target_dir}/ptree" \
+            --object "${target_dir}/pwait"

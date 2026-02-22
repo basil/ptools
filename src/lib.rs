@@ -176,34 +176,35 @@ pub fn print_env(pid: u64) -> bool {
 const AT_RSEQ_FEATURE_SIZE: u64 = 27;
 const AT_RSEQ_ALIGN: u64 = 28;
 
+#[allow(clippy::unnecessary_cast)]
 const AUX_NAMES: &[(u64, &str)] = &[
-    (libc::AT_BASE, "AT_BASE"),
-    (libc::AT_BASE_PLATFORM, "AT_BASE_PLATFORM"),
-    (libc::AT_CLKTCK, "AT_CLKTCK"),
-    (libc::AT_EGID, "AT_EGID"),
-    (libc::AT_ENTRY, "AT_ENTRY"),
-    (libc::AT_EUID, "AT_EUID"),
-    (libc::AT_EXECFD, "AT_EXECFD"),
-    (libc::AT_EXECFN, "AT_EXECFN"),
-    (libc::AT_FLAGS, "AT_FLAGS"),
-    (libc::AT_GID, "AT_GID"),
-    (libc::AT_HWCAP2, "AT_HWCAP2"),
-    (libc::AT_HWCAP, "AT_HWCAP"),
-    (libc::AT_IGNORE, "AT_IGNORE"),
-    (libc::AT_MINSIGSTKSZ, "AT_MINSIGSTKSZ"),
-    (libc::AT_NOTELF, "AT_NOTELF"),
-    (libc::AT_NULL, "AT_NULL"),
-    (libc::AT_PAGESZ, "AT_PAGESZ"),
-    (libc::AT_PHDR, "AT_PHDR"),
-    (libc::AT_PHENT, "AT_PHENT"),
-    (libc::AT_PHNUM, "AT_PHNUM"),
-    (libc::AT_PLATFORM, "AT_PLATFORM"),
-    (libc::AT_RANDOM, "AT_RANDOM"),
+    (libc::AT_BASE as u64, "AT_BASE"),
+    (libc::AT_BASE_PLATFORM as u64, "AT_BASE_PLATFORM"),
+    (libc::AT_CLKTCK as u64, "AT_CLKTCK"),
+    (libc::AT_EGID as u64, "AT_EGID"),
+    (libc::AT_ENTRY as u64, "AT_ENTRY"),
+    (libc::AT_EUID as u64, "AT_EUID"),
+    (libc::AT_EXECFD as u64, "AT_EXECFD"),
+    (libc::AT_EXECFN as u64, "AT_EXECFN"),
+    (libc::AT_FLAGS as u64, "AT_FLAGS"),
+    (libc::AT_GID as u64, "AT_GID"),
+    (libc::AT_HWCAP2 as u64, "AT_HWCAP2"),
+    (libc::AT_HWCAP as u64, "AT_HWCAP"),
+    (libc::AT_IGNORE as u64, "AT_IGNORE"),
+    (libc::AT_MINSIGSTKSZ as u64, "AT_MINSIGSTKSZ"),
+    (libc::AT_NOTELF as u64, "AT_NOTELF"),
+    (libc::AT_NULL as u64, "AT_NULL"),
+    (libc::AT_PAGESZ as u64, "AT_PAGESZ"),
+    (libc::AT_PHDR as u64, "AT_PHDR"),
+    (libc::AT_PHENT as u64, "AT_PHENT"),
+    (libc::AT_PHNUM as u64, "AT_PHNUM"),
+    (libc::AT_PLATFORM as u64, "AT_PLATFORM"),
+    (libc::AT_RANDOM as u64, "AT_RANDOM"),
     (AT_RSEQ_FEATURE_SIZE, "AT_RSEQ_FEATURE_SIZE"),
     (AT_RSEQ_ALIGN, "AT_RSEQ_ALIGN"),
-    (libc::AT_SECURE, "AT_SECURE"),
-    (libc::AT_SYSINFO_EHDR, "AT_SYSINFO_EHDR"),
-    (libc::AT_UID, "AT_UID"),
+    (libc::AT_SECURE as u64, "AT_SECURE"),
+    (libc::AT_SYSINFO_EHDR as u64, "AT_SYSINFO_EHDR"),
+    (libc::AT_UID as u64, "AT_UID"),
 ];
 
 fn aux_key_name(key: u64) -> String {
@@ -319,6 +320,7 @@ fn read_auxv_from(source: &dyn ProcSource) -> Option<Vec<(u64, u64)>> {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[allow(clippy::unnecessary_cast)]
 fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     // AT_HWCAP on x86_64: CPUID leaf 1 EDX register bits
     const HWCAP_NAMES: &[(u32, &str)] = &[
@@ -356,9 +358,9 @@ fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     // AT_HWCAP2 on x86_64: kernel-defined bits from asm/hwcap2.h
     const HWCAP2_NAMES: &[(u32, &str)] = &[(0, "RING3MWAIT"), (1, "FSGSBASE")];
 
-    let table = if key == libc::AT_HWCAP {
+    let table = if key == libc::AT_HWCAP as u64 {
         HWCAP_NAMES
-    } else if key == libc::AT_HWCAP2 {
+    } else if key == libc::AT_HWCAP2 as u64 {
         HWCAP2_NAMES
     } else {
         return None;
@@ -378,6 +380,7 @@ fn decode_hwcap(key: u64, value: u64) -> Option<String> {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[allow(clippy::unnecessary_cast)]
 fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     // AT_HWCAP on aarch64: bits from arch/arm64/include/uapi/asm/hwcap.h
     const HWCAP_NAMES: &[(u32, &str)] = &[
@@ -464,9 +467,9 @@ fn decode_hwcap(key: u64, value: u64) -> Option<String> {
         (44, "HBC"),
     ];
 
-    let table = if key == libc::AT_HWCAP {
+    let table = if key == libc::AT_HWCAP as u64 {
         HWCAP_NAMES
-    } else if key == libc::AT_HWCAP2 {
+    } else if key == libc::AT_HWCAP2 as u64 {
         HWCAP2_NAMES
     } else {
         return None;
@@ -490,12 +493,14 @@ fn decode_hwcap(_key: u64, _value: u64) -> Option<String> {
     None
 }
 
+#[allow(clippy::unnecessary_cast)]
 fn is_uid_auxv_key(key: u64) -> bool {
-    key == libc::AT_UID || key == libc::AT_EUID
+    key == libc::AT_UID as u64 || key == libc::AT_EUID as u64
 }
 
+#[allow(clippy::unnecessary_cast)]
 fn is_gid_auxv_key(key: u64) -> bool {
-    key == libc::AT_GID || key == libc::AT_EGID
+    key == libc::AT_GID as u64 || key == libc::AT_EGID as u64
 }
 
 pub fn resolve_uid(uid: u32) -> Option<String> {
@@ -520,11 +525,12 @@ pub fn resolve_gid(gid: u32) -> Option<String> {
     name.to_str().ok().map(str::to_string)
 }
 
+#[allow(clippy::unnecessary_cast)]
 pub fn print_auxv_from(source: &dyn ProcSource) -> bool {
     if let Some(auxv) = read_auxv_from(source) {
         print_proc_summary_from(source);
         for (key, value) in auxv {
-            if key == libc::AT_EXECFN {
+            if key == libc::AT_EXECFN as u64 {
                 let s = source
                     .read_exe()
                     .ok()

@@ -8,8 +8,12 @@ fn apply_test_overrides_from_env() {
     let hard = env::var("PTOOLS_TEST_SET_RLIMIT_NOFILE_HARD").ok();
     match (soft, hard) {
         (Some(soft), Some(hard)) => {
-            let soft = soft.parse::<u64>().expect("invalid NOFILE soft override");
-            let hard = hard.parse::<u64>().expect("invalid NOFILE hard override");
+            let soft = soft
+                .parse::<nix::libc::rlim_t>()
+                .expect("invalid NOFILE soft override");
+            let hard = hard
+                .parse::<nix::libc::rlim_t>()
+                .expect("invalid NOFILE hard override");
             let lim = nix::libc::rlimit {
                 rlim_cur: soft,
                 rlim_max: hard,
