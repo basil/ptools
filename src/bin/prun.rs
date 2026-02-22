@@ -19,6 +19,21 @@ use std::process;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 
+fn process_state_str(state: &ptools::ProcessState) -> &'static str {
+    use ptools::ProcessState;
+    match state {
+        ProcessState::Running => "running",
+        ProcessState::Sleeping => "sleeping",
+        ProcessState::DiskSleep => "uninterruptible sleep",
+        ProcessState::Zombie => "zombie",
+        ProcessState::Stopped => "stopped",
+        ProcessState::TracingStop => "tracing stop",
+        ProcessState::Dead => "dead",
+        ProcessState::Idle => "idle",
+        ProcessState::Other(_) => "unknown state",
+    }
+}
+
 fn run_process(pid: u64) -> bool {
     let nix_pid = Pid::from_raw(pid as i32);
     let handle = ptools::ProcHandle::from_pid(pid);
@@ -42,8 +57,12 @@ fn run_process(pid: u64) -> bool {
             return false;
         }
         Ok(ProcessState::Stopped) => {} // stopped -- this is the expected case
-        Ok(state) => {
-            eprintln!("prun: process {} is not stopped ({})", pid, state);
+        Ok(ref state) => {
+            eprintln!(
+                "prun: process {} is not stopped ({})",
+                pid,
+                process_state_str(state)
+            );
             return false;
         }
     }

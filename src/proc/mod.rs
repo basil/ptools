@@ -538,7 +538,7 @@ impl ProcHandle {
             file_type,
             stat: stat_result,
             offset: info.offset,
-            open_flags: fd::OpenFlags(info.flags),
+            open_flags: info.flags,
             mnt_id: info.mnt_id,
             extra_lines: info.extra_lines,
             socket,
@@ -574,22 +574,6 @@ impl ProcessState {
             'X' | 'x' => Self::Dead,
             'I' => Self::Idle,
             other => Self::Other(other),
-        }
-    }
-}
-
-impl std::fmt::Display for ProcessState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Running => write!(f, "running"),
-            Self::Sleeping => write!(f, "sleeping"),
-            Self::DiskSleep => write!(f, "uninterruptible sleep"),
-            Self::Zombie => write!(f, "zombie"),
-            Self::Stopped => write!(f, "stopped"),
-            Self::TracingStop => write!(f, "tracing stop"),
-            Self::Dead => write!(f, "dead"),
-            Self::Idle => write!(f, "idle"),
-            Self::Other(c) => write!(f, "unknown state '{}'", c),
         }
     }
 }

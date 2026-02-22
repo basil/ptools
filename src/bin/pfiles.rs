@@ -14,10 +14,13 @@
 //   limitations under the License.
 //
 
+use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
 use ptools::{
-    Error, FileDescriptor, FileType, PosixFileType, ProcHandle, Socket, TcpInfo, TcpState,
+    AnonFileType, Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, Socket,
+    TcpInfo, TcpState,
 };
+use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::process::exit;
 
@@ -41,6 +44,94 @@ fn sockname_from_sockprotoname(sockprotoname: &str) -> String {
         address_family_str(addr_fam).to_string()
     } else {
         sockprotoname.to_string()
+    }
+}
+
+fn file_type_str(ft: &FileType) -> Cow<'static, str> {
+    match ft {
+        FileType::Posix(PosixFileType::Regular) => "S_IFREG".into(),
+        FileType::Posix(PosixFileType::Directory) => "S_IFDIR".into(),
+        FileType::Posix(PosixFileType::Socket) => "S_IFSOCK".into(),
+        FileType::Posix(PosixFileType::SymLink) => "S_IFLNK".into(),
+        FileType::Posix(PosixFileType::BlockDevice) => "S_IFBLK".into(),
+        FileType::Posix(PosixFileType::CharDevice) => "S_IFCHR".into(),
+        FileType::Posix(PosixFileType::Fifo) => "S_IFIFO".into(),
+        FileType::Posix(PosixFileType::Unknown(x)) => format!("UNKNOWN_TYPE(mode={})", x).into(),
+        FileType::Anon(AnonFileType::Epoll) => "anon_inode(epoll)".into(),
+        FileType::Anon(AnonFileType::EventFd) => "anon_inode(eventfd)".into(),
+        FileType::Anon(AnonFileType::SignalFd) => "anon_inode(signalfd)".into(),
+        FileType::Anon(AnonFileType::TimerFd) => "anon_inode(timerfd)".into(),
+        FileType::Anon(AnonFileType::Inotify) => "anon_inode(inotify)".into(),
+        FileType::Anon(AnonFileType::PidFd) => "anon_inode(pidfd)".into(),
+        FileType::Anon(AnonFileType::Unknown(s)) => format!("anon_inode({})", s).into(),
+        FileType::Unknown => "UNKNOWN_TYPE".into(),
+    }
+}
+
+const FLAG_NAMES: &[(OFlag, &str)] = &[
+    (OFlag::O_APPEND, "O_APPEND"),
+    (OFlag::O_ASYNC, "O_ASYNC"),
+    (OFlag::O_CLOEXEC, "O_CLOEXEC"),
+    (OFlag::O_CREAT, "O_CREAT"),
+    (OFlag::O_DIRECT, "O_DIRECT"),
+    (OFlag::O_DIRECTORY, "O_DIRECTORY"),
+    (OFlag::O_DSYNC, "O_DSYNC"),
+    (OFlag::O_EXCL, "O_EXCL"),
+    (OFlag::O_NOATIME, "O_NOATIME"),
+    (OFlag::O_NOCTTY, "O_NOCTTY"),
+    (OFlag::O_NOFOLLOW, "O_NOFOLLOW"),
+    (OFlag::O_NONBLOCK, "O_NONBLOCK"),
+    (OFlag::O_PATH, "O_PATH"),
+    (OFlag::O_SYNC, "O_SYNC"),
+    (OFlag::O_TMPFILE, "O_TMPFILE"),
+    (OFlag::O_TRUNC, "O_TRUNC"),
+];
+
+fn open_flags_str(flags: &OFlag) -> String {
+    let mut s = match *flags & OFlag::O_ACCMODE {
+        OFlag::O_RDONLY => "O_RDONLY",
+        OFlag::O_WRONLY => "O_WRONLY",
+        OFlag::O_RDWR => "O_RDWR",
+        _ => "O_ACCMODE(?)",
+    }
+    .to_string();
+    for &(flag, desc) in FLAG_NAMES {
+        if flags.contains(flag) {
+            s.push('|');
+            s.push_str(desc);
+        }
+    }
+    s
+}
+
+fn sock_type_str(st: &SockType) -> Cow<'static, str> {
+    match st {
+        SockType::Stream => "SOCK_STREAM".into(),
+        SockType::Datagram => "SOCK_DGRAM".into(),
+        SockType::Raw => "SOCK_RAW".into(),
+        SockType::Rdm => "SOCK_RDM".into(),
+        SockType::SeqPacket => "SOCK_SEQPACKET".into(),
+        SockType::Dccp => "SOCK_DCCP".into(),
+        SockType::Packet => "SOCK_PACKET".into(),
+        SockType::Unknown(n) => format!("SOCK_TYPE_UNKNOWN_{}", n).into(),
+    }
+}
+
+fn tcp_state_str(state: &TcpState) -> Cow<'static, str> {
+    match state {
+        TcpState::Established => "TCP_ESTABLISHED".into(),
+        TcpState::SynSent => "TCP_SYN_SENT".into(),
+        TcpState::SynRecv => "TCP_SYN_RECV".into(),
+        TcpState::FinWait1 => "TCP_FIN_WAIT1".into(),
+        TcpState::FinWait2 => "TCP_FIN_WAIT2".into(),
+        TcpState::TimeWait => "TCP_TIME_WAIT".into(),
+        TcpState::Close => "TCP_CLOSE".into(),
+        TcpState::CloseWait => "TCP_CLOSE_WAIT".into(),
+        TcpState::LastAck => "TCP_LAST_ACK".into(),
+        TcpState::Listen => "TCP_LISTEN".into(),
+        TcpState::Closing => "TCP_CLOSING".into(),
+        TcpState::NewSynRecv => "TCP_NEW_SYN_RECV".into(),
+        TcpState::Unknown(n) => format!("TCP_UNKNOWN_{:02X}", n).into(),
     }
 }
 
@@ -157,8 +248,8 @@ fn print_tcp_details(sock: &Socket) {
         println!("        congestion control: {}", cc);
     }
 
-    if let Some(state) = sock.tcp_state {
-        println!("        state: {}", state);
+    if let Some(ref state) = sock.tcp_state {
+        println!("        state: {}", tcp_state_str(state));
     }
 
     if let (Some(tx), Some(rx)) = (sock.tx_queue, sock.rx_queue) {
@@ -203,7 +294,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
         print!(
             "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
             fd.fd,
-            fd.file_type,
+            file_type_str(&fd.file_type),
             st.mode & 0o7777,
             st.dev_major,
             st.dev_minor,
@@ -222,14 +313,14 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
             return;
         }
 
-        println!("      {}", fd.open_flags);
+        println!("      {}", open_flags_str(&fd.open_flags));
 
         match fd.file_type {
             FileType::Posix(PosixFileType::Socket) => {
                 if let Some(ref sock) = fd.socket {
                     print_sockname(sock);
                     print_peername(sock);
-                    println!("        {}", sock.sock_type);
+                    println!("        {}", sock_type_str(&sock.sock_type));
                     if !sock.options.is_empty() {
                         println!("        {}", sock.options.join(","));
                     }
@@ -259,7 +350,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
             return;
         }
 
-        println!("      {}", fd.open_flags);
+        println!("      {}", open_flags_str(&fd.open_flags));
 
         if fd.path.to_string_lossy().starts_with("socket:[") {
             println!("        (socket details not available)");
@@ -467,6 +558,100 @@ mod test {
         assert_eq!(address_family_str(AddressFamily::Tipc), "AF_TIPC");
         assert_eq!(address_family_str(AddressFamily::Nfc), "AF_NFC");
         assert_eq!(address_family_str(AddressFamily::Unspec), "AF_UNSPEC");
+    }
+
+    #[test]
+    fn test_file_type_str() {
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::Regular)).as_ref(),
+            "S_IFREG"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::Socket)).as_ref(),
+            "S_IFSOCK"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::BlockDevice)).as_ref(),
+            "S_IFBLK"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::CharDevice)).as_ref(),
+            "S_IFCHR"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::Directory)).as_ref(),
+            "S_IFDIR"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::SymLink)).as_ref(),
+            "S_IFLNK"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::Fifo)).as_ref(),
+            "S_IFIFO"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Posix(PosixFileType::Unknown(0o170000))).as_ref(),
+            "UNKNOWN_TYPE(mode=61440)"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Anon(AnonFileType::Epoll)).as_ref(),
+            "anon_inode(epoll)"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Anon(AnonFileType::EventFd)).as_ref(),
+            "anon_inode(eventfd)"
+        );
+        assert_eq!(
+            file_type_str(&FileType::Anon(AnonFileType::Unknown(
+                "io_uring".to_string()
+            )))
+            .as_ref(),
+            "anon_inode(io_uring)"
+        );
+        assert_eq!(file_type_str(&FileType::Unknown).as_ref(), "UNKNOWN_TYPE");
+    }
+
+    #[test]
+    fn test_open_flags_str() {
+        assert_eq!(open_flags_str(&OFlag::O_RDONLY), "O_RDONLY");
+        assert_eq!(
+            open_flags_str(&(OFlag::O_RDONLY | OFlag::O_CLOEXEC)),
+            "O_RDONLY|O_CLOEXEC"
+        );
+        assert_eq!(
+            open_flags_str(&(OFlag::O_RDWR | OFlag::O_NONBLOCK)),
+            "O_RDWR|O_NONBLOCK"
+        );
+        // O_SYNC includes O_DSYNC bits on Linux, so both flags appear.
+        assert_eq!(
+            open_flags_str(&(OFlag::O_WRONLY | OFlag::O_APPEND | OFlag::O_SYNC)),
+            "O_WRONLY|O_APPEND|O_DSYNC|O_SYNC"
+        );
+    }
+
+    #[test]
+    fn test_sock_type_str() {
+        assert_eq!(sock_type_str(&SockType::Stream).as_ref(), "SOCK_STREAM");
+        assert_eq!(sock_type_str(&SockType::Datagram).as_ref(), "SOCK_DGRAM");
+        assert_eq!(sock_type_str(&SockType::Raw).as_ref(), "SOCK_RAW");
+        assert_eq!(
+            sock_type_str(&SockType::Unknown(99)).as_ref(),
+            "SOCK_TYPE_UNKNOWN_99"
+        );
+    }
+
+    #[test]
+    fn test_tcp_state_str() {
+        assert_eq!(
+            tcp_state_str(&TcpState::Established).as_ref(),
+            "TCP_ESTABLISHED"
+        );
+        assert_eq!(tcp_state_str(&TcpState::Listen).as_ref(), "TCP_LISTEN");
+        assert_eq!(
+            tcp_state_str(&TcpState::Unknown(0xFF)).as_ref(),
+            "TCP_UNKNOWN_FF"
+        );
     }
 
     #[test]

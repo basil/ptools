@@ -1,6 +1,41 @@
+use std::borrow::Cow;
+
 use crate::proc::auxv::{decode_hwcap, AuxvType};
 use crate::proc::cred::{resolve_gid, resolve_uid};
 use crate::proc::{Error, ProcHandle};
+
+fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
+    match key {
+        AuxvType::Null => "AT_NULL".into(),
+        AuxvType::Ignore => "AT_IGNORE".into(),
+        AuxvType::ExecFd => "AT_EXECFD".into(),
+        AuxvType::Phdr => "AT_PHDR".into(),
+        AuxvType::PhEnt => "AT_PHENT".into(),
+        AuxvType::PhNum => "AT_PHNUM".into(),
+        AuxvType::PageSz => "AT_PAGESZ".into(),
+        AuxvType::Base => "AT_BASE".into(),
+        AuxvType::Flags => "AT_FLAGS".into(),
+        AuxvType::Entry => "AT_ENTRY".into(),
+        AuxvType::NotElf => "AT_NOTELF".into(),
+        AuxvType::Uid => "AT_UID".into(),
+        AuxvType::Euid => "AT_EUID".into(),
+        AuxvType::Gid => "AT_GID".into(),
+        AuxvType::Egid => "AT_EGID".into(),
+        AuxvType::ClkTck => "AT_CLKTCK".into(),
+        AuxvType::Platform => "AT_PLATFORM".into(),
+        AuxvType::Hwcap => "AT_HWCAP".into(),
+        AuxvType::Hwcap2 => "AT_HWCAP2".into(),
+        AuxvType::Secure => "AT_SECURE".into(),
+        AuxvType::BasePlatform => "AT_BASE_PLATFORM".into(),
+        AuxvType::Random => "AT_RANDOM".into(),
+        AuxvType::ExecFn => "AT_EXECFN".into(),
+        AuxvType::SysinfoEhdr => "AT_SYSINFO_EHDR".into(),
+        AuxvType::MinSigStkSz => "AT_MINSIGSTKSZ".into(),
+        AuxvType::RseqFeatureSize => "AT_RSEQ_FEATURE_SIZE".into(),
+        AuxvType::RseqAlign => "AT_RSEQ_ALIGN".into(),
+        AuxvType::Unknown(v) => format!("AT_{}", v).into(),
+    }
+}
 
 pub fn print_env_from(handle: &mut ProcHandle) -> Result<(), Error> {
     // This contains the environ as it was when the proc was started. To get the current
@@ -38,34 +73,34 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
                 .ok()
                 .and_then(|p| p.to_str().map(str::to_string))
                 .unwrap_or_default();
-            println!("{:<15} 0x{:016x} {}", entry.key, entry.value, s);
+            let key = auxv_type_str(&entry.key);
+            println!("{:<15} 0x{:016x} {}", key, entry.value, s);
         } else if let Some(flags) = decode_hwcap(entry.key, entry.value) {
-            println!(
-                "{:<15} 0x{:016x} {}",
-                entry.key,
-                entry.value,
-                flags.join(" | ")
-            );
+            let key = auxv_type_str(&entry.key);
+            println!("{:<15} 0x{:016x} {}", key, entry.value, flags.join(" | "));
         } else if entry.key.is_uid() {
+            let key = auxv_type_str(&entry.key);
             if let Some(name) = resolve_uid(entry.value as u32) {
                 println!(
                     "{:<15} 0x{:016x} {}({})",
-                    entry.key, entry.value, entry.value, name
+                    key, entry.value, entry.value, name
                 );
             } else {
-                println!("{:<15} 0x{:016x}", entry.key, entry.value);
+                println!("{:<15} 0x{:016x}", key, entry.value);
             }
         } else if entry.key.is_gid() {
+            let key = auxv_type_str(&entry.key);
             if let Some(name) = resolve_gid(entry.value as u32) {
                 println!(
                     "{:<15} 0x{:016x} {}({})",
-                    entry.key, entry.value, entry.value, name
+                    key, entry.value, entry.value, name
                 );
             } else {
-                println!("{:<15} 0x{:016x}", entry.key, entry.value);
+                println!("{:<15} 0x{:016x}", key, entry.value);
             }
         } else {
-            println!("{:<15} 0x{:016x}", entry.key, entry.value);
+            let key = auxv_type_str(&entry.key);
+            println!("{:<15} 0x{:016x}", key, entry.value);
         }
     }
     Ok(())

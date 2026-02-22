@@ -1,6 +1,5 @@
 use nix::fcntl::OFlag;
 use nix::sys::stat::SFlag;
-use std::fmt;
 use std::path::PathBuf;
 
 use super::net::Socket;
@@ -39,77 +38,6 @@ pub enum FileType {
     Unknown,
 }
 
-impl fmt::Display for FileType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FileType::Posix(PosixFileType::Regular) => write!(f, "S_IFREG"),
-            FileType::Posix(PosixFileType::Directory) => write!(f, "S_IFDIR"),
-            FileType::Posix(PosixFileType::Socket) => write!(f, "S_IFSOCK"),
-            FileType::Posix(PosixFileType::SymLink) => write!(f, "S_IFLNK"),
-            FileType::Posix(PosixFileType::BlockDevice) => write!(f, "S_IFBLK"),
-            FileType::Posix(PosixFileType::CharDevice) => write!(f, "S_IFCHR"),
-            FileType::Posix(PosixFileType::Fifo) => write!(f, "S_IFIFO"),
-            FileType::Posix(PosixFileType::Unknown(x)) => {
-                write!(f, "UNKNOWN_TYPE(mode={})", x)
-            }
-            FileType::Anon(AnonFileType::Epoll) => write!(f, "anon_inode(epoll)"),
-            FileType::Anon(AnonFileType::EventFd) => write!(f, "anon_inode(eventfd)"),
-            FileType::Anon(AnonFileType::SignalFd) => write!(f, "anon_inode(signalfd)"),
-            FileType::Anon(AnonFileType::TimerFd) => write!(f, "anon_inode(timerfd)"),
-            FileType::Anon(AnonFileType::Inotify) => write!(f, "anon_inode(inotify)"),
-            FileType::Anon(AnonFileType::PidFd) => write!(f, "anon_inode(pidfd)"),
-            FileType::Anon(AnonFileType::Unknown(s)) => write!(f, "anon_inode({})", s),
-            FileType::Unknown => write!(f, "UNKNOWN_TYPE"),
-        }
-    }
-}
-
-/// Open-file flags wrapper with Display formatting.
-pub struct OpenFlags(pub OFlag);
-
-const FLAG_NAMES: &[(OFlag, &str)] = &[
-    (OFlag::O_APPEND, "O_APPEND"),
-    (OFlag::O_ASYNC, "O_ASYNC"),
-    (OFlag::O_CLOEXEC, "O_CLOEXEC"),
-    (OFlag::O_CREAT, "O_CREAT"),
-    (OFlag::O_DIRECT, "O_DIRECT"),
-    (OFlag::O_DIRECTORY, "O_DIRECTORY"),
-    (OFlag::O_DSYNC, "O_DSYNC"),
-    (OFlag::O_EXCL, "O_EXCL"),
-    (OFlag::O_NOATIME, "O_NOATIME"),
-    (OFlag::O_NOCTTY, "O_NOCTTY"),
-    (OFlag::O_NOFOLLOW, "O_NOFOLLOW"),
-    (OFlag::O_NONBLOCK, "O_NONBLOCK"),
-    (OFlag::O_PATH, "O_PATH"),
-    (OFlag::O_SYNC, "O_SYNC"),
-    (OFlag::O_TMPFILE, "O_TMPFILE"),
-    (OFlag::O_TRUNC, "O_TRUNC"),
-];
-
-impl OpenFlags {
-    /// Return the access-mode portion as a string.
-    pub fn access_mode_str(&self) -> &'static str {
-        match self.0 & OFlag::O_ACCMODE {
-            OFlag::O_RDONLY => "O_RDONLY",
-            OFlag::O_WRONLY => "O_WRONLY",
-            OFlag::O_RDWR => "O_RDWR",
-            _ => "O_ACCMODE(?)",
-        }
-    }
-}
-
-impl fmt::Display for OpenFlags {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.access_mode_str())?;
-        for &(flag, desc) in FLAG_NAMES {
-            if self.0.contains(flag) {
-                write!(f, "|{}", desc)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 /// Stat information for a file descriptor, gathered from `stat(2)` on
 /// `/proc/[pid]/fd/<fd>`.
 pub struct FdStat {
@@ -133,7 +61,7 @@ pub struct FileDescriptor {
     pub file_type: FileType,
     pub stat: Option<FdStat>,
     pub offset: u64,
-    pub open_flags: OpenFlags,
+    pub open_flags: OFlag,
     pub mnt_id: Option<u64>,
     pub extra_lines: Vec<String>,
     pub socket: Option<Socket>,
@@ -311,56 +239,48 @@ mod tests {
     fn test_file_type_from_stat_regular() {
         let ft = file_type_from_stat(SFlag::S_IFREG.bits(), "/dev/null");
         assert_eq!(ft, FileType::Posix(PosixFileType::Regular));
-        assert_eq!(ft.to_string(), "S_IFREG");
     }
 
     #[test]
     fn test_file_type_from_stat_socket() {
         let ft = file_type_from_stat(SFlag::S_IFSOCK.bits(), "socket:[123]");
         assert_eq!(ft, FileType::Posix(PosixFileType::Socket));
-        assert_eq!(ft.to_string(), "S_IFSOCK");
     }
 
     #[test]
     fn test_file_type_from_stat_block_device() {
         let ft = file_type_from_stat(SFlag::S_IFBLK.bits(), "/dev/sda");
         assert_eq!(ft, FileType::Posix(PosixFileType::BlockDevice));
-        assert_eq!(ft.to_string(), "S_IFBLK");
     }
 
     #[test]
     fn test_file_type_from_stat_char_device() {
         let ft = file_type_from_stat(SFlag::S_IFCHR.bits(), "/dev/null");
         assert_eq!(ft, FileType::Posix(PosixFileType::CharDevice));
-        assert_eq!(ft.to_string(), "S_IFCHR");
     }
 
     #[test]
     fn test_file_type_from_stat_directory() {
         let ft = file_type_from_stat(SFlag::S_IFDIR.bits(), "/tmp");
         assert_eq!(ft, FileType::Posix(PosixFileType::Directory));
-        assert_eq!(ft.to_string(), "S_IFDIR");
     }
 
     #[test]
     fn test_file_type_from_stat_symlink() {
         let ft = file_type_from_stat(SFlag::S_IFLNK.bits(), "/some/link");
         assert_eq!(ft, FileType::Posix(PosixFileType::SymLink));
-        assert_eq!(ft.to_string(), "S_IFLNK");
     }
 
     #[test]
     fn test_file_type_from_stat_fifo() {
         let ft = file_type_from_stat(SFlag::S_IFIFO.bits(), "/tmp/pipe");
         assert_eq!(ft, FileType::Posix(PosixFileType::Fifo));
-        assert_eq!(ft.to_string(), "S_IFIFO");
     }
 
     #[test]
     fn test_file_type_from_stat_anon_inode_fallback() {
         let ft = file_type_from_stat(0, "anon_inode:[eventpoll]");
         assert_eq!(ft, FileType::Anon(AnonFileType::Epoll));
-        assert_eq!(ft.to_string(), "anon_inode(epoll)");
     }
 
     #[test]
@@ -379,7 +299,6 @@ mod tests {
     fn test_file_type_from_link_eventfd() {
         let ft = file_type_from_link("anon_inode:[eventfd]");
         assert_eq!(ft, FileType::Anon(AnonFileType::EventFd));
-        assert_eq!(ft.to_string(), "anon_inode(eventfd)");
     }
 
     #[test]
@@ -407,7 +326,6 @@ mod tests {
             ft,
             FileType::Anon(AnonFileType::Unknown("io_uring".to_string()))
         );
-        assert_eq!(ft.to_string(), "anon_inode(io_uring)");
     }
 
     #[test]
@@ -435,36 +353,6 @@ mod tests {
     #[test]
     fn test_parse_socket_inode_anon() {
         assert_eq!(parse_socket_inode("anon_inode:[eventpoll]"), None);
-    }
-
-    #[test]
-    fn test_open_flags_display_rdonly() {
-        let flags = OpenFlags(OFlag::O_RDONLY);
-        assert_eq!(flags.to_string(), "O_RDONLY");
-    }
-
-    #[test]
-    fn test_open_flags_display_rdonly_cloexec() {
-        let flags = OpenFlags(OFlag::O_RDONLY | OFlag::O_CLOEXEC);
-        assert_eq!(flags.to_string(), "O_RDONLY|O_CLOEXEC");
-    }
-
-    #[test]
-    fn test_open_flags_display_rdwr_nonblock() {
-        let flags = OpenFlags(OFlag::O_RDWR | OFlag::O_NONBLOCK);
-        assert_eq!(flags.to_string(), "O_RDWR|O_NONBLOCK");
-    }
-
-    #[test]
-    fn test_open_flags_display_wronly_append_sync() {
-        // O_SYNC includes O_DSYNC bits on Linux, so both flags appear.
-        let flags = OpenFlags(OFlag::O_WRONLY | OFlag::O_APPEND | OFlag::O_SYNC);
-        assert_eq!(flags.to_string(), "O_WRONLY|O_APPEND|O_DSYNC|O_SYNC");
-    }
-
-    #[test]
-    fn test_file_type_unknown_display() {
-        assert_eq!(FileType::Unknown.to_string(), "UNKNOWN_TYPE");
     }
 
     #[test]

@@ -25,21 +25,6 @@ pub enum SockType {
     Unknown(u16),
 }
 
-impl std::fmt::Display for SockType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SockType::Stream => write!(f, "SOCK_STREAM"),
-            SockType::Datagram => write!(f, "SOCK_DGRAM"),
-            SockType::Raw => write!(f, "SOCK_RAW"),
-            SockType::Rdm => write!(f, "SOCK_RDM"),
-            SockType::SeqPacket => write!(f, "SOCK_SEQPACKET"),
-            SockType::Dccp => write!(f, "SOCK_DCCP"),
-            SockType::Packet => write!(f, "SOCK_PACKET"),
-            SockType::Unknown(n) => write!(f, "SOCK_TYPE_UNKNOWN_{}", n),
-        }
-    }
-}
-
 /// TCP connection state from `/proc/[pid]/net/tcp*`.
 #[derive(Debug, Clone, Copy)]
 pub enum TcpState {
@@ -56,26 +41,6 @@ pub enum TcpState {
     Closing,
     NewSynRecv,
     Unknown(u8),
-}
-
-impl std::fmt::Display for TcpState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TcpState::Established => write!(f, "TCP_ESTABLISHED"),
-            TcpState::SynSent => write!(f, "TCP_SYN_SENT"),
-            TcpState::SynRecv => write!(f, "TCP_SYN_RECV"),
-            TcpState::FinWait1 => write!(f, "TCP_FIN_WAIT1"),
-            TcpState::FinWait2 => write!(f, "TCP_FIN_WAIT2"),
-            TcpState::TimeWait => write!(f, "TCP_TIME_WAIT"),
-            TcpState::Close => write!(f, "TCP_CLOSE"),
-            TcpState::CloseWait => write!(f, "TCP_CLOSE_WAIT"),
-            TcpState::LastAck => write!(f, "TCP_LAST_ACK"),
-            TcpState::Listen => write!(f, "TCP_LISTEN"),
-            TcpState::Closing => write!(f, "TCP_CLOSING"),
-            TcpState::NewSynRecv => write!(f, "TCP_NEW_SYN_RECV"),
-            TcpState::Unknown(n) => write!(f, "TCP_UNKNOWN_{:02X}", n),
-        }
-    }
 }
 
 /// Parsed socket metadata from `/proc/[pid]/net/*`.

@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::mem::size_of;
@@ -89,42 +88,6 @@ impl AuxvType {
 
     pub fn is_gid(self) -> bool {
         matches!(self, Self::Gid | Self::Egid)
-    }
-}
-
-impl fmt::Display for AuxvType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let name = match self {
-            Self::Null => "AT_NULL",
-            Self::Ignore => "AT_IGNORE",
-            Self::ExecFd => "AT_EXECFD",
-            Self::Phdr => "AT_PHDR",
-            Self::PhEnt => "AT_PHENT",
-            Self::PhNum => "AT_PHNUM",
-            Self::PageSz => "AT_PAGESZ",
-            Self::Base => "AT_BASE",
-            Self::Flags => "AT_FLAGS",
-            Self::Entry => "AT_ENTRY",
-            Self::NotElf => "AT_NOTELF",
-            Self::Uid => "AT_UID",
-            Self::Euid => "AT_EUID",
-            Self::Gid => "AT_GID",
-            Self::Egid => "AT_EGID",
-            Self::ClkTck => "AT_CLKTCK",
-            Self::Platform => "AT_PLATFORM",
-            Self::Hwcap => "AT_HWCAP",
-            Self::Hwcap2 => "AT_HWCAP2",
-            Self::Secure => "AT_SECURE",
-            Self::BasePlatform => "AT_BASE_PLATFORM",
-            Self::Random => "AT_RANDOM",
-            Self::ExecFn => "AT_EXECFN",
-            Self::SysinfoEhdr => "AT_SYSINFO_EHDR",
-            Self::MinSigStkSz => "AT_MINSIGSTKSZ",
-            Self::RseqFeatureSize => "AT_RSEQ_FEATURE_SIZE",
-            Self::RseqAlign => "AT_RSEQ_ALIGN",
-            Self::Unknown(v) => return write!(f, "AT_{}", v),
-        };
-        f.write_str(name)
     }
 }
 
