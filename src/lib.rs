@@ -318,10 +318,6 @@ fn read_auxv_from(source: &dyn ProcSource) -> Option<Vec<(u64, u64)>> {
     None
 }
 
-fn is_string_auxv_key(key: u64) -> bool {
-    key == libc::AT_EXECFN || key == libc::AT_PLATFORM || key == libc::AT_BASE_PLATFORM
-}
-
 #[cfg(target_arch = "x86_64")]
 fn decode_hwcap(key: u64, value: u64) -> Option<String> {
     // AT_HWCAP on x86_64: CPUID leaf 1 EDX register bits
@@ -524,19 +520,16 @@ pub fn resolve_gid(gid: u32) -> Option<String> {
     name.to_str().ok().map(str::to_string)
 }
 
-fn read_proc_string_from(source: &dyn ProcSource, addr: u64) -> Option<String> {
-    let buf = source.read_mem(addr, 256).ok()?;
-    let n = buf.len();
-    let end = buf.iter().position(|&b| b == 0).unwrap_or(n);
-    String::from_utf8(buf[..end].to_vec()).ok()
-}
-
 pub fn print_auxv_from(source: &dyn ProcSource) -> bool {
     if let Some(auxv) = read_auxv_from(source) {
         print_proc_summary_from(source);
         for (key, value) in auxv {
-            if is_string_auxv_key(key) {
-                let s = read_proc_string_from(source, value).unwrap_or_default();
+            if key == libc::AT_EXECFN {
+                let s = source
+                    .read_exe()
+                    .ok()
+                    .and_then(|p| p.to_str().map(str::to_string))
+                    .unwrap_or_default();
                 println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, s);
             } else if let Some(flags) = decode_hwcap(key, value) {
                 println!("{:<15} 0x{:016x} {}", aux_key_name(key), value, flags);

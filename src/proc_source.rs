@@ -15,7 +15,6 @@ pub trait ProcSource {
     fn read_cmdline(&self) -> io::Result<Vec<u8>>;
     fn read_environ(&self) -> io::Result<Vec<u8>>;
     fn read_auxv(&self) -> io::Result<Vec<u8>>;
-    fn read_mem(&self, offset: u64, len: usize) -> io::Result<Vec<u8>>;
     fn read_exe(&self) -> io::Result<PathBuf>;
     fn read_limits(&self) -> io::Result<String>;
 
@@ -71,16 +70,6 @@ impl ProcSource for LiveProcess {
 
     fn read_auxv(&self) -> io::Result<Vec<u8>> {
         std::fs::read(format!("/proc/{}/auxv", self.pid))
-    }
-
-    fn read_mem(&self, offset: u64, len: usize) -> io::Result<Vec<u8>> {
-        use std::io::{Read, Seek, SeekFrom};
-        let mut file = std::fs::File::open(format!("/proc/{}/mem", self.pid))?;
-        file.seek(SeekFrom::Start(offset))?;
-        let mut buf = vec![0u8; len];
-        let n = file.read(&mut buf)?;
-        buf.truncate(n);
-        Ok(buf)
     }
 
     fn read_exe(&self) -> io::Result<PathBuf> {

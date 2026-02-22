@@ -256,10 +256,6 @@ impl ProcSource for CoredumpSource {
         self.get_field("COREDUMP_PROC_AUXV").map(|b| b.to_vec())
     }
 
-    fn read_mem(&self, _offset: u64, _len: usize) -> io::Result<Vec<u8>> {
-        Err(unsupported("process memory"))
-    }
-
     fn read_exe(&self) -> io::Result<PathBuf> {
         let exe = self.get_field_str("COREDUMP_EXE")?;
         Ok(PathBuf::from(exe))
