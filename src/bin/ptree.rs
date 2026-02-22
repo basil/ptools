@@ -15,7 +15,6 @@
 //
 
 use nix::libc;
-use ptools::ParseError;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
@@ -90,7 +89,7 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
                     continue;
                 }
             };
-            if let Some(st) = handle.starttime() {
+            if let Ok(st) = handle.starttime() {
                 starttime_map.insert(pid, st);
             }
             child_map.entry(ppid).or_insert(vec![]).push(pid);
@@ -241,7 +240,7 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
     let uid = match lookup_uid_by_username(username)? {
         Some(uid) => uid,
         None => {
-            return Err(From::from(ParseError::new(
+            return Err(From::from(ptools::Error::parse(
                 "username",
                 &format!("No such user '{}'", username),
             )))

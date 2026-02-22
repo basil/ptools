@@ -36,10 +36,10 @@ impl SignalSet {
 }
 
 /// Parse a hex signal mask (e.g. from `SigIgn`) into a [`SignalSet`].
-pub fn parse_signal_set(hex: &str) -> Result<SignalSet, String> {
+pub fn parse_signal_set(hex: &str) -> Result<SignalSet, super::Error> {
     let trimmed = hex.trim();
     if trimmed.is_empty() {
-        return Err("empty signal mask".to_string());
+        return Err(super::Error::Parse("empty signal mask".to_string()));
     }
 
     let mut bits = vec![false; 1];
@@ -49,7 +49,10 @@ pub fn parse_signal_set(hex: &str) -> Result<SignalSet, String> {
             b'a'..=b'f' => 10 + (ch - b'a'),
             b'A'..=b'F' => 10 + (ch - b'A'),
             _ => {
-                return Err(format!("invalid hex digit '{}'", ch as char));
+                return Err(super::Error::Parse(format!(
+                    "invalid hex digit '{}'",
+                    ch as char
+                )));
             }
         };
 

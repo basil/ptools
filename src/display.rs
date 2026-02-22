@@ -1,12 +1,8 @@
-use std::error::Error;
-use std::io;
-use std::io::ErrorKind;
-
 use crate::proc::auxv::{decode_hwcap, read_auxv, AuxvType};
 use crate::proc::cred::{resolve_gid, resolve_uid};
-use crate::proc::ProcHandle;
+use crate::proc::{Error, ProcHandle};
 
-pub fn print_env_from(handle: &ProcHandle) -> Result<(), io::Error> {
+pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
     // This contains the environ as it was when the proc was started. To get the current
     // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
@@ -30,12 +26,12 @@ pub fn print_env_from(handle: &ProcHandle) -> Result<(), io::Error> {
     Ok(())
 }
 
-pub fn print_env(pid: u64) -> Result<(), io::Error> {
+pub fn print_env(pid: u64) -> Result<(), Error> {
     print_env_from(&ProcHandle::from_pid(pid))
 }
 
 #[allow(clippy::unnecessary_cast)]
-pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Box<dyn Error>> {
+pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
     let auxv = read_auxv(handle)?;
 
     print_proc_summary_from(handle);
@@ -79,7 +75,7 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn print_auxv(pid: u64) -> Result<(), Box<dyn Error>> {
+pub fn print_auxv(pid: u64) -> Result<(), Error> {
     print_auxv_from(&ProcHandle::from_pid(pid))
 }
 
@@ -101,7 +97,7 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
         }
         Ok(_) => {
             // Empty cmdline — fall back to comm name.
-            let is_zombie = handle.state() == Some(crate::ProcessState::Zombie);
+            let is_zombie = matches!(handle.state(), Ok(crate::ProcessState::Zombie));
             match handle.comm() {
                 Ok(ref comm) if !comm.is_empty() => {
                     print!("{}", comm);
@@ -111,13 +107,13 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
                     println!();
                 }
                 Ok(_) => println!("<unknown>"),
-                Err(ref e) if e.kind() == ErrorKind::NotFound => {
+                Err(ref e) if e.is_not_found() => {
                     println!("<exited>");
                 }
                 Err(_) => println!("<unknown>"),
             }
         }
-        Err(ref e) if e.kind() == ErrorKind::NotFound => {
+        Err(ref e) if e.is_not_found() => {
             println!("<exited>");
         }
         Err(e) => {

@@ -35,7 +35,7 @@ struct NodeList {
 
 /// Parse a node list string that may contain IDs, ranges, and keywords.
 /// Warns on stderr for each non-online node (matching Solaris behavior).
-fn parse_node_list(s: &str) -> Result<NodeList, String> {
+fn parse_node_list(s: &str) -> Result<NodeList, ptools::Error> {
     let online = numa_online_nodes()?;
     let mut result = Vec::new();
     let mut had_bad_nodes = false;
@@ -53,16 +53,17 @@ fn parse_node_list(s: &str) -> Result<NodeList, String> {
             }
             _ => {
                 if let Some((start, end)) = part.split_once('-') {
-                    let start: u32 = start
-                        .trim()
-                        .parse()
-                        .map_err(|e| format!("invalid node '{}': {}", start.trim(), e))?;
-                    let end: u32 = end
-                        .trim()
-                        .parse()
-                        .map_err(|e| format!("invalid node '{}': {}", end.trim(), e))?;
+                    let start: u32 = start.trim().parse().map_err(|e| {
+                        ptools::Error::Parse(format!("invalid node '{}': {}", start.trim(), e))
+                    })?;
+                    let end: u32 = end.trim().parse().map_err(|e| {
+                        ptools::Error::Parse(format!("invalid node '{}': {}", end.trim(), e))
+                    })?;
                     if start > end {
-                        return Err(format!("invalid range {}-{}", start, end));
+                        return Err(ptools::Error::Parse(format!(
+                            "invalid range {}-{}",
+                            start, end
+                        )));
                     }
                     for n in start..=end {
                         if online.contains(n) {
@@ -73,9 +74,9 @@ fn parse_node_list(s: &str) -> Result<NodeList, String> {
                         }
                     }
                 } else {
-                    let n: u32 = part
-                        .parse()
-                        .map_err(|e| format!("invalid node '{}': {}", part, e))?;
+                    let n: u32 = part.parse().map_err(|e| {
+                        ptools::Error::Parse(format!("invalid node '{}': {}", part, e))
+                    })?;
                     if online.contains(n) {
                         result.push(n);
                     } else {
@@ -168,18 +169,22 @@ fn parse_args() -> Args {
     args
 }
 
-fn print_thread(handle: &ProcHandle, tid: u64, affinity_nodes: &Option<Vec<u32>>) -> bool {
+fn print_thread(
+    handle: &ProcHandle,
+    tid: u64,
+    affinity_nodes: &Option<Vec<u32>>,
+) -> Result<(), ptools::Error> {
     let pid = handle.pid();
     let home = if handle.is_core() {
         "?".to_string()
     } else {
         match handle.thread_cpu(tid) {
-            Some(cpu) => cpu_to_node(cpu)
+            Ok(cpu) => cpu_to_node(cpu)
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| "?".to_string()),
-            None => {
+            Err(e) => {
                 eprintln!("plgrp: cannot read CPU for {}/{}", pid, tid);
-                return false;
+                return Err(e);
             }
         }
     };
@@ -187,7 +192,7 @@ fn print_thread(handle: &ProcHandle, tid: u64, affinity_nodes: &Option<Vec<u32>>
     let pid_tid = format!("{}/{}", pid, tid);
     if let Some(nodes) = affinity_nodes {
         let affinity = if handle.is_core() {
-            handle.thread_affinity(tid)
+            handle.thread_affinity(tid).ok()
         } else {
             get_thread_affinity(tid)
         };
@@ -207,7 +212,7 @@ fn print_thread(handle: &ProcHandle, tid: u64, affinity_nodes: &Option<Vec<u32>>
     } else {
         println!("{:>14}  {:>4}", pid_tid, home);
     }
-    true
+    Ok(())
 }
 
 fn main() {
@@ -234,18 +239,25 @@ fn main() {
             eprintln!("{w}");
         }
         if let Some(tid) = tid {
-            if !print_thread(&handle, tid, &args.affinity_nodes) {
+            if print_thread(&handle, tid, &args.affinity_nodes).is_err() {
                 error = true;
             }
         } else {
-            let tids = handle.tids();
+            let tids = match handle.tids() {
+                Ok(t) => t,
+                Err(_) => {
+                    eprintln!("plgrp: cannot read threads for PID {}", handle.pid());
+                    error = true;
+                    continue;
+                }
+            };
             if tids.is_empty() {
                 eprintln!("plgrp: cannot read threads for PID {}", handle.pid());
                 error = true;
                 continue;
             }
             // Warn if the process had more threads than are available.
-            if let Some(n) = handle.thread_count() {
+            if let Ok(n) = handle.thread_count() {
                 if n > tids.len() {
                     eprintln!(
                         "warning: process had {} threads but only {} available; \
@@ -256,7 +268,7 @@ fn main() {
                 }
             }
             for tid in tids {
-                if !print_thread(&handle, tid, &args.affinity_nodes) {
+                if print_thread(&handle, tid, &args.affinity_nodes).is_err() {
                     error = true;
                 }
             }

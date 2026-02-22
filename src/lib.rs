@@ -24,13 +24,12 @@ pub use proc::cred::{resolve_gid, resolve_uid, ProcCred};
 pub use proc::numa::{cpu_to_node, numa_node_cpus, numa_online_nodes, parse_list_format, CpuSet};
 pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{
-    enumerate_tids, proc_state, resolve_operand, resolve_operand_with_tid, ParseError, ProcHandle,
+    enumerate_tids, proc_state, resolve_operand, resolve_operand_with_tid, Error, ProcHandle,
     ProcessState, SignalMasks,
 };
 
 use nix::libc;
 
-// TODO Add a type alias for Result<Foo, Box<Error>>
 // TODO Add support for handling core dumps
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
 // TODO Test against 32-bit processes

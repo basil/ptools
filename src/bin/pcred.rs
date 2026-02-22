@@ -89,15 +89,12 @@ fn fmt_gid(gid: u32) -> String {
     }
 }
 
-fn print_cred(handle: &ProcHandle, all: bool) -> bool {
+fn print_cred(handle: &ProcHandle, all: bool) -> Result<(), ptools::Error> {
     let pid = handle.pid();
-    let cred = match handle.cred() {
-        Ok(cred) => cred,
-        Err(e) => {
-            eprintln!("pcred: {}: {}", pid, e);
-            return false;
-        }
-    };
+    let cred = handle.cred().map_err(|e| {
+        eprintln!("pcred: {}: {}", pid, e);
+        e
+    })?;
 
     if !all && cred.euid == cred.ruid && cred.ruid == cred.suid {
         print!("{}:\te/r/suid={}  ", pid, fmt_uid(cred.euid));
@@ -130,7 +127,7 @@ fn print_cred(handle: &ProcHandle, all: bool) -> bool {
         println!();
     }
 
-    true
+    Ok(())
 }
 
 fn main() {
@@ -155,7 +152,7 @@ fn main() {
         for w in handle.warnings() {
             eprintln!("{w}");
         }
-        if !print_cred(&handle, args.all) {
+        if print_cred(&handle, args.all).is_err() {
             error = true;
         }
     }

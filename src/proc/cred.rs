@@ -1,6 +1,6 @@
 use nix::libc;
 
-use super::ParseError;
+use super::Error;
 
 /// Process credentials parsed from /proc/[pid]/status
 pub struct ProcCred {
@@ -14,7 +14,7 @@ pub struct ProcCred {
 }
 
 /// Parse credentials from the text of /proc/[pid]/status.
-pub fn parse_cred(status: &str) -> Result<ProcCred, ParseError> {
+pub fn parse_cred(status: &str) -> Result<ProcCred, Error> {
     let mut uid_fields = None;
     let mut gid_fields = None;
     let mut groups = Vec::new();
@@ -52,10 +52,8 @@ pub fn parse_cred(status: &str) -> Result<ProcCred, ParseError> {
         }
     }
 
-    let (ruid, euid, suid) =
-        uid_fields.ok_or_else(|| ParseError::in_file("status", "missing Uid"))?;
-    let (rgid, egid, sgid) =
-        gid_fields.ok_or_else(|| ParseError::in_file("status", "missing Gid"))?;
+    let (ruid, euid, suid) = uid_fields.ok_or_else(|| Error::in_file("status", "missing Uid"))?;
+    let (rgid, egid, sgid) = gid_fields.ok_or_else(|| Error::in_file("status", "missing Gid"))?;
 
     Ok(ProcCred {
         euid,

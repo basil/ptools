@@ -17,9 +17,8 @@
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
-use ptools::{ParseError, ProcHandle};
+use ptools::{Error, ProcHandle};
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -836,9 +835,9 @@ fn parse_sock_type(type_code: &str) -> Result<SockType, ParseIntError> {
 }
 
 // Parse a socket address of the form "0100007F:1538" (i.e. 127.0.0.1:5432)
-fn parse_ipv4_sock_addr(s: &str) -> Result<SocketAddr, ParseError> {
+fn parse_ipv4_sock_addr(s: &str) -> Result<SocketAddr, Error> {
     let mk_err = || {
-        ParseError::new(
+        Error::parse(
             "IPv4 address",
             &format!("expected address in form '0100007F:1538', got {}", s),
         )
@@ -862,9 +861,9 @@ fn parse_ipv4_sock_addr(s: &str) -> Result<SocketAddr, ParseError> {
 
 // Parse a socket address of the form "00000000000000000000000001000000:1538"
 // (i.e. ::1:5432)
-fn parse_ipv6_sock_addr(s: &str) -> Result<SocketAddr, ParseError> {
+fn parse_ipv6_sock_addr(s: &str) -> Result<SocketAddr, Error> {
     let mk_err = || {
-        ParseError::new(
+        Error::parse(
             "IPv6 address",
             &format!(
                 "expected address in form '00000000000000000000000001000000:1538', got {}",
@@ -900,7 +899,7 @@ fn concrete_peer_addr(addr: SocketAddr) -> Option<SocketAddr> {
 
 // Turn a Result into an Option, printing an error message indicating the error and the file where
 // it occurred if the value is an Err.
-fn ok_or_eprint<T>(r: Result<T, Box<dyn Error>>, filename: &str) -> Option<T> {
+fn ok_or_eprint<T, E: std::fmt::Display>(r: Result<T, E>, filename: &str) -> Option<T> {
     if let Err(ref e) = r {
         eprintln!("Error parsing /proc/[pid]/net/{}: {}", filename, e)
     }
@@ -934,7 +933,7 @@ fn fetch_sock_info(handle: &ProcHandle) -> HashMap<u64, SockInfo> {
                 };
                 Ok((inode, sock_info))
             })
-            .filter_map(|sock_info: Result<(u64, SockInfo), Box<dyn Error>>| {
+            .filter_map(|sock_info: Result<(u64, SockInfo), Error>| {
                 ok_or_eprint(sock_info, "unix")
             });
         sockets.extend(unix_sockets);
@@ -960,7 +959,7 @@ fn fetch_sock_info(handle: &ProcHandle) -> HashMap<u64, SockInfo> {
                 };
                 Ok((inode, sock_info))
             })
-            .filter_map(|sock_info: Result<(u64, SockInfo), Box<dyn Error>>| {
+            .filter_map(|sock_info: Result<(u64, SockInfo), Error>| {
                 ok_or_eprint(sock_info, "netlink")
             });
         sockets.extend(netlink_sockets);
@@ -968,7 +967,7 @@ fn fetch_sock_info(handle: &ProcHandle) -> HashMap<u64, SockInfo> {
 
     // procfs entries for tcp/udp/raw sockets (both IPv4 and IPv6) all use same format
     let mut parse_net_file =
-        |filename: &str, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, ParseError>| {
+        |filename: &str, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, Error>| {
             if let Ok(content) = handle.net_file(filename) {
                 let is_tcp = filename == "tcp" || filename == "tcp6";
                 let additional_sockets = content
@@ -996,7 +995,7 @@ fn fetch_sock_info(handle: &ProcHandle) -> HashMap<u64, SockInfo> {
                         };
                         Ok((inode, sock_info))
                     })
-                    .filter_map(|sock_info| ok_or_eprint(sock_info, filename));
+                    .filter_map(|sock_info: Result<_, Error>| ok_or_eprint(sock_info, filename));
                 sockets.extend(additional_sockets);
             }
         };
@@ -1244,7 +1243,7 @@ fn print_epoll_fdinfo(handle: &ProcHandle, fd: u64) {
     }
 }
 
-fn print_files(handle: &ProcHandle, non_verbose: bool) -> bool {
+fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
     let pid = handle.pid();
 
     ptools::print_proc_summary_from(handle);
@@ -1269,19 +1268,16 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> bool {
         derive_peer_processes(pid, &sockets)
     };
 
-    let fds = match handle.fds() {
-        Ok(fds) => fds,
-        Err(e) => {
-            eprintln!("Unable to read /proc/{}/fd/: {}", pid, e);
-            return false;
-        }
-    };
+    let fds = handle.fds().map_err(|e| {
+        eprintln!("Unable to read /proc/{}/fd/: {}", pid, e);
+        e
+    })?;
 
     for fd in fds {
         print_file(handle, fd, &sockets, &peers, non_verbose);
     }
 
-    true
+    Ok(())
 }
 
 struct Args {
@@ -1361,7 +1357,7 @@ fn main() {
         for w in handle.warnings() {
             eprintln!("{w}");
         }
-        if !print_files(&handle, args.non_verbose) {
+        if print_files(&handle, args.non_verbose).is_err() {
             error = true;
         }
     }

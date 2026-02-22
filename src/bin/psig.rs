@@ -42,16 +42,13 @@ fn action_text(action: SignalAction) -> &'static str {
     }
 }
 
-fn print_signal_actions(handle: &ProcHandle) -> bool {
+fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::Error> {
     ptools::print_proc_summary_from(handle);
 
-    let masks = match handle.signal_masks() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("psig: {}", e);
-            return false;
-        }
-    };
+    let masks = handle.signal_masks().map_err(|e| {
+        eprintln!("psig: {}", e);
+        e
+    })?;
 
     let rtmin = libc::SIGRTMIN() as usize;
     let rtmax = libc::SIGRTMAX() as usize;
@@ -84,7 +81,7 @@ fn print_signal_actions(handle: &ProcHandle) -> bool {
             println!("{:<10}{}\t{}", name, action_text(action), extra.join(","));
         }
     }
-    true
+    Ok(())
 }
 
 use std::process::exit;
@@ -162,7 +159,7 @@ fn main() {
         for w in handle.warnings() {
             eprintln!("{w}");
         }
-        if !print_signal_actions(&handle) {
+        if print_signal_actions(&handle).is_err() {
             error = true;
         }
     }

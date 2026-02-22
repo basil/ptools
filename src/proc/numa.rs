@@ -40,7 +40,7 @@ impl From<nix::sched::CpuSet> for CpuSet {
 }
 
 /// Parse a kernel list-format string like "0-3,5,7-8" into a `CpuSet`.
-pub fn parse_list_format(s: &str) -> Result<CpuSet, String> {
+pub fn parse_list_format(s: &str) -> Result<CpuSet, super::Error> {
     let s = s.trim();
     if s.is_empty() {
         return Ok(CpuSet { cpus: Vec::new() });
@@ -49,22 +49,23 @@ pub fn parse_list_format(s: &str) -> Result<CpuSet, String> {
     for part in s.split(',') {
         let part = part.trim();
         if let Some((start, end)) = part.split_once('-') {
-            let start: u32 = start
-                .trim()
-                .parse()
-                .map_err(|e| format!("invalid range start '{}': {}", start.trim(), e))?;
-            let end: u32 = end
-                .trim()
-                .parse()
-                .map_err(|e| format!("invalid range end '{}': {}", end.trim(), e))?;
+            let start: u32 = start.trim().parse().map_err(|e| {
+                super::Error::Parse(format!("invalid range start '{}': {}", start.trim(), e))
+            })?;
+            let end: u32 = end.trim().parse().map_err(|e| {
+                super::Error::Parse(format!("invalid range end '{}': {}", end.trim(), e))
+            })?;
             if start > end {
-                return Err(format!("invalid range {}-{}", start, end));
+                return Err(super::Error::Parse(format!(
+                    "invalid range {}-{}",
+                    start, end
+                )));
             }
             cpus.extend(start..=end);
         } else {
             let val: u32 = part
                 .parse()
-                .map_err(|e| format!("invalid value '{}': {}", part, e))?;
+                .map_err(|e| super::Error::Parse(format!("invalid value '{}': {}", part, e)))?;
             cpus.push(val);
         }
     }
@@ -74,17 +75,17 @@ pub fn parse_list_format(s: &str) -> Result<CpuSet, String> {
 }
 
 /// Return the list of online NUMA nodes from `/sys/devices/system/node/online`.
-pub fn numa_online_nodes() -> Result<CpuSet, String> {
+pub fn numa_online_nodes() -> Result<CpuSet, super::Error> {
     let content = std::fs::read_to_string("/sys/devices/system/node/online")
-        .map_err(|e| format!("failed to read NUMA online nodes: {}", e))?;
+        .map_err(|e| super::Error::Parse(format!("failed to read NUMA online nodes: {}", e)))?;
     parse_list_format(&content)
 }
 
 /// Return the set of CPUs belonging to a given NUMA node.
-pub fn numa_node_cpus(node: u32) -> Result<CpuSet, String> {
+pub fn numa_node_cpus(node: u32) -> Result<CpuSet, super::Error> {
     let path = format!("/sys/devices/system/node/node{}/cpulist", node);
-    let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("failed to read {}: {}", path, e))?;
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| super::Error::Parse(format!("failed to read {}: {}", path, e)))?;
     parse_list_format(&content)
 }
 

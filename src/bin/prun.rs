@@ -30,19 +30,19 @@ fn run_process(pid: u64) -> bool {
     // ptrace-stopped process is a no-op, and on a running process it is
     // silently ignored. The diagnostics here are best-effort.
     match handle.state() {
-        None => {
+        Err(_) => {
             eprintln!("prun: process {} does not exist", pid);
             return false;
         }
-        Some(ProcessState::TracingStop) => {
+        Ok(ProcessState::TracingStop) => {
             eprintln!(
                 "prun: process {} is ptrace-stopped by a debugger; SIGCONT has no effect",
                 pid
             );
             return false;
         }
-        Some(ProcessState::Stopped) => {} // stopped -- this is the expected case
-        Some(state) => {
+        Ok(ProcessState::Stopped) => {} // stopped -- this is the expected case
+        Ok(state) => {
             eprintln!("prun: process {} is not stopped ({})", pid, state);
             return false;
         }

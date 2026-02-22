@@ -18,14 +18,11 @@ use std::ffi::OsString;
 
 use ptools::ProcHandle;
 
-fn read_cmdline(handle: &ProcHandle) -> Option<Vec<OsString>> {
-    match handle.argv() {
-        Ok(args) => Some(args),
-        Err(e) => {
-            eprintln!("Error opening /proc/{}/cmdline: {}", handle.pid(), e);
-            None
-        }
-    }
+fn read_cmdline(handle: &ProcHandle) -> Result<Vec<OsString>, ptools::Error> {
+    handle.argv().map_err(|e| {
+        eprintln!("Error opening /proc/{}/cmdline: {}", handle.pid(), e);
+        e
+    })
 }
 
 fn shell_quote(arg: &str) -> String {
@@ -43,41 +40,35 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
-fn print_args(handle: &ProcHandle) -> bool {
-    if let Some(args) = read_cmdline(handle) {
-        ptools::print_proc_summary_from(handle);
-        for (i, arg) in args.iter().enumerate() {
-            println!("argv[{}]: {}", i, arg.to_string_lossy());
-        }
-        true
-    } else {
-        false
+fn print_args(handle: &ProcHandle) -> Result<(), ptools::Error> {
+    let args = read_cmdline(handle)?;
+    ptools::print_proc_summary_from(handle);
+    for (i, arg) in args.iter().enumerate() {
+        println!("argv[{}]: {}", i, arg.to_string_lossy());
     }
+    Ok(())
 }
 
-fn print_cmdline(handle: &ProcHandle) -> bool {
-    if let Some(args) = read_cmdline(handle) {
-        // Use /proc/[pid]/exe to resolve the real executable path instead of
-        // argv[0], which may be a relative path or a name set by the process.
-        let exe = handle.exe().ok();
-        let mut quoted = Vec::with_capacity(args.len());
-        for (i, arg) in args.iter().enumerate() {
-            let display = if i == 0 {
-                if let Some(ref path) = exe {
-                    path.to_string_lossy().into_owned()
-                } else {
-                    arg.to_string_lossy().into_owned()
-                }
+fn print_cmdline(handle: &ProcHandle) -> Result<(), ptools::Error> {
+    let args = read_cmdline(handle)?;
+    // Use /proc/[pid]/exe to resolve the real executable path instead of
+    // argv[0], which may be a relative path or a name set by the process.
+    let exe = handle.exe().ok();
+    let mut quoted = Vec::with_capacity(args.len());
+    for (i, arg) in args.iter().enumerate() {
+        let display = if i == 0 {
+            if let Some(ref path) = exe {
+                path.to_string_lossy().into_owned()
             } else {
                 arg.to_string_lossy().into_owned()
-            };
-            quoted.push(shell_quote(&display));
-        }
-        println!("{}", quoted.join(" "));
-        true
-    } else {
-        false
+            }
+        } else {
+            arg.to_string_lossy().into_owned()
+        };
+        quoted.push(shell_quote(&display));
     }
+    println!("{}", quoted.join(" "));
+    Ok(())
 }
 
 use std::process::exit;
@@ -181,10 +172,10 @@ fn main() {
         let mut section = false;
         if want_args {
             if args.line {
-                if !print_cmdline(&handle) {
+                if print_cmdline(&handle).is_err() {
                     error = true;
                 }
-            } else if !print_args(&handle) {
+            } else if print_args(&handle).is_err() {
                 error = true;
             }
             section = true;

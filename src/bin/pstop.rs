@@ -32,19 +32,19 @@ fn verify_stopped(pid: u64) -> bool {
     let mut warned_d = false;
     loop {
         match handle.state() {
-            Some(ProcessState::Stopped) => return true,
-            Some(ProcessState::TracingStop) => {
+            Ok(ProcessState::Stopped) => return true,
+            Ok(ProcessState::TracingStop) => {
                 eprintln!(
                     "pstop: process {} is stopped under a debugger, not by us",
                     pid
                 );
                 return false;
             }
-            None => {
+            Err(_) => {
                 eprintln!("pstop: process {} has exited", pid);
                 return false;
             }
-            Some(ProcessState::DiskSleep) => {
+            Ok(ProcessState::DiskSleep) => {
                 if !warned_d {
                     eprintln!(
                         "pstop: process {} is in uninterruptible sleep; \
@@ -56,7 +56,7 @@ fn verify_stopped(pid: u64) -> bool {
                 thread::sleep(backoff);
                 backoff = (backoff * 2).min(cap);
             }
-            Some(_) => {
+            Ok(_) => {
                 thread::sleep(backoff);
                 backoff = (backoff * 2).min(cap);
             }
