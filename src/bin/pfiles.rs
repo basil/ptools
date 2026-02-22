@@ -1333,8 +1333,13 @@ fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
     }
 
     let sockets = fetch_sock_info(source);
-    // derive_peer_processes does system-wide /proc scan — live-only.
-    let peers = derive_peer_processes(pid, &sockets);
+    // derive_peer_processes does system-wide /proc scan; skip when there are
+    // no sockets to match (always the case for coredump sources).
+    let peers = if sockets.is_empty() {
+        HashMap::new()
+    } else {
+        derive_peer_processes(pid, &sockets)
+    };
 
     let fds = match source.list_fds() {
         Ok(fds) => fds,
