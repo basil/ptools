@@ -14,21 +14,16 @@
 //   limitations under the License.
 //
 
-use ptools::ProcSource;
+use ptools::ProcHandle;
 
-fn read_cmdline(source: &dyn ProcSource) -> Option<Vec<Vec<u8>>> {
-    let bytes = match source.read_cmdline() {
-        Ok(bytes) => bytes,
+fn read_cmdline(handle: &ProcHandle) -> Option<Vec<Vec<u8>>> {
+    match handle.argv() {
+        Ok(args) => Some(args),
         Err(e) => {
-            eprintln!("Error opening /proc/{}/cmdline: {}", source.pid(), e);
-            return None;
+            eprintln!("Error opening /proc/{}/cmdline: {}", handle.pid(), e);
+            None
         }
-    };
-    let mut args: Vec<Vec<u8>> = bytes.split(|b| *b == b'\0').map(<[u8]>::to_vec).collect();
-    if args.last().is_some_and(|arg| arg.is_empty()) {
-        args.pop();
     }
-    Some(args)
 }
 
 fn shell_quote(arg: &str) -> String {
@@ -46,9 +41,9 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
-fn print_args(source: &dyn ProcSource) -> bool {
-    if let Some(args) = read_cmdline(source) {
-        ptools::print_proc_summary_from(source);
+fn print_args(handle: &ProcHandle) -> bool {
+    if let Some(args) = read_cmdline(handle) {
+        ptools::print_proc_summary_from(handle);
         for (i, bytes) in args.iter().enumerate() {
             let arg = String::from_utf8_lossy(bytes);
             println!("argv[{}]: {}", i, arg);
@@ -59,11 +54,11 @@ fn print_args(source: &dyn ProcSource) -> bool {
     }
 }
 
-fn print_cmdline(source: &dyn ProcSource) -> bool {
-    if let Some(args) = read_cmdline(source) {
+fn print_cmdline(handle: &ProcHandle) -> bool {
+    if let Some(args) = read_cmdline(handle) {
         // Use /proc/[pid]/exe to resolve the real executable path instead of
         // argv[0], which may be a relative path or a name set by the process.
-        let exe = source.read_exe().ok();
+        let exe = handle.exe().ok();
         let mut quoted = Vec::with_capacity(args.len());
         for (i, bytes) in args.iter().enumerate() {
             let display = if i == 0 {
@@ -171,21 +166,24 @@ fn main() {
             println!();
         }
         first = false;
-        let source = match ptools::resolve_operand(operand) {
-            Ok(s) => s,
+        let handle = match ptools::resolve_operand(operand) {
+            Ok(h) => h,
             Err(e) => {
                 eprintln!("pargs: {e}");
                 error = true;
                 continue;
             }
         };
+        for w in handle.warnings() {
+            eprintln!("{w}");
+        }
         let mut section = false;
         if want_args {
             if args.line {
-                if !print_cmdline(source.as_ref()) {
+                if !print_cmdline(&handle) {
                     error = true;
                 }
-            } else if !print_args(source.as_ref()) {
+            } else if !print_args(&handle) {
                 error = true;
             }
             section = true;
@@ -194,7 +192,7 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_env_from(source.as_ref()) {
+            if !ptools::print_env_from(&handle) {
                 error = true;
             }
             section = true;
@@ -203,7 +201,7 @@ fn main() {
             if section {
                 println!();
             }
-            if !ptools::print_auxv_from(source.as_ref()) {
+            if !ptools::print_auxv_from(&handle) {
                 error = true;
             }
         }

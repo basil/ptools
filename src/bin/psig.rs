@@ -15,193 +15,13 @@
 //
 
 use nix::libc;
-use ptools::ProcSource;
+use ptools::ProcHandle;
 
 #[derive(Copy, Clone)]
 enum SignalAction {
     Default,
     Ignored,
     Caught,
-}
-
-fn parse_signal_set(hex: &str) -> Result<Vec<bool>, String> {
-    let trimmed = hex.trim();
-    if trimmed.is_empty() {
-        return Err("empty signal mask".to_string());
-    }
-
-    let mut bits = vec![false; 1];
-    for (nibble_idx, ch) in trimmed.bytes().rev().enumerate() {
-        let nibble = match ch {
-            b'0'..=b'9' => ch - b'0',
-            b'a'..=b'f' => 10 + (ch - b'a'),
-            b'A'..=b'F' => 10 + (ch - b'A'),
-            _ => {
-                return Err(format!("invalid hex digit '{}'", ch as char));
-            }
-        };
-
-        for bit in 0..4 {
-            if (nibble & (1 << bit)) == 0 {
-                continue;
-            }
-            let sig = nibble_idx * 4 + bit as usize + 1;
-            if sig >= bits.len() {
-                bits.resize(sig + 1, false);
-            }
-            bits[sig] = true;
-        }
-    }
-
-    Ok(bits)
-}
-
-struct SignalMasks {
-    sig_ign: Vec<bool>,
-    sig_cgt: Vec<bool>,
-    sig_blk: Vec<bool>,
-    sig_pnd: Vec<bool>,
-    shd_pnd: Vec<bool>,
-}
-
-fn intersect_blocked_masks(masks: &[Vec<bool>]) -> Vec<bool> {
-    let Some(first) = masks.first() else {
-        return Vec::new();
-    };
-    let max_len = masks.iter().map(|m| m.len()).max().unwrap_or(0);
-    let mut result = vec![false; max_len];
-    for i in 0..max_len {
-        result[i] = masks.iter().all(|m| i < m.len() && m[i]);
-    }
-    // If there's only one thread, just return its mask directly.
-    if masks.len() == 1 {
-        return first.clone();
-    }
-    result
-}
-
-fn read_thread_blocked_masks(source: &dyn ProcSource) -> Option<Vec<Vec<bool>>> {
-    let tids = source.list_tids().ok()?;
-
-    // Warn if the source reports fewer threads than actually existed (e.g.,
-    // coredump sources only expose the main thread).
-    if let Ok(status) = source.read_status() {
-        if let Some(n) = status
-            .lines()
-            .find_map(|l| l.strip_prefix("Threads:"))
-            .and_then(|v| v.trim().parse::<usize>().ok())
-        {
-            if n > tids.len() {
-                eprintln!(
-                    "warning: process had {} threads but only {} available; \
-                     blocked masks may be incomplete",
-                    n,
-                    tids.len()
-                );
-            }
-        }
-    }
-
-    let mut masks = Vec::new();
-    for tid in tids {
-        let Ok(status) = source.read_tid_status(tid) else {
-            continue;
-        };
-        for line in status.lines() {
-            if let Some(hex) = line.strip_prefix("SigBlk:") {
-                if let Ok(mask) = parse_signal_set(hex) {
-                    masks.push(mask);
-                }
-                break;
-            }
-        }
-    }
-
-    if masks.is_empty() {
-        None
-    } else {
-        Some(masks)
-    }
-}
-
-fn parse_status_signal_masks(source: &dyn ProcSource) -> Option<SignalMasks> {
-    let pid = source.pid();
-    let status = source
-        .read_status()
-        .map_err(|e| {
-            eprintln!("Error reading /proc/{}/status: {}", pid, e);
-            e
-        })
-        .ok()?;
-
-    let mut sig_ign = None;
-    let mut sig_cgt = None;
-    let mut sig_blk = None;
-    let mut sig_pnd = None;
-    let mut shd_pnd = None;
-
-    for line in status.lines() {
-        if let Some((key, value)) = line.split_once(':') {
-            let value = value.trim();
-            match key {
-                "SigIgn" => sig_ign = Some(value.to_string()),
-                "SigCgt" => sig_cgt = Some(value.to_string()),
-                "SigBlk" => sig_blk = Some(value.to_string()),
-                "SigPnd" => sig_pnd = Some(value.to_string()),
-                "ShdPnd" => shd_pnd = Some(value.to_string()),
-                _ => {}
-            }
-        }
-    }
-
-    let sig_ign = match sig_ign {
-        Some(x) => x,
-        None => {
-            eprintln!("Error parsing /proc/{}/status: missing SigIgn", pid);
-            return None;
-        }
-    };
-    let sig_cgt = match sig_cgt {
-        Some(x) => x,
-        None => {
-            eprintln!("Error parsing /proc/{}/status: missing SigCgt", pid);
-            return None;
-        }
-    };
-
-    let parse = |name: &str, hex: &str| -> Option<Vec<bool>> {
-        parse_signal_set(hex)
-            .map_err(|e| {
-                eprintln!("Error parsing /proc/{}/status {}: {}", pid, name, e);
-                e
-            })
-            .ok()
-    };
-
-    let sig_ign = parse("SigIgn", &sig_ign)?;
-    let sig_cgt = parse("SigCgt", &sig_cgt)?;
-
-    // Compute blocked mask as intersection across all threads.
-    // Falls back to main thread's SigBlk if /proc/[pid]/task/ is unreadable.
-    let sig_blk = read_thread_blocked_masks(source)
-        .map(|masks| intersect_blocked_masks(&masks))
-        .or_else(|| sig_blk.and_then(|s| parse("SigBlk", &s)))
-        .unwrap_or_default();
-
-    let sig_pnd = sig_pnd
-        .and_then(|s| parse("SigPnd", &s))
-        .unwrap_or_default();
-    let shd_pnd = shd_pnd
-        .and_then(|s| parse("ShdPnd", &s))
-        .unwrap_or_default();
-
-    Some(SignalMasks {
-        sig_ign,
-        sig_cgt,
-        sig_blk,
-        sig_pnd,
-        shd_pnd,
-    })
 }
 
 fn has_signal(m: &[bool], sig: usize) -> bool {
@@ -273,10 +93,10 @@ fn action_text(action: SignalAction) -> &'static str {
     }
 }
 
-fn print_signal_actions(source: &dyn ProcSource) -> bool {
-    ptools::print_proc_summary_from(source);
+fn print_signal_actions(handle: &ProcHandle) -> bool {
+    ptools::print_proc_summary_from(handle);
 
-    let Some(masks) = parse_status_signal_masks(source) else {
+    let Some(masks) = handle.signal_masks() else {
         return false;
     };
 
@@ -287,15 +107,15 @@ fn print_signal_actions(source: &dyn ProcSource) -> bool {
         64,
         std::cmp::max(
             rtmax,
-            std::cmp::max(masks.sig_ign.len(), masks.sig_cgt.len()).saturating_sub(1),
+            std::cmp::max(masks.ignored.len(), masks.caught.len()).saturating_sub(1),
         ),
     );
 
     for sig in 1..=max_sig {
         let name = signal_name(sig, rtmin, rtmax);
-        let action = action_for_signal(sig, &masks.sig_ign, &masks.sig_cgt);
-        let blocked = has_signal(&masks.sig_blk, sig);
-        let pending = has_signal(&masks.sig_pnd, sig) || has_signal(&masks.shd_pnd, sig);
+        let action = action_for_signal(sig, &masks.ignored, &masks.caught);
+        let blocked = has_signal(&masks.blocked, sig);
+        let pending = has_signal(&masks.pending, sig) || has_signal(&masks.shared_pending, sig);
 
         let mut extra = Vec::new();
         if blocked {
@@ -378,15 +198,18 @@ fn main() {
             println!();
         }
         first = false;
-        let source = match ptools::resolve_operand(operand) {
-            Ok(s) => s,
+        let handle = match ptools::resolve_operand(operand) {
+            Ok(h) => h,
             Err(e) => {
                 eprintln!("psig: {e}");
                 error = true;
                 continue;
             }
         };
-        if !print_signal_actions(source.as_ref()) {
+        for w in handle.warnings() {
+            eprintln!("{w}");
+        }
+        if !print_signal_actions(&handle) {
             error = true;
         }
     }

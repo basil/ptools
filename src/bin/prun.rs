@@ -21,13 +21,13 @@ use nix::unistd::Pid;
 
 fn run_process(pid: u64) -> bool {
     let nix_pid = Pid::from_raw(pid as i32);
-    let source = ptools::LiveProcess::new(pid);
+    let handle = ptools::ProcHandle::from_pid(pid);
 
     // Advisory pre-check: the state can change between this read and the
     // kill(2) below (TOCTOU), but that is harmless -- SIGCONT on a
     // ptrace-stopped process is a no-op, and on a running process it is
     // silently ignored. The diagnostics here are best-effort.
-    match ptools::proc_state_from(&source) {
+    match handle.state() {
         None => {
             eprintln!("prun: process {} does not exist", pid);
             return false;

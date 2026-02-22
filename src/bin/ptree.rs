@@ -15,7 +15,7 @@
 //
 
 use nix::libc;
-use ptools::{LiveProcess, ParseError, ProcSource};
+use ptools::ParseError;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
@@ -62,102 +62,6 @@ fn graph_chars() -> &'static GraphChars {
     }
 }
 
-// Info parsed from /proc/[pid]/status
-struct ProcStat {
-    pid: u64,
-    fields: HashMap<String, String>,
-}
-
-impl ProcStat {
-    // What is the stability of 'status' vs 'stat'? Is parsing this more likely to break? Overall,
-    // 'stat' seems better designed for parsing, _except_ ...
-    //
-    // The fields in /proc/[pid]/stat are separated by spaces. Unfortunately, the second field is
-    // the command, which can contain spaces. Without knowing what the command is beforehand, we
-    // can't parse this file reliably. We can read the command from /proc/[pid]/comm,
-    // so we know exactly what to expect, but that would be a pain.
-    //
-    fn from_source(source: &dyn ProcSource) -> Result<Self, Box<dyn Error>> {
-        // /proc/[pid]/status contains lines of the form
-        //
-        //    Name:   bash
-        //    Umask:  0022
-        //    State:  S (sleeping)
-        //    ...
-
-        let pid = source.pid();
-        let status_file = format!("/proc/{}/status", pid);
-        let content = source.read_status()?;
-        let fields = content
-            .lines()
-            .map(|s| {
-                let substrs = s.splitn(2, ":").collect::<Vec<&str>>();
-                if substrs.len() < 2 {
-                    Err(ParseError::in_file(
-                        "status",
-                        &format!(
-                            "Fewer fields than expected in line '{}' of file {}",
-                            s, status_file
-                        ),
-                    ))?;
-                }
-                let key = substrs[0].to_string();
-                let value = substrs[1].trim().to_string();
-                Ok((key, value))
-            })
-            .collect::<Result<HashMap<String, String>, Box<dyn Error>>>()?;
-
-        Ok(ProcStat { pid, fields })
-    }
-
-    fn get_field(&self, field: &str) -> Result<&str, Box<dyn Error>> {
-        match self.fields.get(field) {
-            Some(val) => Ok(val),
-            None => Err(From::from(ParseError::in_file(
-                "status",
-                &format!(
-                    "Missing expected field '{}' in file /proc/{}/status",
-                    field, self.pid
-                ),
-            ))),
-        }
-    }
-
-    fn ppid(&self) -> Result<u64, Box<dyn Error>> {
-        Ok(self.get_field("PPid")?.parse()?)
-    }
-
-    fn euid(&self) -> Result<u32, Box<dyn Error>> {
-        let fields = self
-            .get_field("Uid")?
-            .split_whitespace()
-            .collect::<Vec<&str>>();
-        if fields.len() < 2 {
-            return Err(From::from(ParseError::in_file(
-                "status",
-                &format!(
-                    "Uid field in /proc/{}/status had fewer fields than expected",
-                    self.pid
-                ),
-            )));
-        }
-        Ok(fields[1].parse::<u32>()?)
-    }
-}
-
-// Read the start time (field 22) from /proc/[pid]/stat.
-// Field 2 (comm) is wrapped in parens and may contain spaces or parens,
-// so we find the last ')' and parse fields after it.
-fn read_starttime(source: &dyn ProcSource) -> Option<u64> {
-    let data = source.read_stat().ok()?;
-    let after_comm = &data[data.rfind(')')? + 2..];
-    // Fields after comm: state(1) ppid(2) pgrp(3) session(4) tty_nr(5) tpgid(6)
-    // flags(7) minflt(8) cminflt(9) majflt(10) cmajflt(11) utime(12) stime(13)
-    // cutime(14) cstime(15) priority(16) nice(17) num_threads(18) itrealvalue(19)
-    // starttime(20)
-    after_comm.split_whitespace().nth(19)?.parse().ok()
-}
-
 // Loop over all the processes listed in /proc/, find the parent of each one, and build a map from
 // child to parent and a map from parent to children. There doesn't seem to be a more efficient way
 // of doing this reliably.
@@ -173,27 +77,20 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
         let entry = entry?;
         let filename = entry.file_name();
         if let Some(pid) = filename.to_str().and_then(|s| s.parse::<u64>().ok()) {
-            let source = LiveProcess::new(pid);
-            let proc_stat = match ProcStat::from_source(&source) {
-                Ok(proc_stat) => proc_stat,
+            let handle = ptools::ProcHandle::from_pid(pid);
+            let ppid = match handle.ppid() {
+                Ok(ppid) => ppid,
                 // Proc probably exited before we could read its status
                 Err(_) => continue,
             };
-            let ppid = match proc_stat.ppid() {
-                Ok(ppid) => ppid,
-                Err(e) => {
-                    eprintln!("{}", e);
-                    continue;
-                }
-            };
-            let euid = match proc_stat.euid() {
+            let euid = match handle.euid() {
                 Ok(euid) => euid,
                 Err(e) => {
                     eprintln!("{}", e);
                     continue;
                 }
             };
-            if let Some(st) = read_starttime(&source) {
+            if let Some(st) = handle.starttime() {
                 starttime_map.insert(pid, st);
             }
             child_map.entry(ppid).or_insert(vec![]).push(pid);
@@ -326,8 +223,8 @@ fn print_ptree_line(
         }
     }
     print!("{}  ", pid);
-    let source = LiveProcess::new(pid);
-    ptools::print_cmd_summary_from(&source);
+    let handle = ptools::ProcHandle::from_pid(pid);
+    ptools::print_cmd_summary_from(&handle);
 }
 
 fn lookup_uid_by_username(username: &str) -> Result<Option<u32>, Box<dyn Error>> {

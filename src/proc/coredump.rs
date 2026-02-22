@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use nix::libc;
 
-use crate::proc_source::ProcSource;
+use super::ProcSource;
 
 // ---------------------------------------------------------------------------
 // libsystemd journal FFI (minimal subset)
@@ -95,6 +95,7 @@ impl Drop for Journal {
 pub struct CoredumpSource {
     pid: u64,
     fields: HashMap<String, Vec<u8>>,
+    warnings: Vec<String>,
 }
 
 /// A parsed entry from `COREDUMP_OPEN_FDS`.
@@ -141,6 +142,7 @@ impl CoredumpSource {
         // Look up the matching journal entry and merge in all
         // COREDUMP_* fields not already present from xattrs.
         let journal_fields = lookup_journal_fields(path, &fields);
+        let mut warnings = Vec::new();
         if journal_fields.is_empty() {
             if !file_exists {
                 return Err(io::Error::new(
@@ -151,17 +153,17 @@ impl CoredumpSource {
                     ),
                 ));
             }
-            eprintln!(
+            warnings.push(format!(
                 "warning: no matching journal entry found for {}; \
                  output will be limited to core file metadata",
                 path.display()
-            );
+            ));
         } else if !file_exists {
-            eprintln!(
+            warnings.push(format!(
                 "warning: core file {} no longer exists; \
                  using journal entry only",
                 path.display()
-            );
+            ));
         }
         for (key, value) in journal_fields {
             fields.entry(key).or_insert(value);
@@ -176,13 +178,26 @@ impl CoredumpSource {
                 ),
             )
         })?;
-        Ok(CoredumpSource { pid, fields })
+        Ok(CoredumpSource {
+            pid,
+            fields,
+            warnings,
+        })
     }
 
     /// Create from a pre-built field map (e.g. from journal bindings).
     pub fn from_fields(fields: HashMap<String, Vec<u8>>) -> io::Result<Self> {
         let pid = extract_pid(&fields)?;
-        Ok(CoredumpSource { pid, fields })
+        Ok(CoredumpSource {
+            pid,
+            fields,
+            warnings: Vec::new(),
+        })
+    }
+
+    /// Return any warnings generated during construction.
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
     }
 
     fn get_field(&self, key: &str) -> io::Result<&[u8]> {

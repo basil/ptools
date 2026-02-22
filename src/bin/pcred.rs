@@ -16,7 +16,7 @@
 
 use std::process::exit;
 
-use ptools::{resolve_gid, resolve_uid, ProcSource};
+use ptools::{resolve_gid, resolve_uid, ProcHandle};
 
 struct Args {
     all: bool,
@@ -75,90 +75,6 @@ fn parse_args() -> Args {
     args
 }
 
-struct Cred {
-    euid: u32,
-    ruid: u32,
-    suid: u32,
-    egid: u32,
-    rgid: u32,
-    sgid: u32,
-    groups: Vec<u32>,
-}
-
-fn read_cred(source: &dyn ProcSource) -> Option<Cred> {
-    let pid = source.pid();
-    let status = source
-        .read_status()
-        .map_err(|e| {
-            eprintln!("pcred: {}: {}", pid, e);
-            e
-        })
-        .ok()?;
-
-    let mut uid_fields = None;
-    let mut gid_fields = None;
-    let mut groups = Vec::new();
-
-    for line in status.lines() {
-        if let Some((key, value)) = line.split_once(':') {
-            let value = value.trim();
-            match key {
-                "Uid" => {
-                    let fields: Vec<u32> = value
-                        .split_whitespace()
-                        .filter_map(|s| s.parse().ok())
-                        .collect();
-                    if fields.len() >= 3 {
-                        uid_fields = Some((fields[0], fields[1], fields[2]));
-                    }
-                }
-                "Gid" => {
-                    let fields: Vec<u32> = value
-                        .split_whitespace()
-                        .filter_map(|s| s.parse().ok())
-                        .collect();
-                    if fields.len() >= 3 {
-                        gid_fields = Some((fields[0], fields[1], fields[2]));
-                    }
-                }
-                "Groups" => {
-                    groups = value
-                        .split_whitespace()
-                        .filter_map(|s| s.parse().ok())
-                        .collect();
-                }
-                _ => {}
-            }
-        }
-    }
-
-    let (ruid, euid, suid) = match uid_fields {
-        Some(f) => f,
-        None => {
-            eprintln!("pcred: {}: missing Uid in /proc/{}/status", pid, pid);
-            return None;
-        }
-    };
-
-    let (rgid, egid, sgid) = match gid_fields {
-        Some(f) => f,
-        None => {
-            eprintln!("pcred: {}: missing Gid in /proc/{}/status", pid, pid);
-            return None;
-        }
-    };
-
-    Some(Cred {
-        euid,
-        ruid,
-        suid,
-        egid,
-        rgid,
-        sgid,
-        groups,
-    })
-}
-
 fn fmt_uid(uid: u32) -> String {
     match resolve_uid(uid) {
         Some(name) => format!("{}({})", uid, name),
@@ -173,10 +89,14 @@ fn fmt_gid(gid: u32) -> String {
     }
 }
 
-fn print_cred(source: &dyn ProcSource, all: bool) -> bool {
-    let pid = source.pid();
-    let Some(cred) = read_cred(source) else {
-        return false;
+fn print_cred(handle: &ProcHandle, all: bool) -> bool {
+    let pid = handle.pid();
+    let cred = match handle.cred() {
+        Ok(cred) => cred,
+        Err(e) => {
+            eprintln!("pcred: {}: {}", pid, e);
+            return false;
+        }
     };
 
     if !all && cred.euid == cred.ruid && cred.ruid == cred.suid {
@@ -224,15 +144,18 @@ fn main() {
             println!();
         }
         first = false;
-        let source = match ptools::resolve_operand(operand) {
-            Ok(s) => s,
+        let handle = match ptools::resolve_operand(operand) {
+            Ok(h) => h,
             Err(e) => {
                 eprintln!("pcred: {e}");
                 error = true;
                 continue;
             }
         };
-        if !print_cred(source.as_ref(), args.all) {
+        for w in handle.warnings() {
+            eprintln!("{w}");
+        }
+        if !print_cred(&handle, args.all) {
             error = true;
         }
     }

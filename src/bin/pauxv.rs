@@ -78,15 +78,18 @@ fn main() {
             println!();
         }
         first = false;
-        let source = match ptools::resolve_operand(operand) {
-            Ok(s) => s,
+        let handle = match ptools::resolve_operand(operand) {
+            Ok(h) => h,
             Err(e) => {
                 eprintln!("pauxv: {e}");
                 error = true;
                 continue;
             }
         };
-        if !ptools::print_auxv_from(source.as_ref()) {
+        for w in handle.warnings() {
+            eprintln!("{w}");
+        }
+        if !ptools::print_auxv_from(&handle) {
             error = true;
         }
     }

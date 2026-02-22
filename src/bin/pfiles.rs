@@ -17,7 +17,7 @@
 use nix::fcntl::OFlag;
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use nix::sys::stat::{major, minor, stat, SFlag};
-use ptools::{ParseError, ProcSource};
+use ptools::{ParseError, ProcHandle};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
@@ -190,11 +190,11 @@ fn print_file_type(file_type: &FileType) -> String {
     }
 }
 
-fn print_matching_fdinfo_lines(source: &dyn ProcSource, fd: u64, prefixes: &[&str]) {
-    let fdinfo = match source.read_fdinfo(fd) {
+fn print_matching_fdinfo_lines(handle: &ProcHandle, fd: u64, prefixes: &[&str]) {
+    let fdinfo = match handle.fdinfo_raw(fd) {
         Ok(fdinfo) => fdinfo,
         Err(e) => {
-            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", source.pid(), fd, e);
+            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", handle.pid(), fd, e);
             return;
         }
     };
@@ -260,40 +260,6 @@ fn print_open_flags(flags: u64) {
     // /proc/[pid]/fdinfo flags, so we keep it in this compact flag list.
 
     println!();
-}
-
-fn get_fdinfo_field(
-    source: &dyn ProcSource,
-    fd: u64,
-    field: &str,
-) -> Result<String, Box<dyn Error>> {
-    let contents = source.read_fdinfo(fd)?;
-    let line = contents
-        .lines()
-        .filter(|line| line.starts_with(&format!("{}:", field)))
-        .collect::<Vec<&str>>()
-        .pop()
-        .ok_or(ParseError::in_file(
-            "fdinfo",
-            &format!("no value '{}'", field),
-        ))?;
-
-    let (_, value) = line.split_once(':').ok_or(ParseError::in_file(
-        "fdinfo",
-        &format!("unexpected format for '{}': {}", field, line),
-    ))?;
-
-    Ok(value.trim().to_string())
-}
-
-fn get_flags(source: &dyn ProcSource, fd: u64) -> Result<u64, Box<dyn Error>> {
-    let str_flags = get_fdinfo_field(source, fd, "flags")?;
-    Ok(u64::from_str_radix(str_flags.trim(), 8)?)
-}
-
-fn get_offset(source: &dyn ProcSource, fd: u64) -> Result<u64, Box<dyn Error>> {
-    let str_offset = get_fdinfo_field(source, fd, "pos")?;
-    Ok(str_offset.parse::<u64>()?)
 }
 
 fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
@@ -943,12 +909,12 @@ fn ok_or_eprint<T>(r: Result<T, Box<dyn Error>>, filename: &str) -> Option<T> {
 
 // Parse the info for each socket in the system from /proc/[pid]/net, and return it as a map indexed
 // by inode
-fn fetch_sock_info(source: &dyn ProcSource) -> HashMap<u64, SockInfo> {
+fn fetch_sock_info(handle: &ProcHandle) -> HashMap<u64, SockInfo> {
     let mut sockets = HashMap::new();
     // Socket table data is namespace-scoped in procfs. Always read from
     // /proc/<target-pid>/net/* so inode->socket metadata resolution is done in
     // the target process's network namespace instead of our own.
-    if let Ok(content) = source.read_net_file("unix") {
+    if let Ok(content) = handle.net_file("unix") {
         let unix_sockets = content
             .lines()
             .skip(1) // Header
@@ -974,7 +940,7 @@ fn fetch_sock_info(source: &dyn ProcSource) -> HashMap<u64, SockInfo> {
         sockets.extend(unix_sockets);
     }
 
-    if let Ok(content) = source.read_net_file("netlink") {
+    if let Ok(content) = handle.net_file("netlink") {
         let netlink_sockets = content
             .lines()
             .skip(1) // Header
@@ -1003,7 +969,7 @@ fn fetch_sock_info(source: &dyn ProcSource) -> HashMap<u64, SockInfo> {
     // procfs entries for tcp/udp/raw sockets (both IPv4 and IPv6) all use same format
     let mut parse_net_file =
         |filename: &str, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, ParseError>| {
-            if let Ok(content) = source.read_net_file(filename) {
+            if let Ok(content) = handle.net_file(filename) {
                 let is_tcp = filename == "tcp" || filename == "tcp6";
                 let additional_sockets = content
                     .lines()
@@ -1075,17 +1041,17 @@ fn fetch_sock_info(source: &dyn ProcSource) -> HashMap<u64, SockInfo> {
     sockets
 }
 
-fn print_fd_details(source: &dyn ProcSource, fd: u64, path: &Path) {
-    match get_offset(source, fd) {
+fn print_fd_details(handle: &ProcHandle, fd: u64, path: &Path) {
+    match handle.fd_offset(fd) {
         Ok(offset) => println!("      offset: {}", offset),
         Err(e) => eprintln!("failed to read fd offset: {}", e),
     }
     match path.as_os_str().to_string_lossy().as_ref() {
-        "anon_inode:[eventpoll]" => print_epoll_fdinfo(source, fd),
-        "anon_inode:[eventfd]" => print_matching_fdinfo_lines(source, fd, &["eventfd-count:"]),
-        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(source, fd, &["sigmask:"]),
+        "anon_inode:[eventpoll]" => print_epoll_fdinfo(handle, fd),
+        "anon_inode:[eventfd]" => print_matching_fdinfo_lines(handle, fd, &["eventfd-count:"]),
+        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(handle, fd, &["sigmask:"]),
         "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
-            source,
+            handle,
             fd,
             &[
                 "clockid:",
@@ -1096,7 +1062,7 @@ fn print_fd_details(source: &dyn ProcSource, fd: u64, path: &Path) {
             ],
         ),
         "anon_inode:inotify" | "anon_inode:[inotify]" => {
-            print_matching_fdinfo_lines(source, fd, &["inotify "])
+            print_matching_fdinfo_lines(handle, fd, &["inotify "])
         }
         _ => {}
     }
@@ -1104,13 +1070,13 @@ fn print_fd_details(source: &dyn ProcSource, fd: u64, path: &Path) {
 
 #[allow(clippy::unnecessary_cast)]
 fn print_file(
-    source: &dyn ProcSource,
+    handle: &ProcHandle,
     fd: u64,
     sockets: &HashMap<u64, SockInfo>,
     peers: &HashMap<u64, PeerProcess>,
     non_verbose: bool,
 ) {
-    let pid = source.pid();
+    let pid = handle.pid();
     // stat() on the fd path stats the TARGET file, not /proc itself -- live-only.
     let link_path_str = format!("/proc/{}/fd/{}", pid, fd);
     let link_path = Path::new(&link_path_str);
@@ -1144,7 +1110,7 @@ fn print_file(
         }
 
         print!("      ");
-        match get_flags(source, fd) {
+        match handle.fd_flags(fd) {
             Ok(flags) => print_open_flags(flags),
             Err(e) => eprintln!("failed to read fd flags: {}", e),
         }
@@ -1185,18 +1151,18 @@ fn print_file(
                     );
                 }
             }
-            _ => match source.read_fd_link(fd) {
+            _ => match handle.fd_path(fd) {
                 Ok(path) => {
                     println!("      {}", path.to_string_lossy());
-                    print_fd_details(source, fd, &path);
+                    print_fd_details(handle, fd, &path);
                 }
                 Err(e) => eprintln!("failed to readlink /proc/{}/fd/{}: {}", pid, fd, e),
             },
         }
     } else {
         // Fallback -- stat failed (coredump or inaccessible fd).
-        // Print what we can from ProcSource methods.
-        let path = match source.read_fd_link(fd) {
+        // Print what we can from ProcHandle methods.
+        let path = match handle.fd_path(fd) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("failed to read fd link for fd {}: {}", fd, e);
@@ -1210,7 +1176,7 @@ fn print_file(
         }
 
         print!("      ");
-        match get_flags(source, fd) {
+        match handle.fd_flags(fd) {
             Ok(flags) => print_open_flags(flags),
             Err(e) => eprintln!("failed to read fd flags: {}", e),
         }
@@ -1219,15 +1185,15 @@ fn print_file(
             println!("        (socket details not available)");
         }
 
-        print_fd_details(source, fd, &path);
+        print_fd_details(handle, fd, &path);
     }
 }
 
-fn print_epoll_fdinfo(source: &dyn ProcSource, fd: u64) {
-    let fdinfo = match source.read_fdinfo(fd) {
+fn print_epoll_fdinfo(handle: &ProcHandle, fd: u64) {
+    let fdinfo = match handle.fdinfo_raw(fd) {
         Ok(fdinfo) => fdinfo,
         Err(e) => {
-            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", source.pid(), fd, e);
+            eprintln!("failed to read /proc/{}/fdinfo/{}: {}", handle.pid(), fd, e);
             return;
         }
     };
@@ -1278,65 +1244,23 @@ fn print_epoll_fdinfo(source: &dyn ProcSource, fd: u64) {
     }
 }
 
-fn read_nofile_rlimit(source: &dyn ProcSource) -> Result<(String, String), Box<dyn Error>> {
-    let limits = source.read_limits()?;
+fn print_files(handle: &ProcHandle, non_verbose: bool) -> bool {
+    let pid = handle.pid();
 
-    for line in limits.lines() {
-        if line.starts_with("Max open files") {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            if fields.len() < 6 {
-                return Err(Box::new(ParseError::new(
-                    "Max open files",
-                    "line has fewer fields than expected",
-                )));
-            }
-
-            return Ok((fields[3].to_string(), fields[4].to_string()));
-        }
-    }
-
-    Err(Box::new(ParseError::new(
-        "/proc/[pid]/limits",
-        "Max open files line not found",
-    )))
-}
-
-fn read_umask(source: &dyn ProcSource) -> Result<String, Box<dyn Error>> {
-    let status = source.read_status()?;
-    for line in status.lines() {
-        let Some((field, value)) = line.split_once(':') else {
-            continue;
-        };
-
-        if field == "Umask" {
-            let parsed = u16::from_str_radix(value.trim(), 8)?;
-            return Ok(format!("{:03o}", parsed));
-        }
-    }
-
-    Err(Box::new(ParseError::new(
-        "/proc/[pid]/status",
-        "Umask line not found",
-    )))
-}
-
-fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
-    let pid = source.pid();
-
-    ptools::print_proc_summary_from(source);
-    match read_nofile_rlimit(source) {
+    ptools::print_proc_summary_from(handle);
+    match handle.nofile_limit() {
         Ok((soft, hard)) => {
             println!("  Current soft rlimit: {} file descriptors", soft);
             println!("  Current hard rlimit: {} file descriptors", hard);
         }
         Err(e) => eprintln!("Failed to read RLIMIT_NOFILE for {}: {}", pid, e),
     }
-    match read_umask(source) {
-        Ok(umask) => println!("  Current umask: {}", umask),
+    match handle.umask() {
+        Ok(umask) => println!("  Current umask: {:03o}", umask),
         Err(e) => eprintln!("Failed to read umask for {}: {}", pid, e),
     }
 
-    let sockets = fetch_sock_info(source);
+    let sockets = fetch_sock_info(handle);
     // derive_peer_processes does system-wide /proc scan; skip when there are
     // no sockets to match (always the case for coredump sources).
     let peers = if sockets.is_empty() {
@@ -1345,7 +1269,7 @@ fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
         derive_peer_processes(pid, &sockets)
     };
 
-    let fds = match source.list_fds() {
+    let fds = match handle.fds() {
         Ok(fds) => fds,
         Err(e) => {
             eprintln!("Unable to read /proc/{}/fd/: {}", pid, e);
@@ -1354,7 +1278,7 @@ fn print_files(source: &dyn ProcSource, non_verbose: bool) -> bool {
     };
 
     for fd in fds {
-        print_file(source, fd, &sockets, &peers, non_verbose);
+        print_file(handle, fd, &sockets, &peers, non_verbose);
     }
 
     true
@@ -1426,15 +1350,18 @@ fn main() {
             println!();
         }
         first = false;
-        let source = match ptools::resolve_operand(operand) {
-            Ok(s) => s,
+        let handle = match ptools::resolve_operand(operand) {
+            Ok(h) => h,
             Err(e) => {
                 eprintln!("pfiles: {e}");
                 error = true;
                 continue;
             }
         };
-        if !print_files(source.as_ref(), args.non_verbose) {
+        for w in handle.warnings() {
+            eprintln!("{w}");
+        }
+        if !print_files(&handle, args.non_verbose) {
             error = true;
         }
     }
