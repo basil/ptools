@@ -1,15 +1,14 @@
-//! Presentation layer: human-readable formatting of process data.
+//! Shared formatting helpers for process data.
 //!
-//! This module is the sole place where process information is formatted for
-//! output.  It consumes the [`crate::proc`] module (specifically
-//! [`ProcHandle`] and its associated types) and turns structured data into
-//! text written to stdout.
+//! This module formats environment variables, auxiliary vectors, and
+//! process/command summaries via [`ProcHandle`].  Individual binaries
+//! (e.g. `pfiles`, `pcred`, `psig`, `ptree`) contain their own
+//! specialised formatting.
 //!
 //! **Contract:**
 //! - This module must **not** depend on [`crate::source`] or know anything
 //!   about how raw procfs / coredump data is obtained.  All data arrives
 //!   pre-parsed through the proc-handle API.
-//! - All user-visible formatting and presentation decisions belong here.
 
 use std::borrow::Cow;
 

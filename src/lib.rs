@@ -37,9 +37,8 @@ pub use proc::{
 
 use nix::libc;
 
-// TODO Add support for handling core dumps
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
-// TODO Test against 32-bit processes
+// TODO Test against 32-bit target processes
 
 // Error handling philosophy: in general these tools should try to recover from errors and continue
 // to produce useful output. Debugging tools, much more so than other tools, are expected to be run

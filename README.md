@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/crates/l/ptools)](LICENSE)
 [![Build](https://github.com/basil/ptools/actions/workflows/build.yml/badge.svg)](https://github.com/basil/ptools/actions/workflows/build.yml)
 
-`ptools` is a a collection of Linux utilities for inspecting the state of
+`ptools` is a collection of Linux utilities for inspecting the state of
 processes, inspired by the tools of the same name on Solaris/illumos.
 
 ## Motivation
