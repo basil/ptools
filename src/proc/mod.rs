@@ -24,6 +24,7 @@ pub(crate) mod cred;
 pub(crate) mod fd;
 pub(crate) mod net;
 pub(crate) mod numa;
+pub(crate) mod pidfd;
 pub(crate) mod signal;
 
 use nix::fcntl::OFlag;

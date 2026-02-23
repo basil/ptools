@@ -15,50 +15,12 @@
 //
 
 use std::collections::{HashMap, HashSet};
-use std::io;
-use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, BorrowedFd};
 use std::process;
 
 use nix::errno::Errno;
-use nix::libc;
 use nix::poll::{self, PollFd, PollFlags, PollTimeout};
-
-/// Open a pidfd for the given PID via the pidfd_open(2) syscall.
-fn pidfd_open(pid: libc::pid_t) -> io::Result<OwnedFd> {
-    let ret = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0_u32) };
-    if ret < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(unsafe { OwnedFd::from_raw_fd(ret as i32) })
-    }
-}
-
-/// Read the wait status from a raw fd via waitid(P_PIDFD, ...).
-/// Returns Ok(status) on success, Err(errno) on failure.
-fn pidfd_wait_status(raw_fd: i32) -> Result<i32, Errno> {
-    let mut siginfo: libc::siginfo_t = unsafe { std::mem::zeroed() };
-    let ret = unsafe {
-        libc::waitid(
-            libc::P_PIDFD,
-            raw_fd as libc::id_t,
-            &mut siginfo,
-            libc::WEXITED,
-        )
-    };
-    if ret < 0 {
-        return Err(Errno::last());
-    }
-    // Reconstruct the traditional wait status from siginfo fields.
-    let code = siginfo.si_code;
-    let status = unsafe { siginfo.si_status() };
-    let wait_status = match code {
-        libc::CLD_EXITED => (status & 0xff) << 8,
-        libc::CLD_KILLED => status & 0x7f,
-        libc::CLD_DUMPED => (status & 0x7f) | 0x80,
-        _ => 0,
-    };
-    Ok(wait_status)
-}
+use ptools::PidFd;
 
 struct Args {
     verbose: bool,
@@ -131,11 +93,11 @@ fn main() {
     let mut seen = HashSet::new();
     let pids: Vec<u64> = args.pid.into_iter().filter(|p| seen.insert(*p)).collect();
 
-    // Map raw fd -> (OwnedFd, pid) for O(1) lookup.
-    let mut entries: HashMap<i32, (OwnedFd, u64)> = HashMap::new();
+    // Map raw fd -> (PidFd, pid) for O(1) lookup.
+    let mut entries: HashMap<i32, (PidFd, u64)> = HashMap::new();
 
     for pid in &pids {
-        match pidfd_open(*pid as libc::pid_t) {
+        match PidFd::open(*pid) {
             Ok(fd) => {
                 entries.insert(fd.as_raw_fd(), (fd, *pid));
             }
@@ -184,13 +146,13 @@ fn main() {
             .collect();
 
         for &raw_fd in &ready_fds {
-            let (_, pid) = &entries[&raw_fd];
+            let (pidfd, pid) = &entries[&raw_fd];
 
             if args.verbose {
                 // waitid(P_PIDFD) only works for child processes; for
                 // non-children it returns ECHILD, and we simply omit the
                 // wait status in that case.
-                match pidfd_wait_status(raw_fd) {
+                match pidfd.wait_status() {
                     Ok(status) => {
                         println!("{}: terminated, wait status {:#06x}", pid, status);
                     }

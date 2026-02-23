@@ -29,6 +29,7 @@ pub use proc::fd::{
 };
 pub use proc::net::{PeerProcess, SockType, Socket, SocketOptions, TcpInfo, TcpState};
 pub use proc::numa::{cpu_to_node, format_node_list, numa_online_nodes, CpuSet, NodeAffinity};
+pub use proc::pidfd::PidFd;
 pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{
     resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcessState, Rlimit, RlimitVal,
