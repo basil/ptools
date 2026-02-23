@@ -96,7 +96,14 @@ fn main() {
     // Map raw fd -> (PidFd, pid) for O(1) lookup.
     let mut entries: HashMap<i32, (PidFd, u64)> = HashMap::new();
 
+    let my_pid = process::id() as u64;
+
     for pid in &pids {
+        if *pid == my_pid {
+            eprintln!("pwait: skipping self PID {}", pid);
+            failed = true;
+            continue;
+        }
         match PidFd::open(*pid) {
             Ok(fd) => {
                 entries.insert(fd.as_raw_fd(), (fd, *pid));
