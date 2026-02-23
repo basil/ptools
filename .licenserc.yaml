@@ -21,6 +21,7 @@ header:
   paths-ignore:
     - '**/*.md'
     - '.git-blame-ignore-revs'
+    - '.gitattributes'
     - '.github/**'
     - '.gitignore'
     - '.licenserc.yaml'
