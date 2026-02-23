@@ -32,7 +32,7 @@ fn shell_quote(arg: &str) -> String {
 
     let is_shell_safe = arg
         .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || b"_@%+=:,./-".contains(&b));
+        .all(|b| b.is_ascii_alphanumeric() || b"_.-/@:,".contains(&b));
     if is_shell_safe {
         arg.to_string()
     } else {
