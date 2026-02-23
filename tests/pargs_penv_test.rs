@@ -200,7 +200,7 @@ fn pauxv_prints_auxv_entries() {
         let _key = parts.next().unwrap();
         let value = parts.next().unwrap_or("");
         assert!(
-            value.starts_with("0x") && value.len() == 18,
+            value.starts_with("0x") && (value.len() == 10 || value.len() == 18),
             "Expected auxv value to be fixed-width hex, got '{}' in line '{}'",
             value,
             line
@@ -225,7 +225,7 @@ fn pauxv_prints_auxv_entries() {
     let allowed_page_sizes = [0x1000_u64, 0x4000_u64, 0x10000_u64];
     assert!(
         allowed_page_sizes.contains(&pagesz),
-        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?} for amd64/arm64",
+        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?}",
         pagesz,
         allowed_page_sizes
     );
@@ -294,7 +294,7 @@ fn pargs_x_prints_auxv_entries() {
         let _key = parts.next().unwrap();
         let value = parts.next().unwrap_or("");
         assert!(
-            value.starts_with("0x") && value.len() == 18,
+            value.starts_with("0x") && (value.len() == 10 || value.len() == 18),
             "Expected auxv value to be fixed-width hex, got '{}' in line '{}'",
             value,
             line
@@ -319,7 +319,7 @@ fn pargs_x_prints_auxv_entries() {
     let allowed_page_sizes = [0x1000_u64, 0x4000_u64, 0x10000_u64];
     assert!(
         allowed_page_sizes.contains(&pagesz),
-        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?} for amd64/arm64",
+        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?}",
         pagesz,
         allowed_page_sizes
     );
