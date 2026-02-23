@@ -114,16 +114,12 @@ fn print_tree(
     child_map: &HashMap<u64, Vec<u64>>,
     graph: Option<&GraphChars>,
 ) -> bool {
+    if !parent_map.contains_key(&pid) {
+        eprintln!("No such pid {}", pid);
+        return false;
+    }
     let mut cont = Vec::new();
-    let indent_level = if pid == 1 {
-        0
-    } else {
-        if !parent_map.contains_key(&pid) {
-            eprintln!("No such pid {}", pid);
-            return false;
-        }
-        print_parents(parent_map, pid, graph, &mut cont)
-    };
+    let indent_level = print_parents(parent_map, pid, graph, &mut cont);
     print_children(child_map, pid, indent_level, graph, &mut cont, true);
     true
 }
@@ -146,17 +142,14 @@ fn print_parents(
 ) -> u64 {
     let ppid = match parent_map.get(&pid) {
         Some(ppid) => *ppid,
-        // Some child process listed 'pid' as its parent, but 'pid' exited before we could read its
-        // parent. The child of 'pid' will have been re-parented, and the new parent will be 'init'.
-        // It's actually a bit more complicated (see find_new_reaper() in the kernel), and there is
-        // one case we might want to handle better: when a child is re-parented to another thread in
-        // the thread group.
-        None => 1,
+        // Process exited before we could read its parent, stop the ancestry chain.
+        None => return 0,
     };
 
-    // We've reached the top of the process tree. Don't bother printing the parent if the parent
-    // is pid 1. Typically pid 1 didn't really start the process in question.
-    if ppid == 1 {
+    // Don't print ancestors whose parent is PID 0. This skips PID 1
+    // (init/systemd) and PID 2 (kthreadd) since both have ppid=0.
+    let ppid_parent = parent_map.get(&ppid).copied().unwrap_or(0);
+    if ppid_parent == 0 {
         return 0;
     }
 
@@ -361,7 +354,12 @@ fn main() {
     } else if args.all {
         print_all_trees(&child_map, graph);
     } else {
-        print_tree(1, &parent_map, &child_map, graph);
+        if let Some(children) = child_map.get(&1) {
+            for pid in children {
+                let mut cont = Vec::new();
+                print_children(&child_map, *pid, 0, graph, &mut cont, true);
+            }
+        }
     }
     if error {
         exit(1);
