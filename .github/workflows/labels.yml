@@ -30,6 +30,10 @@ jobs:
           {"name": "Status: Review Needed", "color": "fbca04", "description": "Request for review feedback"},
           {"name": "Status: Need More Info", "color": "f9c90a", "description": "Lacks enough info to make progress"},
 
+          {"name": "Type: Task", "color": "fbca04", "description": "A specific piece of work"},
+          {"name": "Type: Bug", "color": "ee0701", "description": "An unexpected problem or behavior"},
+          {"name": "Type: Enhancement", "color": "0075ca", "description": "A request, idea, or new functionality"},
+
           {"name": "Component: Other", "color": "0e8a16", "description": "Catch-all component for issues not covered by other components"},
           {"name": "Component: Process Handle", "color": "0e8a16", "description": "Issues related to process handles"},
           {"name": "Component: Process Source", "color": "0e8a16", "description": "Issues related to process sources"},
