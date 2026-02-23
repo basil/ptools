@@ -139,9 +139,11 @@ fn ptree_a_includes_children_of_process_zero() {
     assert!(all_output.status.success());
     let all_stdout = String::from_utf8_lossy(&all_output.stdout);
 
+    // Default mode prints children of PID 1 (not PID 1 itself).
+    // -a mode prints children of PID 0 which includes PID 1.
     assert!(
-        output_has_pid_line(&default_stdout, 1),
-        "Expected default ptree output to include PID 1:\n{}",
+        !output_has_pid_line(&default_stdout, 1),
+        "Expected default ptree output to exclude PID 1:\n{}",
         default_stdout
     );
     assert!(
