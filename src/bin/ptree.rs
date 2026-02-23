@@ -353,12 +353,10 @@ fn main() {
         }
     } else if args.all {
         print_all_trees(&child_map, graph);
-    } else {
-        if let Some(children) = child_map.get(&1) {
-            for pid in children {
-                let mut cont = Vec::new();
-                print_children(&child_map, *pid, 0, graph, &mut cont, true);
-            }
+    } else if let Some(children) = child_map.get(&1) {
+        for pid in children {
+            let mut cont = Vec::new();
+            print_children(&child_map, *pid, 0, graph, &mut cont, true);
         }
     }
     if error {
