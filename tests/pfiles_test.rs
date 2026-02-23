@@ -660,7 +660,7 @@ fn pfiles_reports_netlink_socket() {
     let netlink_fd = find_fd_containing(&fd_map, "sockname: AF_NETLINK");
     let normalized =
         normalize_dynamic_fields(fd_map.get(&netlink_fd).expect("expected netlink fd"));
-    let expected_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR\n        sockname: AF_NETLINK\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let expected_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_NETLINK";
     let expected_without_sockopts = drop_sockopts_line(expected_with_sockopts);
     assert!(
         normalized == expected_with_sockopts || normalized == expected_without_sockopts,
@@ -863,7 +863,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         inotify_lines[4]
     );
 
-    let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
+    let inet_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
     let inet_listen_without_congestion = drop_congestion_control_line(inet_listen_expected);
     let inet_listen_count = count_normalized_exact_blocks(&fd_map, inet_listen_expected)
         + count_normalized_exact_blocks(&fd_map, &inet_listen_without_congestion);
@@ -872,13 +872,13 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv4 listening socket block"
     );
 
-    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        state: TCP_ESTABLISHED";
+    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET 127.0.0.1  port: <dynamic>\n        state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet_peer_expected) >= 1,
         "expected at least one IPv4 established socket block"
     );
 
-    let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET6 ::1  port: <dynamic>\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
+    let inet6_listen_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET6 ::1  port: <dynamic>\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
     let inet6_listen_without_congestion = drop_congestion_control_line(inet6_listen_expected);
     let inet6_listen_count = count_normalized_exact_blocks(&fd_map, inet6_listen_expected)
         + count_normalized_exact_blocks(&fd_map, &inet6_listen_without_congestion);
@@ -887,20 +887,20 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv6 listening socket block"
     );
 
-    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET6 ::1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET6 ::1  port: <dynamic>\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        state: TCP_ESTABLISHED";
+    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET6 ::1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET6 ::1  port: <dynamic>\n        state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet6_peer_expected) >= 1,
         "expected at least one IPv6 established socket block"
     );
 
-    let inet_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let inet_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, inet_dgram_expected),
         1,
         "expected exactly one IPv4 datagram socket block"
     );
 
-    let inet6_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET6 ::1  port: <dynamic>\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let inet6_dgram_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET6 ::1  port: <dynamic>";
     assert_eq!(
         count_normalized_exact_blocks(&fd_map, inet6_dgram_expected),
         1,
@@ -1033,7 +1033,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
             .get(&listen_fd)
             .expect("expected listening socket fd"),
     );
-    let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
+    let listen_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_REUSEADDR,SO_ACCEPTCONN,SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        congestion control: <dynamic>\n        state: TCP_LISTEN";
     let listen_without_sockopts = drop_sockopts_line(listen_with_sockopts);
     let listen_without_congestion = drop_congestion_control_line(listen_with_sockopts);
     let listen_minimal = drop_congestion_control_line(&listen_without_sockopts);
@@ -1053,7 +1053,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
     );
     let dgram_normalized =
         normalize_dynamic_fields(fd_map.get(&dgram_fd).expect("expected udp socket fd"));
-    let dgram_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)";
+    let dgram_with_sockopts = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_DGRAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>";
     let dgram_without_sockopts = drop_sockopts_line(dgram_with_sockopts);
     assert!(
         dgram_normalized == dgram_with_sockopts || dgram_normalized == dgram_without_sockopts,

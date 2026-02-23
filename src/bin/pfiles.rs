@@ -318,7 +318,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
     if let Some(ref st) = fd.stat {
         // Full output -- stat succeeded (live process).
         print!(
-            "{: >4}: {} mode:{:04o} dev:{},{} ino:{} uid:{} gid:{}",
+            "{: >4}: {} mode:0{:03o} dev:{},{} ino:{} uid:{} gid:{}",
             fd.fd,
             file_type_str(&fd.file_type),
             st.mode & 0o7777,
@@ -344,13 +344,13 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
         match fd.file_type {
             FileType::Posix(PosixFileType::Socket) => {
                 if let Some(ref sock) = fd.socket {
-                    print_sockname(sock);
-                    print_peername(sock);
                     println!("        {}", sock_type_str(&sock.sock_type));
                     let opts = format_socket_options(&sock.options);
                     if !opts.is_empty() {
                         println!("        {}", opts);
                     }
+                    print_sockname(sock);
+                    print_peername(sock);
                     print_tcp_details(sock);
                 } else if let Some(ref sockprotoname) = fd.sockprotoname {
                     println!(
