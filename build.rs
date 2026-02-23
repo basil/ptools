@@ -467,24 +467,26 @@ $ ptree -ag `pgrep ssh`
     render_man_page(
         &ManPage {
             name: "plgrp",
-            about: "display home NUMA node and thread affinities",
-            description: "Display the home NUMA node for each thread in the specified \
-                          processes or process core files. The home node is the NUMA node \
-                          of the CPU on which the thread is currently running. With the -a \
-                          option, also display whether each thread's CPU affinity includes \
-                          CPUs on the requested nodes. For core files, the HOME column \
-                          shows ? because the running CPU is not captured by \
-                          systemd-coredump(8), and CPU affinity is derived from \
-                          Cpus_allowed_list in the saved process status.",
+            about: "display current NUMA node and thread CPU affinities",
+            description: "Display the current NUMA node for each thread in the specified \
+                          processes or process core files. The node is the NUMA node \
+                          of the CPU on which the thread is currently (or was last) \
+                          running. With the -a option, also display whether each thread's \
+                          CPU affinity mask covers all, some, or none of the CPUs on the \
+                          requested nodes. For core files, the NODE column shows ? because \
+                          the running CPU is not captured by systemd-coredump(8), and CPU \
+                          affinity is derived from Cpus_allowed_list in the saved process \
+                          status.",
             synopsis: "[-a node_list] [pid[/tid] | core] ...",
             options: &[(
                 "-a node_list",
                 "Display affinity information for the specified NUMA nodes. \
                  The node_list is a comma-separated list of node IDs, ranges \
-                 (e.g. 0-3), or the keywords all, root (node 0), or leaves \
-                 (all online nodes). For each requested node, the output shows \
-                 bound if the thread's CPU affinity mask includes any CPU on \
-                 that node, or none otherwise.",
+                 (e.g. 0-3), or the keywords all or leaves (all online nodes). \
+                 Nodes are grouped by affinity: all means the thread's CPU \
+                 affinity mask includes every CPU on that node, some means it \
+                 includes some but not all, and none means it includes no CPUs \
+                 on that node.",
             )],
             operands: &[
                 (
@@ -502,21 +504,21 @@ $ ptree -ag `pgrep ssh`
             ],
             examples: &[
                 Example {
-                    title: "Example 1 Display home nodes",
-                    description: "Display the home NUMA node for each thread of the shell:",
+                    title: "Example 1 Display current nodes",
+                    description: "Display the current NUMA node for each thread of the shell:",
                     code: "\
 $ plgrp $$
-       PID/TID  HOME
+       PID/TID  NODE
      3401/3401     1",
                 },
                 Example {
                     title: "Example 2 Display affinities",
-                    description: "Display home node and affinity for nodes 0 through 2:",
+                    description: "Display current node and affinity for nodes 0 through 2:",
                     code: "\
 $ plgrp -a 0-2 101398
-       PID/TID  HOME  AFFINITY
- 101398/101398     1  0/bound,1/none,2/bound
- 101398/101412     0  0/bound,1/none,2/bound",
+       PID/TID  NODE  AFFINITY
+ 101398/101398     1  0,2/all,1/none
+ 101398/101412     0  0,2/all,1/none",
                 },
             ],
             exit_status: DEFAULT_EXIT_STATUS,
@@ -524,7 +526,7 @@ $ plgrp -a 0-2 101398
                     /sys/devices/system/node/\tNUMA topology information.",
             notes: CORE_NOTES,
             see_also: "taskset(1), numactl(8), coredumpctl(1), sched_getaffinity(2), proc(5)",
-            warnings: "For core files, the HOME column always shows ? because \
+            warnings: "For core files, the NODE column always shows ? because \
                        systemd-coredump(8) does not capture which CPU each thread \
                        was running on at the time of the crash. Only the main thread \
                        is available from core files; information for other threads \

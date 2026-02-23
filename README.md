@@ -207,7 +207,7 @@ been implemented here yet, perhaps most notably `pstack(1)`.
 | [`pgrep(1)`](https://illumos.org/man/1/pgrep)                 | Find processes by name                                | ➡️ See `procps-ng`           |
 | [`pkill(1)`](https://illumos.org/man/1/pkill)                 | Signal processes by name                              | ➡️ See `procps-ng`           |
 | [`pldd(1)`](https://illumos.org/man/1/pldd)                   | Print process dynamic libraries                       | ➡️ See `glibc`               |
-| [`plgrp(1)`](https://illumos.org/man/1/plgrp)                 | Print home NUMA node and thread affinities            | ✅ Implemented               |
+| [`plgrp(1)`](https://illumos.org/man/1/plgrp)                 | Print current NUMA node and thread CPU affinities     | ✅ Implemented               |
 | [`plimit(1)`](https://illumos.org/man/1/plimit)               | Get or set process resource limits                    | 🔲 Not yet implemented       |
 | [`plockstat(1)`](https://illumos.org/man/8/plockstat)         | Print lock statistics                                 | 🔲 Not yet implemented       |
 | [`pmadvise(1)`](https://illumos.org/man/1/pmadvise)           | Apply advice about memory to a process                | 🔲 Not yet implemented       |

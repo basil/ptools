@@ -19,13 +19,53 @@ use std::process;
 use nix::sched::sched_getaffinity;
 use nix::unistd::Pid;
 
-use ptools::{cpu_to_node, numa_online_nodes, CpuSet, ProcHandle};
+use ptools::{cpu_to_node, format_node_list, numa_online_nodes, CpuSet, NodeAffinity, ProcHandle};
 
 /// Get the CPU affinity mask for a thread via syscall.
 fn get_thread_affinity(tid: u64) -> Option<CpuSet> {
     sched_getaffinity(Pid::from_raw(tid as i32))
         .ok()
         .map(CpuSet::from)
+}
+
+/// Format affinities for display, grouping nodes by affinity level and
+/// collapsing consecutive node IDs into ranges.
+///
+/// Example output: `0-2/all,3/some,4-7/none`
+fn format_affinity(nodes: &[u32], affinity: &Option<CpuSet>) -> String {
+    let Some(cpuset) = affinity else {
+        let list = format_node_list(nodes);
+        return if list.is_empty() {
+            String::new()
+        } else {
+            format!("{}/?", list)
+        };
+    };
+
+    let mut all = Vec::new();
+    let mut some = Vec::new();
+    let mut none = Vec::new();
+
+    for &n in nodes {
+        match cpuset.node_affinity(n) {
+            NodeAffinity::All => all.push(n),
+            NodeAffinity::Some => some.push(n),
+            NodeAffinity::None => none.push(n),
+        }
+    }
+
+    let mut parts = Vec::new();
+    if !all.is_empty() {
+        parts.push(format!("{}/all", format_node_list(&all)));
+    }
+    if !some.is_empty() {
+        parts.push(format!("{}/some", format_node_list(&some)));
+    }
+    if !none.is_empty() {
+        parts.push(format!("{}/none", format_node_list(&none)));
+    }
+
+    parts.join(",")
 }
 
 struct NodeList {
@@ -47,9 +87,10 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::Error> {
                 result.extend(online.iter());
             }
             "root" => {
-                if online.contains(0) {
-                    result.push(0);
-                }
+                return Err(ptools::Error::parse(
+                    "node 'root'",
+                    "Linux NUMA nodes have no hierarchy; use 'all' instead",
+                ));
             }
             _ => {
                 if let Some((start, end)) = part.split_once('-') {
@@ -104,7 +145,7 @@ struct Args {
 
 fn print_usage() {
     eprintln!("Usage: plgrp [-a node_list] [pid[/tid] | core] ...");
-    eprintln!("Display home NUMA node and thread affinities.");
+    eprintln!("Display current NUMA node and thread CPU affinities.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -a node_list     Show affinity for the specified nodes");
@@ -175,7 +216,7 @@ fn print_thread(
     affinity_nodes: &Option<Vec<u32>>,
 ) -> Result<(), ptools::Error> {
     let pid = handle.pid();
-    let home = if handle.is_core() {
+    let node = if handle.is_core() {
         "?".to_string()
     } else {
         match handle.thread_cpu(tid) {
@@ -196,21 +237,10 @@ fn print_thread(
         } else {
             get_thread_affinity(tid)
         };
-        let aff_str: String = nodes
-            .iter()
-            .map(|&n| {
-                let label = match &affinity {
-                    Some(cpuset) if cpuset.includes_node(n) => "bound",
-                    Some(_) => "none",
-                    None => "?",
-                };
-                format!("{}/{}", n, label)
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        println!("{:>14}  {:>4}  {}", pid_tid, home, aff_str);
+        let aff_str = format_affinity(nodes, &affinity);
+        println!("{:>14}  {:>4}  {}", pid_tid, node, aff_str);
     } else {
-        println!("{:>14}  {:>4}", pid_tid, home);
+        println!("{:>14}  {:>4}", pid_tid, node);
     }
     Ok(())
 }
@@ -220,9 +250,9 @@ fn main() {
     let args = parse_args();
 
     if args.affinity_nodes.is_some() {
-        println!("{:>14}  {:>4}  AFFINITY", "PID/TID", "HOME");
+        println!("{:>14}  {:>4}  AFFINITY", "PID/TID", "NODE");
     } else {
-        println!("{:>14}  {:>4}", "PID/TID", "HOME");
+        println!("{:>14}  {:>4}", "PID/TID", "NODE");
     }
 
     let mut error = false;

@@ -5,12 +5,12 @@ fn plgrp_shows_home_node_for_all_threads() {
     let output = common::run_ptool("plgrp", &[], "examples/plgrp_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
-    // Header line should contain HOME.
+    // Header line should contain NODE.
     let mut lines = stdout.lines();
     let header = lines.next().expect("expected header line");
     assert!(
-        header.contains("HOME"),
-        "Expected header to contain HOME:\n{}",
+        header.contains("NODE"),
+        "Expected header to contain NODE:\n{}",
         stdout
     );
 
@@ -87,11 +87,11 @@ fn plgrp_affinity_flag_shows_affinity_column() {
         stdout
     );
 
-    // Each data line should contain bound or none.
+    // Each data line should contain all, some, or none.
     for line in stdout.lines().skip(1) {
         assert!(
-            line.contains("bound") || line.contains("none"),
-            "Expected bound or none in affinity line: {}",
+            line.contains("/all") || line.contains("/some") || line.contains("/none"),
+            "Expected all, some, or none in affinity line: {}",
             line
         );
     }

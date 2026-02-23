@@ -1,3 +1,14 @@
+/// Affinity relationship between a CPU set and a NUMA node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeAffinity {
+    /// All CPUs on the node are in the affinity mask.
+    All,
+    /// Some but not all CPUs on the node are in the affinity mask.
+    Some,
+    /// No CPUs on the node are in the affinity mask.
+    None,
+}
+
 /// A set of CPU IDs, stored as a sorted, deduplicated vector.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CpuSet {
@@ -17,6 +28,24 @@ impl CpuSet {
         self.cpus.iter().copied()
     }
 
+    /// Return the intersection of two sorted CPU sets.
+    pub fn intersection(&self, other: &CpuSet) -> CpuSet {
+        let mut cpus = Vec::new();
+        let (mut i, mut j) = (0, 0);
+        while i < self.cpus.len() && j < other.cpus.len() {
+            match self.cpus[i].cmp(&other.cpus[j]) {
+                std::cmp::Ordering::Less => i += 1,
+                std::cmp::Ordering::Greater => j += 1,
+                std::cmp::Ordering::Equal => {
+                    cpus.push(self.cpus[i]);
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        CpuSet { cpus }
+    }
+
     /// Check whether this set includes any CPU belonging to the given NUMA node.
     pub fn includes_node(&self, node: u32) -> bool {
         let Ok(node_cpus) = numa_node_cpus(node) else {
@@ -24,6 +53,25 @@ impl CpuSet {
         };
         let result = node_cpus.iter().any(|cpu| self.contains(cpu));
         result
+    }
+
+    /// Return the affinity relationship between this CPU set and a NUMA node.
+    pub fn node_affinity(&self, node: u32) -> NodeAffinity {
+        let Ok(node_cpus) = numa_node_cpus(node) else {
+            return NodeAffinity::None;
+        };
+        let total = node_cpus.iter().count();
+        if total == 0 {
+            return NodeAffinity::None;
+        }
+        let matching = node_cpus.iter().filter(|&cpu| self.contains(cpu)).count();
+        if matching == 0 {
+            NodeAffinity::None
+        } else if matching == total {
+            NodeAffinity::All
+        } else {
+            NodeAffinity::Some
+        }
     }
 }
 
@@ -84,12 +132,63 @@ pub fn numa_online_nodes() -> Result<CpuSet, super::Error> {
     parse_list_format(&content)
 }
 
-/// Return the set of CPUs belonging to a given NUMA node.
+/// Return the set of online CPUs from `/sys/devices/system/cpu/online`.
+fn online_cpus() -> Result<CpuSet, super::Error> {
+    let content = std::fs::read_to_string("/sys/devices/system/cpu/online")
+        .map_err(|e| super::Error::Parse(format!("failed to read online CPUs: {}", e)))?;
+    parse_list_format(&content)
+}
+
+/// Return the set of online CPUs belonging to a given NUMA node.
+///
+/// This intersects the node's CPU list with the set of online CPUs so that
+/// offline CPUs do not skew affinity comparisons against `sched_getaffinity`,
+/// which only reports online CPUs.
 pub(crate) fn numa_node_cpus(node: u32) -> Result<CpuSet, super::Error> {
     let path = format!("/sys/devices/system/node/node{}/cpulist", node);
     let content = std::fs::read_to_string(&path)
         .map_err(|e| super::Error::Parse(format!("failed to read {}: {}", path, e)))?;
-    parse_list_format(&content)
+    let node_cpus = parse_list_format(&content)?;
+    let online = online_cpus()?;
+    Ok(node_cpus.intersection(&online))
+}
+
+/// Format a sorted slice of node IDs, collapsing consecutive runs into ranges.
+///
+/// For example, `[0, 1, 2, 5, 7, 8]` becomes `"0-2,5,7-8"`.
+pub fn format_node_list(nodes: &[u32]) -> String {
+    if nodes.is_empty() {
+        return String::new();
+    }
+    let mut parts = Vec::new();
+    let mut start = nodes[0];
+    let mut end = nodes[0];
+
+    for &n in &nodes[1..] {
+        if n == end + 1 {
+            end = n;
+        } else {
+            if end > start + 1 {
+                parts.push(format!("{}-{}", start, end));
+            } else if end > start {
+                parts.push(format!("{},{}", start, end));
+            } else {
+                parts.push(format!("{}", start));
+            }
+            start = n;
+            end = n;
+        }
+    }
+
+    if end > start + 1 {
+        parts.push(format!("{}-{}", start, end));
+    } else if end > start {
+        parts.push(format!("{},{}", start, end));
+    } else {
+        parts.push(format!("{}", start));
+    }
+
+    parts.join(",")
 }
 
 /// Determine which NUMA node a given CPU belongs to.
@@ -143,5 +242,35 @@ mod tests {
     #[test]
     fn parse_list_format_invalid_range() {
         assert!(parse_list_format("5-2").is_err());
+    }
+
+    #[test]
+    fn format_node_list_single() {
+        assert_eq!(format_node_list(&[3]), "3");
+    }
+
+    #[test]
+    fn format_node_list_consecutive_range() {
+        assert_eq!(format_node_list(&[0, 1, 2, 3]), "0-3");
+    }
+
+    #[test]
+    fn format_node_list_two_consecutive() {
+        assert_eq!(format_node_list(&[4, 5]), "4,5");
+    }
+
+    #[test]
+    fn format_node_list_mixed() {
+        assert_eq!(format_node_list(&[0, 1, 2, 5, 7, 8]), "0-2,5,7,8");
+    }
+
+    #[test]
+    fn format_node_list_empty() {
+        assert_eq!(format_node_list(&[]), "");
+    }
+
+    #[test]
+    fn format_node_list_gaps() {
+        assert_eq!(format_node_list(&[0, 2, 4]), "0,2,4");
     }
 }
