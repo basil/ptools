@@ -54,16 +54,16 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::Error> {
             _ => {
                 if let Some((start, end)) = part.split_once('-') {
                     let start: u32 = start.trim().parse().map_err(|e| {
-                        ptools::Error::Parse(format!("invalid node '{}': {}", start.trim(), e))
+                        ptools::Error::parse(&format!("node '{}'", start.trim()), &format!("{}", e))
                     })?;
                     let end: u32 = end.trim().parse().map_err(|e| {
-                        ptools::Error::Parse(format!("invalid node '{}': {}", end.trim(), e))
+                        ptools::Error::parse(&format!("node '{}'", end.trim()), &format!("{}", e))
                     })?;
                     if start > end {
-                        return Err(ptools::Error::Parse(format!(
-                            "invalid range {}-{}",
-                            start, end
-                        )));
+                        return Err(ptools::Error::parse(
+                            &format!("range {}-{}", start, end),
+                            "start > end",
+                        ));
                     }
                     for n in start..=end {
                         if online.contains(n) {
@@ -75,7 +75,7 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::Error> {
                     }
                 } else {
                     let n: u32 = part.parse().map_err(|e| {
-                        ptools::Error::Parse(format!("invalid node '{}': {}", part, e))
+                        ptools::Error::parse(&format!("node '{}'", part), &format!("{}", e))
                     })?;
                     if online.contains(n) {
                         result.push(n);

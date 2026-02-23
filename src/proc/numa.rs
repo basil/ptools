@@ -50,22 +50,25 @@ pub(crate) fn parse_list_format(s: &str) -> Result<CpuSet, super::Error> {
         let part = part.trim();
         if let Some((start, end)) = part.split_once('-') {
             let start: u32 = start.trim().parse().map_err(|e| {
-                super::Error::Parse(format!("invalid range start '{}': {}", start.trim(), e))
+                super::Error::parse(
+                    &format!("range start '{}'", start.trim()),
+                    &format!("{}", e),
+                )
             })?;
             let end: u32 = end.trim().parse().map_err(|e| {
-                super::Error::Parse(format!("invalid range end '{}': {}", end.trim(), e))
+                super::Error::parse(&format!("range end '{}'", end.trim()), &format!("{}", e))
             })?;
             if start > end {
-                return Err(super::Error::Parse(format!(
-                    "invalid range {}-{}",
-                    start, end
-                )));
+                return Err(super::Error::parse(
+                    &format!("range {}-{}", start, end),
+                    "start > end",
+                ));
             }
             cpus.extend(start..=end);
         } else {
-            let val: u32 = part
-                .parse()
-                .map_err(|e| super::Error::Parse(format!("invalid value '{}': {}", part, e)))?;
+            let val: u32 = part.parse().map_err(|e| {
+                super::Error::parse(&format!("value '{}'", part), &format!("{}", e))
+            })?;
             cpus.push(val);
         }
     }

@@ -636,10 +636,10 @@ fn parse_pid_spec(s: &str) -> Result<PidSpec, Error> {
     if let Some((pid_str, tid_str)) = s.split_once('/') {
         let pid = pid_str
             .parse::<u64>()
-            .map_err(|e| Error::Parse(format!("invalid PID '{}': {}", pid_str, e)))?;
+            .map_err(|e| Error::parse(&format!("PID '{}'", pid_str), &format!("{}", e)))?;
         let tid = tid_str
             .parse::<u64>()
-            .map_err(|e| Error::Parse(format!("invalid thread ID '{}': {}", tid_str, e)))?;
+            .map_err(|e| Error::parse(&format!("thread ID '{}'", tid_str), &format!("{}", e)))?;
         if pid == 0 {
             return Err(Error::Parse("PID must be >= 1".to_string()));
         }
@@ -650,7 +650,7 @@ fn parse_pid_spec(s: &str) -> Result<PidSpec, Error> {
     } else {
         let pid = s
             .parse::<u64>()
-            .map_err(|e| Error::Parse(format!("invalid PID '{}': {}", s, e)))?;
+            .map_err(|e| Error::parse(&format!("PID '{}'", s), &format!("{}", e)))?;
         if pid == 0 {
             return Err(Error::Parse("PID must be >= 1".to_string()));
         }

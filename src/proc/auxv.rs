@@ -101,32 +101,38 @@ fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
     match word_size {
         4 => {
             let raw: [u8; 4] = chunk.try_into().map_err(|_| {
-                super::Error::Parse(format!("invalid 32-bit word length {}", chunk.len()))
+                super::Error::parse(
+                    "auxv",
+                    &format!("invalid 32-bit word length {}", chunk.len()),
+                )
             })?;
             Ok(u32::from_ne_bytes(raw) as u64)
         }
         8 => {
             let raw: [u8; 8] = chunk.try_into().map_err(|_| {
-                super::Error::Parse(format!("invalid 64-bit word length {}", chunk.len()))
+                super::Error::parse(
+                    "auxv",
+                    &format!("invalid 64-bit word length {}", chunk.len()),
+                )
             })?;
             Ok(u64::from_ne_bytes(raw))
         }
-        n => Err(super::Error::Parse(format!(
-            "unsupported auxv word size {}",
-            n
-        ))),
+        n => Err(super::Error::parse(
+            "auxv",
+            &format!("unsupported word size {}", n),
+        )),
     }
 }
 
 fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, super::Error> {
     let record_size = word_size
         .checked_mul(2)
-        .ok_or_else(|| super::Error::Parse("auxv record size overflow".to_string()))?;
+        .ok_or_else(|| super::Error::parse("auxv", "record size overflow"))?;
     if record_size == 0 || !bytes.len().is_multiple_of(record_size) {
-        return Err(super::Error::Parse(format!(
-            "unexpected auxv size {}",
-            bytes.len()
-        )));
+        return Err(super::Error::parse(
+            "auxv",
+            &format!("unexpected size {}", bytes.len()),
+        ));
     }
 
     let mut result = Vec::new();
@@ -145,9 +151,7 @@ fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, 
     }
 
     if !saw_terminator {
-        return Err(super::Error::Parse(
-            "missing AT_NULL terminator".to_string(),
-        ));
+        return Err(super::Error::parse("auxv", "missing AT_NULL terminator"));
     }
 
     Ok(result)
@@ -174,9 +178,7 @@ pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Er
     let bytes = handle.auxv_bytes()?;
 
     if bytes.is_empty() {
-        return Err(super::Error::Parse(
-            "error reading auxv: empty file".to_string(),
-        ));
+        return Err(super::Error::parse("auxv", "empty file"));
     }
 
     let native_word_size = size_of::<usize>();
@@ -201,10 +203,10 @@ pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Er
         }
     }
 
-    Err(super::Error::Parse(format!(
-        "error parsing auxv: unexpected auxv format ({} bytes)",
-        bytes.len()
-    )))
+    Err(super::Error::parse(
+        "auxv",
+        &format!("unexpected format ({} bytes)", bytes.len()),
+    ))
 }
 
 #[cfg(target_arch = "x86_64")]
