@@ -29,7 +29,8 @@ jobs:
           {"name": "Status: PR Welcome", "color": "2e7733", "description": "Pull requests welcome"},
           {"name": "Status: Review Needed", "color": "fbca04", "description": "Request for review feedback"},
           {"name": "Status: Need More Info", "color": "f9c90a", "description": "Lacks enough info to make progress"},
-          {"name": "Status: Won't Fix", "color": "000000", "description": "The issue or pull request won't be fixed"},
+          {"name": "Status: Duplicate", "color": "cfd3d7", "description": "This issue or pull request already exists"},
+          {"name": "Status: Won't Fix", "color": "ffffff", "description": "This will not be worked on"},
 
           {"name": "Type: Task", "color": "fbca04", "description": "A specific piece of work"},
           {"name": "Type: Bug", "color": "d73a4a", "description": "An unexpected problem or behavior"},
