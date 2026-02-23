@@ -1,0 +1,90 @@
+---
+name: Update repository labels
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/labels.yml'
+  workflow_dispatch:
+
+jobs:
+  update-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      LABELS_JSON: |
+        [
+          {"name": "Priority: Critical", "color": "ee0701", "description": "Must be fixed immediately"},
+          {"name": "Priority: High", "color": "d93f0b", "description": "Should be fixed soon"},
+          {"name": "Priority: Medium", "color": "fbca04", "description": "Normal priority"},
+          {"name": "Priority: Low", "color": "0e8a16", "description": "Nice to have"},
+
+          {"name": "Status: Abandoned", "color": "000000", "description": "The issue or pull request is abandoned"},
+          {"name": "Status: Blocked", "color": "ee0701", "description": "Progress on the issue is blocked"},
+          {"name": "Status: In Progress", "color": "cccccc", "description": "Work in progress (WIP)"},
+          {"name": "Status: Proposal", "color": "d4c5f9", "description": "Request for comments (RFC)"},
+          {"name": "Status: PR Welcome", "color": "2e7733", "description": "Pull requests welcome"},
+          {"name": "Status: Review Needed", "color": "fbca04", "description": "Request for review feedback"},
+          {"name": "Status: Need More Info", "color": "f9c90a", "description": "Lacks enough info to make progress"},
+
+          {"name": "Component: Other", "color": "0e8a16", "description": "Catch-all component for issues not covered by other components"},
+          {"name": "Component: Process Handle", "color": "0e8a16", "description": "Issues related to process handles"},
+          {"name": "Component: Process Source", "color": "0e8a16", "description": "Issues related to process sources"},
+          {"name": "Component: pargs", "color": "0e8a16", "description": "Issues related to pargs(1)"},
+          {"name": "Component: pauxv", "color": "0e8a16", "description": "Issues related to pauxv(1)"},
+          {"name": "Component: pcred", "color": "0e8a16", "description": "Issues related to pcred(1)"},
+          {"name": "Component: penv", "color": "0e8a16", "description": "Issues related to penv(1)"},
+          {"name": "Component: pfiles", "color": "0e8a16", "description": "Issues related to pfiles(1)"},
+          {"name": "Component: plgrp", "color": "0e8a16", "description": "Issues related to plgrp(1)"},
+          {"name": "Component: plimit", "color": "0e8a16", "description": "Issues related to plimit(1)"},
+          {"name": "Component: plockstat", "color": "0e8a16", "description": "Issues related to plockstat(1)"},
+          {"name": "Component: pmadvise", "color": "0e8a16", "description": "Issues related to pmadvise(1)"},
+          {"name": "Component: ppgsz", "color": "0e8a16", "description": "Issues related to ppgsz(1)"},
+          {"name": "Component: ppriv", "color": "0e8a16", "description": "Issues related to ppriv(1)"},
+          {"name": "Component: preap", "color": "0e8a16", "description": "Issues related to preap(1)"},
+          {"name": "Component: prun", "color": "0e8a16", "description": "Issues related to prun(1)"},
+          {"name": "Component: psecflags", "color": "0e8a16", "description": "Issues related to psecflags(1)"},
+          {"name": "Component: psig", "color": "0e8a16", "description": "Issues related to psig(1)"},
+          {"name": "Component: pstack", "color": "0e8a16", "description": "Issues related to pstack(1)"},
+          {"name": "Component: pstop", "color": "0e8a16", "description": "Issues related to pstop(1)"},
+          {"name": "Component: ptime", "color": "0e8a16", "description": "Issues related to ptime(1)"},
+          {"name": "Component: ptree", "color": "0e8a16", "description": "Issues related to ptree(1)"},
+          {"name": "Component: pwait", "color": "0e8a16", "description": "Issues related to pwait(1)"}
+        ]
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const labels = JSON.parse(process.env.LABELS_JSON);
+            for (const label of labels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                  description: label.description || '',
+                  color: label.color
+                });
+                console.log(`Created label '${label.name}'.`);
+              } catch (error) {
+                if (error.status === 422) {
+                  try {
+                    await github.rest.issues.updateLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      name: label.name,
+                      description: label.description || '',
+                      color: label.color
+                    });
+                    console.log(`Updated label '${label.name}'.`);
+                  } catch (updateError) {
+                    console.error(`Error updating label '${label.name}': ${updateError}`);
+                  }
+                } else {
+                  console.error(`Error creating label '${label.name}': ${error}`);
+                }
+              }
+            }
