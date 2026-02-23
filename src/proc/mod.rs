@@ -1,3 +1,24 @@
+//! Core process-handle module: parsing and structured access to process data.
+//!
+//! This module consumes the [`crate::source`] abstraction to read raw procfs
+//! (or coredump) data and parses it into typed Rust structures.  Its central
+//! type, [`ProcHandle`], is the opaque handle through which all process
+//! queries flow.
+//!
+//! **Consumed by:** the presentation layer ([`crate::display`]) and the
+//! binary targets in `src/bin/`.  Those consumers should treat this module
+//! as a data-provider and never format output themselves from raw source
+//! data.
+//!
+//! **Contract:**
+//! - This module must **never** write to stdout or stderr.  All warnings
+//!   and non-fatal diagnostics must be returned via the `warnings` vector
+//!   on [`ProcHandle`].
+//! - Types defined here should **not** implement `Display` except for
+//!   [`Error`], which needs `Display` for the `std::error::Error` blanket.
+//! - This module provides structured data to the presentation layer for
+//!   formatting; it should never make presentation decisions itself.
+
 pub(crate) mod auxv;
 pub(crate) mod cred;
 pub(crate) mod fd;
@@ -6,6 +27,7 @@ pub(crate) mod numa;
 pub(crate) mod signal;
 
 use nix::fcntl::OFlag;
+use std::cell::RefCell;
 use std::ffi::OsString;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
@@ -71,13 +93,14 @@ fn parse_rlimit_line(limits: &str, prefix: &str) -> Result<Option<Rlimit>, Error
 /// through typed accessor methods rather than reading /proc files directly.
 pub struct ProcHandle {
     source: Box<dyn ProcSource>,
-    warnings: Vec<String>,
+    warnings: RefCell<Vec<String>>,
     is_core: bool,
 }
 
 impl ProcHandle {
-    pub fn warnings(&self) -> &[String] {
-        &self.warnings
+    /// Drain and return all accumulated warnings.
+    pub fn drain_warnings(&self) -> Vec<String> {
+        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 
     /// Whether the handle was opened from a coredump (as opposed to a live
@@ -320,12 +343,12 @@ impl ProcHandle {
                 .and_then(|v| v.trim().parse::<usize>().ok())
             {
                 if n > tids.len() {
-                    eprintln!(
+                    self.warnings.borrow_mut().push(format!(
                         "warning: process had {} threads but only {} available; \
                          blocked masks may be incomplete",
                         n,
                         tids.len()
-                    );
+                    ));
                 }
             }
         }
@@ -401,7 +424,7 @@ impl ProcHandle {
     /// `(key, value)` pairs.  Entries that lack an `=` or have an
     /// empty key are silently skipped (processes like sshd can overwrite
     /// their environ memory with status info, leaving garbage).
-    pub(crate) fn environ(&mut self) -> Result<Vec<(OsString, OsString)>, Error> {
+    pub(crate) fn environ(&self) -> Result<Vec<(OsString, OsString)>, Error> {
         let bytes = self.source.read_environ()?;
         let mut vars = Vec::new();
         for chunk in bytes.split(|b| *b == b'\0') {
@@ -414,7 +437,7 @@ impl ProcHandle {
                     let value = OsString::from(std::ffi::OsStr::from_bytes(&chunk[pos + 1..]));
                     vars.push((key, value));
                 } else {
-                    self.warnings.push(format!(
+                    self.warnings.borrow_mut().push(format!(
                         "warning: skipping environ entry with empty key for pid {}",
                         self.pid()
                     ));
@@ -442,28 +465,32 @@ impl ProcHandle {
         let fds = self.fds()?;
         let sockets = net::parse_socket_info(&*self.source);
 
+        let mut warnings = Vec::new();
+
         // Compute TCP peer processes in bulk (system-wide /proc scan).
         // Skip for coredumps or when no loopback TCP sockets exist.
         let tcp_peers = if !self.is_core && net::has_loopback_tcp_peers(&sockets) {
-            net::derive_peer_processes(self.pid(), &sockets)
+            net::derive_peer_processes(self.pid(), &sockets, &mut warnings)
         } else {
             std::collections::HashMap::new()
         };
 
         let mut result = Vec::with_capacity(fds.len());
         for fd_num in fds {
-            match self.gather_fd(fd_num, &sockets, &tcp_peers) {
+            match self.gather_fd(fd_num, &sockets, &tcp_peers, &mut warnings) {
                 Ok(fd_desc) => result.push(fd_desc),
                 Err(e) => {
-                    eprintln!(
+                    warnings.push(format!(
                         "failed to gather info for /proc/{}/fd/{}: {}",
                         self.pid(),
                         fd_num,
                         e
-                    );
+                    ));
                 }
             }
         }
+
+        self.warnings.borrow_mut().extend(warnings);
         Ok(result)
     }
 
@@ -474,6 +501,7 @@ impl ProcHandle {
         fd_num: u64,
         sockets: &std::collections::HashMap<u64, net::SocketInfo>,
         tcp_peers: &std::collections::HashMap<u64, net::PeerProcess>,
+        warnings: &mut Vec<String>,
     ) -> Result<fd::FileDescriptor, Error> {
         let path = self.fd_path(fd_num)?;
         let link_text = path.to_string_lossy();
@@ -528,7 +556,7 @@ impl ProcHandle {
 
             // Fallback: sockprotoname xattr when not found in /proc/net/*
             if socket.is_none() && !self.is_core {
-                sockprotoname = fd::get_sockprotoname(self.pid(), fd_num);
+                sockprotoname = fd::get_sockprotoname(self.pid(), fd_num, warnings);
             }
         }
 
@@ -592,7 +620,7 @@ impl ProcHandle {
     pub fn from_pid(pid: u64) -> Self {
         ProcHandle {
             source: crate::source::open_live(pid),
-            warnings: Vec::new(),
+            warnings: RefCell::new(Vec::new()),
             is_core: false,
         }
     }
@@ -635,7 +663,7 @@ fn grab_core(path: &Path) -> Result<ProcHandle, Error> {
     let (source, warnings) = crate::source::open_coredump(path)?;
     Ok(ProcHandle {
         source,
-        warnings,
+        warnings: RefCell::new(warnings),
         is_core: true,
     })
 }

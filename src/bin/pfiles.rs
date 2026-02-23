@@ -519,11 +519,14 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.warnings() {
+        for w in handle.drain_warnings() {
             eprintln!("{w}");
         }
         if print_files(&handle, args.non_verbose).is_err() {
             error = true;
+        }
+        for w in handle.drain_warnings() {
+            eprintln!("{w}");
         }
     }
 

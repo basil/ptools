@@ -1,3 +1,21 @@
+//! Data-source abstraction layer for process introspection.
+//!
+//! This module provides a uniform [`ProcSource`] trait that abstracts over
+//! where process data comes from -- a live `/proc/[pid]/...` filesystem or
+//! an ELF coredump with systemd journal fields.  The rest of the crate
+//! programs against this trait so the same parsing logic works for both
+//! backends.
+//!
+//! **Only consumer:** [`crate::proc`] -- the proc-handle module.  Nothing
+//! outside `proc` should depend on this module directly.
+//!
+//! **Contract:**
+//! - This module must **never** write to stdout or stderr.
+//! - Warnings and non-fatal diagnostics must be returned in a `Vec<String>`
+//!   (see [`open_coredump`]).
+//! - Types defined here should **not** implement `Display`; formatting is
+//!   the responsibility of the presentation layer.
+
 mod coredump;
 mod live;
 

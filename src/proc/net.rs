@@ -526,12 +526,15 @@ pub(crate) fn read_comm(_pid: u64) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
-fn list_socket_owners() -> HashMap<u64, std::collections::HashSet<u64>> {
+fn list_socket_owners(warnings: &mut Vec<String>) -> HashMap<u64, std::collections::HashSet<u64>> {
     let mut owners = HashMap::<u64, std::collections::HashSet<u64>>::new();
     let proc_entries = match std::fs::read_dir("/proc") {
         Ok(entries) => entries,
         Err(e) => {
-            eprintln!("failed to read /proc for socket ownership lookup: {}", e);
+            warnings.push(format!(
+                "failed to read /proc for socket ownership lookup: {}",
+                e
+            ));
             return owners;
         }
     };
@@ -618,9 +621,10 @@ pub(crate) fn has_loopback_tcp_peers(sockets: &HashMap<u64, SocketInfo>) -> bool
 pub(crate) fn derive_peer_processes(
     target_pid: u64,
     sockets: &HashMap<u64, SocketInfo>,
+    warnings: &mut Vec<String>,
 ) -> HashMap<u64, PeerProcess> {
     let mut peers = HashMap::new();
-    let owners = list_socket_owners();
+    let owners = list_socket_owners(warnings);
     let mut comm_cache = HashMap::<u64, String>::new();
 
     for (inode, peer_inode) in local_tcp_peer_inodes(sockets) {
@@ -663,6 +667,7 @@ pub(crate) fn derive_peer_processes(
 pub(crate) fn derive_peer_processes(
     _target_pid: u64,
     _sockets: &HashMap<u64, SocketInfo>,
+    _warnings: &mut Vec<String>,
 ) -> HashMap<u64, PeerProcess> {
     HashMap::new()
 }

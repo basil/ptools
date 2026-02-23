@@ -124,7 +124,7 @@ pub(crate) fn parse_socket_inode(link_text: &str) -> Option<u64> {
 }
 
 /// Read `system.sockprotoname` xattr from `/proc/[pid]/fd/[fd]`.
-pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
+pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -> Option<String> {
     #[cfg(target_os = "linux")]
     {
         let path = std::ffi::CString::new(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
@@ -134,7 +134,7 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
             unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
 
         if size < 0 {
-            handle_sockprotoname_xattr_error(pid, fd);
+            warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
             return None;
         }
 
@@ -148,7 +148,7 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
             )
         };
         if filled < 0 {
-            handle_sockprotoname_xattr_error(pid, fd);
+            warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
             return None;
         }
 
@@ -166,27 +166,27 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (pid, fd);
+        let _ = (pid, fd, warnings);
         None
     }
 }
 
 #[cfg(target_os = "linux")]
-fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
+fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) -> Option<String> {
     match std::io::Error::last_os_error().raw_os_error() {
         Some(nix::libc::ENODATA)
         | Some(nix::libc::EOPNOTSUPP)
         | Some(nix::libc::ENOENT)
         | Some(nix::libc::EPERM)
-        | Some(nix::libc::EACCES) => {}
-        Some(errno) => eprintln!(
+        | Some(nix::libc::EACCES) => None,
+        Some(errno) => Some(format!(
             "failed to read system.sockprotoname xattr for /proc/{}/fd/{}: errno {}",
             pid, fd, errno
-        ),
-        None => eprintln!(
+        )),
+        None => Some(format!(
             "failed to read system.sockprotoname xattr for /proc/{}/fd/{}",
             pid, fd
-        ),
+        )),
     }
 }
 

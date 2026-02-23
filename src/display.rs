@@ -1,3 +1,16 @@
+//! Presentation layer: human-readable formatting of process data.
+//!
+//! This module is the sole place where process information is formatted for
+//! output.  It consumes the [`crate::proc`] module (specifically
+//! [`ProcHandle`] and its associated types) and turns structured data into
+//! text written to stdout.
+//!
+//! **Contract:**
+//! - This module must **not** depend on [`crate::source`] or know anything
+//!   about how raw procfs / coredump data is obtained.  All data arrives
+//!   pre-parsed through the proc-handle API.
+//! - All user-visible formatting and presentation decisions belong here.
+
 use std::borrow::Cow;
 
 use crate::proc::auxv::{decode_hwcap, AuxvType};
@@ -37,7 +50,7 @@ fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
     }
 }
 
-pub fn print_env_from(handle: &mut ProcHandle) -> Result<(), Error> {
+pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
     // This contains the environ as it was when the proc was started. To get the current
     // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
@@ -118,7 +131,7 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
             println!("{}", summary.join(" "));
         }
         Ok(_) => {
-            // Empty cmdline — fall back to comm name.
+            // Empty cmdline -- fall back to comm name.
             let is_zombie = matches!(handle.state(), Ok(crate::ProcessState::Zombie));
             match handle.comm() {
                 Ok(ref comm) if !comm.is_empty() => {

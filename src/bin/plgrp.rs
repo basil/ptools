@@ -235,7 +235,7 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.warnings() {
+        for w in handle.drain_warnings() {
             eprintln!("{w}");
         }
         if let Some(tid) = tid {

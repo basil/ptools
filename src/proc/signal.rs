@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn parse_single_signal() {
-        // Bit 0 of nibble 0 → signal 1 (SIGHUP)
+        // Bit 0 of nibble 0 -> signal 1 (SIGHUP)
         let set = parse_signal_set("0000000000000001").unwrap();
         assert!(set.contains(1));
         assert!(!set.contains(2));
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn parse_multiple_signals() {
-        // 0x3 = bits 0,1 → signals 1,2
+        // 0x3 = bits 0,1 -> signals 1,2
         let set = parse_signal_set("0000000000000003").unwrap();
         assert!(set.contains(1));
         assert!(set.contains(2));
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn iter_yields_set_signals() {
-        // 0x5 = bits 0,2 → signals 1,3
+        // 0x5 = bits 0,2 -> signals 1,3
         let set = parse_signal_set("5").unwrap();
         assert_eq!(set.iter().collect::<Vec<_>>(), vec![1, 3]);
     }

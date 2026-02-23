@@ -86,7 +86,7 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.warnings() {
+        for w in handle.drain_warnings() {
             eprintln!("{w}");
         }
         if let Err(e) = ptools::print_auxv_from(&handle) {
