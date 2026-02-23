@@ -67,19 +67,16 @@ fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::Error> {
         let blocked = masks.blocked.contains(sig);
         let pending = masks.pending.contains(sig) || masks.shared_pending.contains(sig);
 
-        let mut extra = Vec::new();
+        let mut parts = Vec::new();
         if blocked {
-            extra.push("blocked");
+            parts.push("blocked");
         }
         if pending {
-            extra.push("pending");
+            parts.push("pending");
         }
+        parts.push(action_text(action));
 
-        if extra.is_empty() {
-            println!("{:<10}{}", name, action_text(action));
-        } else {
-            println!("{:<10}{}\t{}", name, action_text(action), extra.join(","));
-        }
+        println!("{:<10}{}", name, parts.join(","));
     }
     Ok(())
 }
