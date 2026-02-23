@@ -1,0 +1,58 @@
+---
+"Component: pargs":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pargs.rs
+
+"Component: pauxv":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pauxv.rs
+
+"Component: pcred":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pcred.rs
+
+"Component: penv":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/penv.rs
+
+"Component: pfiles":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pfiles.rs
+
+"Component: plgrp":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/plgrp.rs
+
+"Component: prun":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/prun.rs
+
+"Component: psig":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/psig.rs
+
+"Component: pstop":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pstop.rs
+
+"Component: ptree":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/ptree.rs
+
+"Component: pwait":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pwait.rs
+
+"Component: Process Handle":
+  - changed-files:
+      - any-glob-to-any-file: src/proc/*.rs
+
+"Component: Process Source":
+  - changed-files:
+      - any-glob-to-any-file: src/source/*.rs
+
+"Type: Documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - CONTRIBUTING.md
+          - README.md
