@@ -293,10 +293,22 @@ pub(crate) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, SocketI
     sockets
 }
 
+/// Socket-level options queried via `getsockopt`.
+#[derive(Clone, Default)]
+pub struct SocketOptions {
+    pub reuse_addr: bool,
+    pub keep_alive: bool,
+    pub broadcast: bool,
+    pub accept_conn: bool,
+    pub oob_inline: bool,
+    pub snd_buf: Option<usize>,
+    pub rcv_buf: Option<usize>,
+}
+
 /// Socket details queried via `getsockopt` on a duplicated file descriptor.
 #[derive(Clone)]
 pub(crate) struct SocketDetails {
-    pub options: Vec<String>,
+    pub options: SocketOptions,
     pub tcp_info: Option<nix::libc::tcp_info>,
     pub congestion_control: Option<String>,
 }
@@ -360,7 +372,7 @@ pub struct Socket {
     pub tcp_state: Option<TcpState>,
     pub tx_queue: Option<u32>,
     pub rx_queue: Option<u32>,
-    pub options: Vec<String>,
+    pub options: SocketOptions,
     pub tcp_info: Option<TcpInfo>,
     pub congestion_control: Option<String>,
     pub peer_process: Option<PeerProcess>,
@@ -379,7 +391,7 @@ impl Socket {
                 d.options,
             )
         } else {
-            (None, None, Vec::new())
+            (None, None, SocketOptions::default())
         };
         Socket {
             family: info.family,
@@ -423,33 +435,16 @@ fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
     None
 }
 
-fn query_socket_options(sock_fd: &OwnedFd) -> Vec<String> {
-    let mut options = Vec::new();
-
-    if matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)) {
-        options.push("SO_REUSEADDR".to_string());
+fn query_socket_options(sock_fd: &OwnedFd) -> SocketOptions {
+    SocketOptions {
+        reuse_addr: matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)),
+        keep_alive: matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)),
+        broadcast: matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)),
+        accept_conn: matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)),
+        oob_inline: matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)),
+        snd_buf: getsockopt(sock_fd, sockopt::SndBuf).ok(),
+        rcv_buf: getsockopt(sock_fd, sockopt::RcvBuf).ok(),
     }
-    if matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)) {
-        options.push("SO_KEEPALIVE".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)) {
-        options.push("SO_BROADCAST".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)) {
-        options.push("SO_ACCEPTCONN".to_string());
-    }
-    if matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)) {
-        options.push("SO_OOBINLINE".to_string());
-    }
-
-    if let Ok(sndbuf) = getsockopt(sock_fd, sockopt::SndBuf) {
-        options.push(format!("SO_SNDBUF({})", sndbuf));
-    }
-    if let Ok(rcvbuf) = getsockopt(sock_fd, sockopt::RcvBuf) {
-        options.push(format!("SO_RCVBUF({})", rcvbuf));
-    }
-
-    options
 }
 
 fn query_tcp_congestion_control(sock_fd: &OwnedFd) -> Option<String> {

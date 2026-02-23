@@ -18,7 +18,7 @@ use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
 use ptools::{
     AnonFileType, Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, Socket,
-    TcpInfo, TcpState,
+    SocketOptions, TcpInfo, TcpState,
 };
 use std::borrow::Cow;
 use std::net::SocketAddr;
@@ -230,6 +230,32 @@ fn print_tcp_info(info: &TcpInfo) {
     println!("        rcv_space: {}", info.rcv_space);
 }
 
+fn format_socket_options(opts: &SocketOptions) -> String {
+    let mut parts = Vec::new();
+    if opts.reuse_addr {
+        parts.push("SO_REUSEADDR".to_string());
+    }
+    if opts.keep_alive {
+        parts.push("SO_KEEPALIVE".to_string());
+    }
+    if opts.broadcast {
+        parts.push("SO_BROADCAST".to_string());
+    }
+    if opts.accept_conn {
+        parts.push("SO_ACCEPTCONN".to_string());
+    }
+    if opts.oob_inline {
+        parts.push("SO_OOBINLINE".to_string());
+    }
+    if let Some(sndbuf) = opts.snd_buf {
+        parts.push(format!("SO_SNDBUF({})", sndbuf));
+    }
+    if let Some(rcvbuf) = opts.rcv_buf {
+        parts.push(format!("SO_RCVBUF({})", rcvbuf));
+    }
+    parts.join(",")
+}
+
 fn print_peername(sock: &Socket) {
     if let Some(ref peer) = sock.peer_process {
         println!("        peer: {}[{}]", peer.comm, peer.pid);
@@ -321,8 +347,9 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
                     print_sockname(sock);
                     print_peername(sock);
                     println!("        {}", sock_type_str(&sock.sock_type));
-                    if !sock.options.is_empty() {
-                        println!("        {}", sock.options.join(","));
+                    let opts = format_socket_options(&sock.options);
+                    if !opts.is_empty() {
+                        println!("        {}", opts);
                     }
                     print_tcp_details(sock);
                 } else if let Some(ref sockprotoname) = fd.sockprotoname {
