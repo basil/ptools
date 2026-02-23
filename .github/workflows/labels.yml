@@ -29,10 +29,15 @@ jobs:
           {"name": "Status: PR Welcome", "color": "2e7733", "description": "Pull requests welcome"},
           {"name": "Status: Review Needed", "color": "fbca04", "description": "Request for review feedback"},
           {"name": "Status: Need More Info", "color": "f9c90a", "description": "Lacks enough info to make progress"},
+          {"name": "Status: Won't Fix", "color": "000000", "description": "The issue or pull request won't be fixed"},
 
           {"name": "Type: Task", "color": "fbca04", "description": "A specific piece of work"},
-          {"name": "Type: Bug", "color": "ee0701", "description": "An unexpected problem or behavior"},
-          {"name": "Type: Enhancement", "color": "0075ca", "description": "A request, idea, or new functionality"},
+          {"name": "Type: Bug", "color": "d73a4a", "description": "An unexpected problem or behavior"},
+          {"name": "Type: Enhancement", "color": "a2eeef", "description": "A request, idea, or new functionality"},
+          {"name": "Type: CI", "color": "000000", "description": "Pull requests that update CI code"},
+          {"name": "Type: Dependencies", "color": "0366d6", "description": "Pull requests that update a dependency file"},
+          {"name": "Type: Documentation", "color": "0075ca", "description": "Improvements or additions to documentation"},
+          {"name": "Type: Question", "color": "d876e3", "description": "Further information is requested"},
 
           {"name": "Component: Other", "color": "0e8a16", "description": "Catch-all component for issues not covered by other components"},
           {"name": "Component: Process Handle", "color": "0e8a16", "description": "Issues related to process handles"},
