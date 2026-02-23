@@ -12,12 +12,12 @@ fn pcred_reports_condensed_credentials() {
 
     // A regular process has equal real/effective/saved UIDs and GIDs.
     assert!(
-        first.contains("e/r/suid="),
+        first.contains("e/r/s/fsuid="),
         "Expected condensed UID format:\n{}",
         stdout
     );
     assert!(
-        first.contains("e/r/sgid="),
+        first.contains("e/r/s/fsgid="),
         "Expected condensed GID format:\n{}",
         stdout
     );

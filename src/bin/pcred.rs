@@ -96,37 +96,29 @@ fn print_cred(handle: &ProcHandle, all: bool) -> Result<(), ptools::Error> {
         e
     })?;
 
-    let all_uid_equal = cred.euid == cred.ruid && cred.ruid == cred.suid && cred.suid == cred.fsuid;
-    if !all && all_uid_equal {
-        print!("{}:\te/r/suid={}  ", pid, fmt_uid(cred.euid));
+    if !all && cred.euid == cred.ruid && cred.ruid == cred.suid && cred.suid == cred.fsuid {
+        print!("{}:\te/r/s/fsuid={}  ", pid, fmt_uid(cred.euid));
     } else {
         print!(
-            "{}:\teuid={} ruid={} suid={}",
+            "{}:\teuid={} ruid={} suid={} fsuid={}  ",
             pid,
             fmt_uid(cred.euid),
             fmt_uid(cred.ruid),
             fmt_uid(cred.suid),
+            fmt_uid(cred.fsuid),
         );
-        if all || cred.fsuid != cred.euid {
-            print!(" fsuid={}", fmt_uid(cred.fsuid));
-        }
-        print!("  ");
     }
 
-    let all_gid_equal = cred.egid == cred.rgid && cred.rgid == cred.sgid && cred.sgid == cred.fsgid;
-    if !all && all_gid_equal {
-        println!("e/r/sgid={}", fmt_gid(cred.egid));
+    if !all && cred.egid == cred.rgid && cred.rgid == cred.sgid && cred.sgid == cred.fsgid {
+        println!("e/r/s/fsgid={}", fmt_gid(cred.egid));
     } else {
-        print!(
-            "egid={} rgid={} sgid={}",
+        println!(
+            "egid={} rgid={} sgid={} fsgid={}",
             fmt_gid(cred.egid),
             fmt_gid(cred.rgid),
             fmt_gid(cred.sgid),
+            fmt_gid(cred.fsgid),
         );
-        if all || cred.fsgid != cred.egid {
-            print!(" fsgid={}", fmt_gid(cred.fsgid));
-        }
-        println!();
     }
 
     if !cred.groups.is_empty() && (all || cred.groups.len() != 1 || cred.groups[0] != cred.rgid) {
