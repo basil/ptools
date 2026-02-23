@@ -120,8 +120,8 @@ impl ProcHandle {
         Ok(self.source.read_auxv()?)
     }
 
-    /// Parse and return all auxiliary vector entries.
-    pub(crate) fn auxv(&self) -> Result<Vec<auxv::AuxvEntry>, Error> {
+    /// Parse and return all auxiliary vector entries with metadata.
+    pub(crate) fn auxv(&self) -> Result<auxv::AuxvData, Error> {
         auxv::read_auxv(self)
     }
 

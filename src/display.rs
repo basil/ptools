@@ -76,9 +76,10 @@ pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
 #[allow(clippy::unnecessary_cast)]
 pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
     let auxv = handle.auxv()?;
+    let hex_width = auxv.word_size * 2;
 
     print_proc_summary_from(handle);
-    for entry in &auxv {
+    for entry in &auxv.entries {
         if entry.key == AuxvType::ExecFn {
             let s = handle
                 .exe()
@@ -86,33 +87,53 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
                 .and_then(|p| p.to_str().map(str::to_string))
                 .unwrap_or_default();
             let key = auxv_type_str(&entry.key);
-            println!("{:<15} 0x{:016x} {}", key, entry.value, s);
+            println!(
+                "{:<15} 0x{:0width$x} {}",
+                key,
+                entry.value,
+                s,
+                width = hex_width
+            );
         } else if let Some(flags) = decode_hwcap(entry.key, entry.value) {
             let key = auxv_type_str(&entry.key);
-            println!("{:<15} 0x{:016x} {}", key, entry.value, flags.join(" | "));
+            println!(
+                "{:<15} 0x{:0width$x} {}",
+                key,
+                entry.value,
+                flags.join(" | "),
+                width = hex_width
+            );
         } else if entry.key.is_uid() {
             let key = auxv_type_str(&entry.key);
             if let Some(name) = resolve_uid(entry.value as u32) {
                 println!(
-                    "{:<15} 0x{:016x} {}({})",
-                    key, entry.value, entry.value, name
+                    "{:<15} 0x{:0width$x} {}({})",
+                    key,
+                    entry.value,
+                    entry.value,
+                    name,
+                    width = hex_width
                 );
             } else {
-                println!("{:<15} 0x{:016x}", key, entry.value);
+                println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
             }
         } else if entry.key.is_gid() {
             let key = auxv_type_str(&entry.key);
             if let Some(name) = resolve_gid(entry.value as u32) {
                 println!(
-                    "{:<15} 0x{:016x} {}({})",
-                    key, entry.value, entry.value, name
+                    "{:<15} 0x{:0width$x} {}({})",
+                    key,
+                    entry.value,
+                    entry.value,
+                    name,
+                    width = hex_width
                 );
             } else {
-                println!("{:<15} 0x{:016x}", key, entry.value);
+                println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
             }
         } else {
             let key = auxv_type_str(&entry.key);
-            println!("{:<15} 0x{:016x}", key, entry.value);
+            println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
         }
     }
     Ok(())

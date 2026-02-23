@@ -97,6 +97,13 @@ pub struct AuxvEntry {
     pub value: u64,
 }
 
+/// Parsed auxiliary vector with metadata about the originating process.
+pub struct AuxvData {
+    pub entries: Vec<AuxvEntry>,
+    /// Word size of the process (4 for 32-bit, 8 for 64-bit).
+    pub word_size: usize,
+}
+
 fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
     match word_size {
         4 => {
@@ -174,7 +181,7 @@ fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
 }
 
 /// Read and parse the auxiliary vector from a process handle.
-pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Error> {
+pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<AuxvData, super::Error> {
     let bytes = handle.auxv_bytes()?;
 
     if bytes.is_empty() {
@@ -198,8 +205,8 @@ pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<Vec<AuxvEntry>, super::Er
             continue;
         }
 
-        if let Ok(result) = parse_auxv_records(&bytes, word_size) {
-            return Ok(result);
+        if let Ok(entries) = parse_auxv_records(&bytes, word_size) {
+            return Ok(AuxvData { entries, word_size });
         }
     }
 
