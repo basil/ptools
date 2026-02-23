@@ -5,11 +5,19 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: chore
+    cooldown:
+      default-days: 30
     labels:
-      - "Type: Dependencies"
+      - 'Type: Dependencies'
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: chore
+    cooldown:
+      default-days: 30
     labels:
-      - "Type: Dependencies"
+      - 'Type: Dependencies'
