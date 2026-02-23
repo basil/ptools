@@ -1,6 +1,7 @@
 use roff::{bold, roman, Roff};
 use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 struct Example<'a> {
     title: &'a str,
@@ -50,12 +51,49 @@ const CORE_NOTES: &str = "When a core file has been removed by systemd-tmpfiles(
                            the path of a missing core file, e.g., \
                            coredumpctl list <name> -F COREDUMP_FILENAME.";
 
+fn build_date() -> String {
+    let days = (SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        / 86400) as i64;
+    // Howard Hinnant's civil_from_days algorithm
+    let z = days + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    format!("{} {}", MONTHS[(m - 1) as usize], y)
+}
+
 fn render_man_page(page: &ManPage, out_dir: &Path) {
     let version = env!("CARGO_PKG_VERSION");
     let upper_name = page.name.to_uppercase();
-    let date_version = format!("{} {}", page.name, version);
+    let date = build_date();
+    let source = format!("{} {}", page.name, version);
     let mut roff = Roff::default();
-    roff.control("TH", [upper_name.as_str(), "1", date_version.as_str()]);
+    roff.control(
+        "TH",
+        [upper_name.as_str(), "1", date.as_str(), source.as_str()],
+    );
     roff.control("SH", ["NAME"]);
     roff.text([roman(format!("{} - {}", page.name, page.about))]);
     roff.control("SH", ["SYNOPSIS"]);
