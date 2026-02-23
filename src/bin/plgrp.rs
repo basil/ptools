@@ -19,7 +19,45 @@ use std::process;
 use nix::sched::sched_getaffinity;
 use nix::unistd::Pid;
 
-use ptools::{cpu_to_node, format_node_list, numa_online_nodes, CpuSet, NodeAffinity, ProcHandle};
+use ptools::{cpu_to_node, numa_online_nodes, CpuSet, NodeAffinity, ProcHandle};
+
+/// Format a sorted slice of node IDs, collapsing consecutive runs into ranges.
+///
+/// For example, `[0, 1, 2, 5, 7, 8]` becomes `"0-2,5,7-8"`.
+fn format_node_list(nodes: &[u32]) -> String {
+    if nodes.is_empty() {
+        return String::new();
+    }
+    let mut parts = Vec::new();
+    let mut start = nodes[0];
+    let mut end = nodes[0];
+
+    for &n in &nodes[1..] {
+        if n == end + 1 {
+            end = n;
+        } else {
+            if end > start + 1 {
+                parts.push(format!("{}-{}", start, end));
+            } else if end > start {
+                parts.push(format!("{},{}", start, end));
+            } else {
+                parts.push(format!("{}", start));
+            }
+            start = n;
+            end = n;
+        }
+    }
+
+    if end > start + 1 {
+        parts.push(format!("{}-{}", start, end));
+    } else if end > start {
+        parts.push(format!("{},{}", start, end));
+    } else {
+        parts.push(format!("{}", start));
+    }
+
+    parts.join(",")
+}
 
 /// Get the CPU affinity mask for a thread via syscall.
 fn get_thread_affinity(tid: u64) -> Option<CpuSet> {
@@ -310,5 +348,40 @@ fn main() {
     }
     if error {
         process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_node_list_single() {
+        assert_eq!(format_node_list(&[3]), "3");
+    }
+
+    #[test]
+    fn format_node_list_consecutive_range() {
+        assert_eq!(format_node_list(&[0, 1, 2, 3]), "0-3");
+    }
+
+    #[test]
+    fn format_node_list_two_consecutive() {
+        assert_eq!(format_node_list(&[4, 5]), "4,5");
+    }
+
+    #[test]
+    fn format_node_list_mixed() {
+        assert_eq!(format_node_list(&[0, 1, 2, 5, 7, 8]), "0-2,5,7,8");
+    }
+
+    #[test]
+    fn format_node_list_empty() {
+        assert_eq!(format_node_list(&[]), "");
+    }
+
+    #[test]
+    fn format_node_list_gaps() {
+        assert_eq!(format_node_list(&[0, 2, 4]), "0,2,4");
     }
 }
