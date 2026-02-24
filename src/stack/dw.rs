@@ -29,12 +29,16 @@ fn demangle(name: &str) -> Option<String> {
     // Try C++ Itanium ABI demangling (_Z prefix).
     if name.starts_with("_Z") {
         if let Ok(sym) = cpp_demangle::Symbol::new(name) {
-            return Some(sym.to_string());
+            let opts = cpp_demangle::DemangleOptions::new().no_params();
+            if let Ok(s) = sym.demangle(&opts) {
+                return Some(s);
+            }
         }
     }
     // Try Rust symbol demangling (_R prefix for v0, _ZN...E for legacy).
     let demangled = rustc_demangle::try_demangle(name).ok()?;
-    Some(demangled.to_string())
+    // Alternate format omits the hash suffix.
+    Some(format!("{:#}", demangled))
 }
 
 /// Get the linkage name or plain name of a DWARF DIE, matching elfutils die_name().

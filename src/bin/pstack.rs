@@ -39,12 +39,12 @@ fn print_thread(thread: &Thread, tid_filter: Option<u64>) {
             return;
         }
     }
-    println!("{}: {}", thread.id(), thread.name().unwrap_or("<unknown>"));
+    println!("{}:\t{}", thread.id(), thread.name().unwrap_or("<unknown>"));
     for frame in thread.frames() {
         print!("{:#018x}", frame.ip());
 
         if let Some(symbol) = frame.symbol() {
-            print!(" in {}", symbol.name());
+            print!(" {}", symbol.name());
 
             // Print arguments inside parentheses
             match frame.args() {
@@ -75,7 +75,7 @@ fn print_thread(thread: &Thread, tid_filter: Option<u64>) {
             print!(" in {module}");
         }
         if let Some(src) = frame.source() {
-            print!(" at {}", format_source(src));
+            print!(" ({})", format_source(src));
         }
         println!();
     }
@@ -87,17 +87,17 @@ fn print_stack(
     handle: Option<&ProcHandle>,
     tid_filter: Option<u64>,
     core_path: Option<&Path>,
-    debug: bool,
+    args: &Args,
 ) -> Result<(), ptools::stack::Error> {
     let mut opts = ptools::stack::TraceOptions::new();
     let opts = opts
         .thread_names(true)
         .symbols(true)
         .demangle(true)
-        .module(true)
-        .source(debug)
-        .inlines(debug)
-        .args(debug);
+        .module(args.module)
+        .source(args.verbose)
+        .inlines(args.verbose)
+        .args(args.verbose);
 
     if let Some(path) = core_path {
         opts.trace_core_each(
@@ -126,16 +126,18 @@ fn print_stack(
 }
 
 struct Args {
-    debug: bool,
+    verbose: bool,
+    module: bool,
     operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [-d] [pid[/thread] | core]...");
+    eprintln!("Usage: pstack [-mv] [pid[/thread] | core]...");
     eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -d, --debug      Show source locations, inline frames, and arguments");
+    eprintln!("  -m, --module     Show module file paths");
+    eprintln!("  -v, --verbose    Show source locations, inline frames, and arguments");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
@@ -144,7 +146,8 @@ fn parse_args() -> Args {
     use lexopt::prelude::*;
 
     let mut args = Args {
-        debug: false,
+        module: false,
+        verbose: false,
         operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
@@ -154,8 +157,11 @@ fn parse_args() -> Args {
         exit(2);
     }) {
         match arg {
-            Short('d') | Long("debug") => {
-                args.debug = true;
+            Short('m') | Long("module") => {
+                args.module = true;
+            }
+            Short('v') | Long("verbose") => {
+                args.verbose = true;
             }
             Short('h') | Long("help") => {
                 print_usage();
@@ -209,7 +215,7 @@ fn main() {
                 } else {
                     None
                 };
-                if let Err(e) = print_stack(Some(&handle), tid, core_path, args.debug) {
+                if let Err(e) = print_stack(Some(&handle), tid, core_path, &args) {
                     eprintln!("pstack: {}: {e}", handle.pid());
                     error = true;
                 }
@@ -222,7 +228,7 @@ fn main() {
                 // (no systemd-coredump metadata available).
                 let path = Path::new(operand.as_str());
                 if !operand.bytes().all(|b| b.is_ascii_digit()) && path.exists() {
-                    if let Err(e) = print_stack(None, None, Some(path), args.debug) {
+                    if let Err(e) = print_stack(None, None, Some(path), &args) {
                         eprintln!("pstack: {}: {e}", path.display());
                         error = true;
                     }
