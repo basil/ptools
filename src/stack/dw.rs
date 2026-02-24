@@ -669,7 +669,11 @@ fn expand_inlines(
     let (scopes_ptr, nscopes) = module.getscopes(&mut cudie, pc_adjusted - bias)?;
 
     // Find the innermost function-like DIE and its name.
-    let mut innermost_die = None;
+    // We reuse the scopes array from dwarf_getscopes directly: starting from
+    // the function DIE index, the remaining entries are exactly the parent
+    // scope chain. This avoids calling dwarf_getscopes_die which would do
+    // another expensive full-CU tree walk.
+    let mut func_scope_idx = None;
     let mut debug_name = None;
     unsafe {
         for i in 0..nscopes as usize {
@@ -678,23 +682,23 @@ fn expand_inlines(
             if is_function_tag(tag) {
                 debug_name = die_name(scope);
                 if debug_name.is_some() {
-                    innermost_die = Some(*scope);
+                    func_scope_idx = Some(i);
                 }
                 break;
             }
         }
-        libc::free(scopes_ptr.cast());
     }
 
-    let mut die = innermost_die?;
-    let raw_name = debug_name?;
+    let (func_idx, raw_name) = match (func_scope_idx, debug_name) {
+        (Some(idx), Some(name)) => (idx, name),
+        _ => {
+            unsafe { libc::free(scopes_ptr.cast()) };
+            return None;
+        }
+    };
 
-    // Get the parent scope chain from the innermost DIE.
-    let mut parent_scopes_ptr: *mut crate::dw_sys::Dwarf_Die = std::ptr::null_mut();
-    let nparent = unsafe { crate::dw_sys::dwarf_getscopes_die(&mut die, &mut parent_scopes_ptr) };
-    if nparent <= 0 {
-        return None;
-    }
+    let parent_scopes_ptr = unsafe { scopes_ptr.add(func_idx) };
+    let nparent = nscopes - func_idx as c_int;
 
     let module_name = if options.module {
         module.name().map(|n| n.to_string_lossy().into_owned())
@@ -728,7 +732,7 @@ fn expand_inlines(
         }
 
         if !has_inlines {
-            libc::free(parent_scopes_ptr.cast());
+            libc::free(scopes_ptr.cast());
             return None;
         }
 
@@ -838,7 +842,7 @@ fn expand_inlines(
             last_scope = scope;
         }
 
-        libc::free(parent_scopes_ptr.cast());
+        libc::free(scopes_ptr.cast());
     }
 
     Some(result)
