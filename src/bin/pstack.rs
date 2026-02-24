@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::process::exit;
 
-use ptools::stack::SourceLocation;
+use ptools::stack::{FrameArgs, SourceLocation};
 use ptools::ProcHandle;
 
 fn format_source(src: &SourceLocation) -> String {
@@ -45,7 +45,8 @@ fn print_stack(
         .demangle(!quiet)
         .module(!quiet)
         .source(!quiet)
-        .inlines(!quiet);
+        .inlines(!quiet)
+        .args(!quiet);
     let process = if let Some(path) = core_path {
         opts.trace_core(path, handle)?
     } else {
@@ -66,26 +67,36 @@ fn print_stack(
         }
         println!("{}: {}", thread.id(), thread.name().unwrap_or("<unknown>"));
         for frame in thread.frames() {
-            if frame.is_inline() {
-                match frame.symbol() {
-                    Some(symbol) => {
-                        print!("{:#016x} {} [inlined]", frame.ip(), symbol.name());
+            print!("{:#018x}", frame.ip());
+
+            if let Some(symbol) = frame.symbol() {
+                print!(" in {}", symbol.name());
+
+                // Print arguments inside parentheses
+                match frame.args() {
+                    Some(FrameArgs::Args(args)) => {
+                        print!("(");
+                        for (i, arg) in args.iter().enumerate() {
+                            if i > 0 {
+                                print!(", ");
+                            }
+                            print!("{}={}", arg.name(), arg.value());
+                        }
+                        print!(")");
                     }
-                    None => print!("{:#016x} - ??? [inlined]", frame.ip()),
+                    Some(FrameArgs::NoDebugInfo) => print!("()"),
+                    None => {}
+                }
+
+                if frame.is_inline() {
+                    print!(" [inlined]");
+                } else {
+                    print!("+{:#x}", symbol.offset());
                 }
             } else {
-                match frame.symbol() {
-                    Some(symbol) => {
-                        print!(
-                            "{:#016x} {}+{:#x}",
-                            frame.ip(),
-                            symbol.name(),
-                            symbol.offset()
-                        );
-                    }
-                    None => print!("{:#016x} - ???", frame.ip()),
-                }
+                print!(" - ???");
             }
+
             if let Some(module) = frame.module() {
                 print!(" in {module}");
             }

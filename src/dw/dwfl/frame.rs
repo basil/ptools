@@ -50,4 +50,16 @@ impl FrameRef {
             }
         }
     }
+
+    /// Returns the value of a register at this frame.
+    pub fn reg(&self, regno: u32) -> Option<u64> {
+        unsafe {
+            let mut val: crate::dw_sys::Dwarf_Word = 0;
+            if crate::dw_sys::dwfl_frame_reg(self.as_ptr(), regno, &mut val) == 0 {
+                Some(val)
+            } else {
+                None
+            }
+        }
+    }
 }
