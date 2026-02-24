@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+use std::cell::Cell;
 use std::io::Write;
 use std::path::Path;
 use std::process::exit;
@@ -33,12 +34,16 @@ fn format_source(src: &SourceLocation) -> String {
     }
 }
 
-fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize) {
+fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize, first: &Cell<bool>) {
     if let Some(tid) = tid_filter {
         if thread.id() as u64 != tid {
             return;
         }
     }
+    if !first.get() {
+        println!();
+    }
+    first.set(false);
     println!("{}:\t{}", thread.id(), thread.name().unwrap_or("<unknown>"));
     for (i, frame) in thread.frames().iter().enumerate() {
         if max_frames > 0 && i >= max_frames {
@@ -83,7 +88,6 @@ fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize) {
         }
         println!();
     }
-    println!();
     std::io::stdout().flush().ok();
 }
 
@@ -103,6 +107,7 @@ fn print_stack(
         .inlines(args.verbose)
         .args(args.verbose);
 
+    let first_thread = Cell::new(true);
     if let Some(path) = core_path {
         opts.trace_core_each(
             path,
@@ -115,15 +120,16 @@ fn print_stack(
                     println!();
                 }
                 println!();
+                first_thread.set(true);
             },
-            |thread| print_thread(&thread, tid_filter, args.max_frames),
+            |thread| print_thread(&thread, tid_filter, args.max_frames, &first_thread),
         )?;
     } else {
         let h = handle.unwrap();
         ptools::print_proc_summary_from(h);
         println!();
         opts.trace_each(h.pid() as u32, |thread| {
-            print_thread(&thread, tid_filter, args.max_frames);
+            print_thread(&thread, tid_filter, args.max_frames, &first_thread);
         })?;
     }
 
