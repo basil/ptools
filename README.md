@@ -42,7 +42,7 @@ it’s slow or not responsive.
 
 ```text
 $ pstack $$
-31903:	/bin/zsh
+31903: /bin/zsh
 0x00007fc764b24c5e __internal_syscall_cancel+0x7e
 0x00007fc764b24c84 __syscall_cancel+0x14
 0x00007fc764ad0525 __sigsuspend+0x25
@@ -64,7 +64,7 @@ locations (file and line number) and inlined function frames.
 
 ```text
 $ pstack -v 27888/27981
-27981:	/usr/lib64/firefox/firefox
+27981: /usr/lib64/firefox/firefox
 0x00007fa051e879a2 __syscall_cancel_arch+0x32 (syscall_cancel.S:56)
 0x00007fa051e7bc3c __internal_syscall_cancel+0x5c (cancellation.c:49)
 0x00007fa051e7c2ac __futex_abstimed_wait_common+0x7c (futex-internal.c:57)
@@ -149,7 +149,7 @@ $ ptree 1
 
 ```text
 $ pargs $(pgrep Xwayland)
-3978:	Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
+3978: Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
 argv[0]: Xwayland
 argv[1]: :0
 argv[2]: -rootless
@@ -168,7 +168,7 @@ argv[11]: 95
 
 ```text
 $ penv $(pgrep Xwayland)
-3978:	Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
+3978: Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
 envp[0]: SHELL=/bin/zsh
 envp[1]: GTK_IM_MODULE=wayland
 envp[2]: XDG_BACKEND=wayland
@@ -180,7 +180,7 @@ envp[4]: XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session1
 
 ```text
 $ pauxv $(pgrep sshd)
-2887:	sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+2887: sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
 AT_SYSINFO_EHDR 0x00007fca98be9000
 AT_MINSIGSTKSZ  0x0000000000000d30
 AT_HWCAP        0x00000000178bfbff FPU | VME | DE | PSE | TSC | MSR | PAE | MCE | CX8 | APIC | SEP | MTRR | PGE | MCA | CMOV | PAT | PSE36 | CLFSH | MMX | FXSR | SSE | SSE2 | HTT
@@ -209,7 +209,7 @@ AT_RSEQ_ALIGN   0x0000000000000020
 
 ```text
 $ psig 1
-1:	/usr/lib/systemd/systemd --switched-root --system --deserialize=48
+1: /usr/lib/systemd/systemd --switched-root --system --deserialize=48
 HUP       blocked,default
 INT       blocked,default
 QUIT      caught
