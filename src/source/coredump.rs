@@ -188,7 +188,7 @@ impl CoredumpSource {
             fields.entry(key).or_insert(value);
         }
 
-        let pid = extract_pid(&fields).unwrap_or_else(|_| core_elf.pid() as u64);
+        let pid = extract_pid(&fields).unwrap_or(0);
         Ok(CoredumpSource {
             pid,
             core_elf: Arc::clone(core_elf),

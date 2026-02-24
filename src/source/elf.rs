@@ -17,8 +17,7 @@
 //! ELF core dump file handling.
 //!
 //! Owns the ELF handle and (optionally decompressed) file descriptor for a
-//! core dump.  Provides memory reading via PT_LOAD segments and PID
-//! extraction from NT_PRSTATUS notes.
+//! core dump.  Provides memory reading via PT_LOAD segments.
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -50,12 +49,6 @@ pub(super) struct CoreElf {
 
 /// Zstd magic bytes.
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
-
-/// NT_PRSTATUS note type.
-const NT_PRSTATUS: u32 = 1;
-
-/// PT_NOTE program header type.
-const PT_NOTE: u32 = 4;
 
 impl CoreElf {
     /// Open a core dump file, decompressing zstd if needed.
@@ -148,86 +141,6 @@ impl CoreElf {
             }
         }
         false
-    }
-
-    /// Extract the PID from the first NT_PRSTATUS note in the core file.
-    ///
-    /// Returns 0 if no NT_PRSTATUS note is found.
-    pub(super) fn pid(&self) -> u32 {
-        unsafe {
-            let elf = self.elf.0;
-
-            // Determine PID offset within prstatus based on ELF class.
-            // ELFCLASS64: pr_pid is at offset 32 (after siginfo(12) + cursig(2) + pad(2) + sigpend(8) + sighold(8))
-            // ELFCLASS32: pr_pid is at offset 24 (after siginfo(12) + cursig(2) + pad(2) + sigpend(4) + sighold(4))
-            let class = crate::dw_sys::gelf_getclass(elf);
-            let pid_offset: usize = if class == 2 { 32 } else { 24 };
-
-            let mut phnum: libc::size_t = 0;
-            if crate::dw_sys::elf_getphdrnum(elf, &mut phnum) != 0 {
-                return 0;
-            }
-
-            for i in 0..phnum as c_int {
-                let mut phdr = std::mem::zeroed::<crate::dw_sys::GElf_Phdr>();
-                if crate::dw_sys::gelf_getphdr(elf, i, &mut phdr).is_null() {
-                    continue;
-                }
-                if phdr.p_type != PT_NOTE {
-                    continue;
-                }
-
-                let data = crate::dw_sys::elf_getdata_rawchunk(
-                    elf,
-                    phdr.p_offset as i64,
-                    phdr.p_filesz as usize,
-                    crate::dw_sys::ELF_T_NHDR,
-                );
-                if data.is_null() {
-                    continue;
-                }
-
-                let mut offset: libc::size_t = 0;
-                loop {
-                    let mut nhdr = std::mem::zeroed::<crate::dw_sys::GElf_Nhdr>();
-                    let mut name_offset: libc::size_t = 0;
-                    let mut desc_offset: libc::size_t = 0;
-
-                    let next = crate::dw_sys::gelf_getnote(
-                        data,
-                        offset,
-                        &mut nhdr,
-                        &mut name_offset,
-                        &mut desc_offset,
-                    );
-                    if next == 0 {
-                        break;
-                    }
-
-                    if nhdr.n_type == NT_PRSTATUS {
-                        let d = &*data;
-                        let name_end = name_offset + nhdr.n_namesz as usize;
-                        if name_end <= d.d_size {
-                            let name_slice = std::slice::from_raw_parts(
-                                (d.d_buf as *const u8).add(name_offset),
-                                nhdr.n_namesz as usize,
-                            );
-                            let name = name_slice.strip_suffix(b"\0").unwrap_or(name_slice);
-                            if name == b"CORE" && desc_offset + pid_offset + 4 <= d.d_size {
-                                let desc_start = (d.d_buf as *const u8).add(desc_offset);
-                                let pid_ptr = desc_start.add(pid_offset) as *const i32;
-                                let pid = std::ptr::read_unaligned(pid_ptr);
-                                return pid as u32;
-                            }
-                        }
-                    }
-
-                    offset = next;
-                }
-            }
-
-            0
-        }
     }
 }
 
