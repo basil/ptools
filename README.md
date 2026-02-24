@@ -42,44 +42,46 @@ it’s slow or not responsive.
 
 ```text
 $ pstack $$
-97060:  /bin/zsh
-0x00007f46d0d31c5e __internal_syscall_cancel+0x7e
-0x00007f46d0d31c84 __syscall_cancel+0x14
-0x00007f46d0cdd525 __sigsuspend+0x25
-0x000055a071737dad zwaitjob+0x5cd
-0x000055a071737e8f waitjobs+0x2f
-0x000055a07170c682 execpline.lto_priv.0+0xba2
-0x000055a07170dbfe execlist+0x52e
-0x000055a07170e4ce execode+0xae
-0x000055a07172d532 loop+0x792
-0x000055a0717350e6 zsh_main+0x5a6
-0x000055a0716e1d0d main+0xd
-0x00007f46d0cc65b5 __libc_start_call_main+0x75
-0x00007f46d0cc6668 __libc_start_main@@GLIBC_2.34+0x88
-0x000055a0716e1d35 _start+0x25
+31903:	/bin/zsh
+0x00007fc764b24c5e __internal_syscall_cancel+0x7e
+0x00007fc764b24c84 __syscall_cancel+0x14
+0x00007fc764ad0525 __sigsuspend+0x25
+0x000055bec2e64dad zwaitjob+0x5cd
+0x000055bec2e64e8f waitjobs+0x2f
+0x000055bec2e39682 execpline.lto_priv.0+0xba2
+0x000055bec2e3abfe execlist+0x52e
+0x000055bec2e3b4ce execode+0xae
+0x000055bec2e5a532 loop+0x792
+0x000055bec2e620e6 zsh_main+0x5a6
+0x000055bec2e0ed0d main+0xd
+0x00007fc764ab95b5 __libc_start_call_main+0x75
+0x00007fc764ab9668 __libc_start_main@@GLIBC_2.34+0x88
+0x000055bec2e0ed35 _start+0x25
 ```
 
-If DWARF debug information is installed, you can use verbose mode to
-find source code information (file and line number), values of arguments
-passed to functions, and inlined function frames.
+If DWARF debug information is installed, you can use `-v` to show source code
+locations (file and line number) and inlined function frames.
 
 ```text
-$ pstack -v $$
-194145: /bin/zsh
-0x00007f7a7e2aec5e __internal_syscall_cancel(a1=140728959537968, a2=8, a3=0, a4=0, a5=0, a6=0, nr=130)+0x7e (cancellation.c:64)
-0x00007f7a7e2aec84 __syscall_cancel(nr=130)+0x14 (cancellation.c:75)
-0x00007f7a7e25a525 __sigsuspend()+0x25 (sigsuspend.c:26)
-0x000055cbe14bfdad zwaitjob()+0x5cd (signals.c:393)
-0x000055cbe14bfe8f waitjobs()+0x2f (jobs.c:1702)
-0x000055cbe1494682 execpline.lto_priv.0()+0xba2 (exec.c:1785)
-0x000055cbe1495bfe execlist()+0x52e (exec.c:1444)
-0x000055cbe14964ce execode()+0xae (exec.c:1221)
-0x000055cbe14b5532 loop()+0x792 (init.c:212)
-0x000055cbe14bd0e6 zsh_main()+0x5a6 (init.c:1794)
-0x000055cbe1469d0d main()+0xd (main.c:93)
-0x00007f7a7e2435b5 __libc_start_call_main(main=0x55cbe1469d00, argc=1, argv=0x7ffe03a49cf8)+0x75 (libc_start_call_main.h:58)
-0x00007f7a7e243668 __libc_start_main@@GLIBC_2.34(main=0x55cbe1469d00, argc=1, argv=0x7ffe03a49cf8, stack_end=0x7ffe03a49ce8)+0x88 (libc-start.c:360)
-0x000055cbe1469d35 _start()+0x25 (main.c:93)
+$ pstack -v 27888/27981
+27981:	/usr/lib64/firefox/firefox
+0x00007fa051e879a2 __syscall_cancel_arch+0x32 (syscall_cancel.S:56)
+0x00007fa051e7bc3c __internal_syscall_cancel+0x5c (cancellation.c:49)
+0x00007fa051e7c2ac __futex_abstimed_wait_common+0x7c (futex-internal.c:57)
+0x00007fa051e7e97e pthread_cond_wait@@GLIBC_2.3.2+0x14e (pthread_cond_wait.c:421)
+0x000055894a58616b mozilla::detail::ConditionVariableImpl::wait+0x1b (ConditionVariable_posix.cpp:104)
+0x00007fa03b98067a mozilla::ThreadEventQueue::GetEvent+0xea (CondVar.h:58)
+0x00007fa03b995d5d nsThread::ProcessNextEvent+0x18d (nsThread.cpp:1125)
+0x00007fa03b9964a1 NS_ProcessNextEvent+0x41 (nsThreadUtils.cpp:461)
+0x00007fa03c1cb39b mozilla::ipc::MessagePumpForNonMainThreads::Run+0xcb (MessagePump.cpp:329)
+0x00007fa03c179b94 MessageLoop::RunInternal+0x54 (message_loop.cc:368)
+0x00007fa03c179b94 MessageLoop::RunHandler [inlined] (message_loop.cc:361)
+0x00007fa03c179b94 MessageLoop::Run [inlined] (message_loop.cc:343)
+0x00007fa03b99cfd6 nsThread::ThreadFunc+0xd6 (nsThread.cpp:373)
+0x00007fa0522fee63 _pt_root+0x103
+0x000055894a5558ec set_alt_signal_stack_and_start+0xec (pthread_create_interposer.cpp:81)
+0x00007fa051e7f464 start_thread+0x2e4 (pthread_create.c:448)
+0x00007fa051f025ec __clone3+0x2c (clone3.S:78)
 ```
 
 `pfiles(1)` shows you every file descriptor a process has open (similar to
@@ -131,19 +133,23 @@ process or user:
 
 ```text
 $ ptree 1
-1  /usr/lib/systemd/systemd --switched-root --system --deserialize=47
-  1333  /usr/lib/systemd/systemd-journald
-  1370  /usr/lib/systemd/systemd-udevd
-  3620  /usr/lib/systemd/systemd --user
-    6184  /usr/bin/qterminal
-      45909  /bin/zsh
+1  /usr/lib/systemd/systemd --switched-root --system --deserialize=48
+  1427  /usr/lib/systemd/systemd-journald
+  1451  /usr/lib/systemd/systemd-userdbd
+    32574  systemd-userwork: waiting...
+    32873  systemd-userwork: waiting...
+    34264  systemd-userwork: waiting...
+  1465  /usr/lib/systemd/systemd-udevd
+  2439  /usr/lib/systemd/systemd-oomd
+  2440  /usr/lib/systemd/systemd-resolved
+  2441  /usr/bin/auditd
 ```
 
 `pargs(1)` prints the arguments a process was started with:
 
 ```text
 $ pargs $(pgrep Xwayland)
-3866: Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
+3978:	Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
 argv[0]: Xwayland
 argv[1]: :0
 argv[2]: -rootless
@@ -162,7 +168,7 @@ argv[11]: 95
 
 ```text
 $ penv $(pgrep Xwayland)
-3866: Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
+3978:	Xwayland :0 -rootless -core -listenfd 55 -listenfd 56 -displayfd 98 -wm 95
 envp[0]: SHELL=/bin/zsh
 envp[1]: GTK_IM_MODULE=wayland
 envp[2]: XDG_BACKEND=wayland
@@ -174,27 +180,27 @@ envp[4]: XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session1
 
 ```text
 $ pauxv $(pgrep sshd)
-2785: sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
-AT_SYSINFO_EHDR 0x00007fa1fe8b7000
+2887:	sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+AT_SYSINFO_EHDR 0x00007fca98be9000
 AT_MINSIGSTKSZ  0x0000000000000d30
 AT_HWCAP        0x00000000178bfbff FPU | VME | DE | PSE | TSC | MSR | PAE | MCE | CX8 | APIC | SEP | MTRR | PGE | MCA | CMOV | PAT | PSE36 | CLFSH | MMX | FXSR | SSE | SSE2 | HTT
 AT_PAGESZ       0x0000000000001000
 AT_CLKTCK       0x0000000000000064
-AT_PHDR         0x000056161562a040
+AT_PHDR         0x00005626e0d9a040
 AT_PHENT        0x0000000000000038
 AT_PHNUM        0x000000000000000d
-AT_BASE         0x00007fa1fe8b9000
+AT_BASE         0x00007fca98beb000
 AT_FLAGS        0x0000000000000000
-AT_ENTRY        0x000056161562fc90
+AT_ENTRY        0x00005626e0d9fc90
 AT_UID          0x0000000000000000 0(root)
 AT_EUID         0x0000000000000000 0(root)
 AT_GID          0x0000000000000000 0(root)
 AT_EGID         0x0000000000000000 0(root)
 AT_SECURE       0x0000000000000000
-AT_RANDOM       0x00007fff1cf31ff9
+AT_RANDOM       0x00007ffd97c8b079
 AT_HWCAP2       0x0000000000000002 FSGSBASE
-AT_EXECFN       0x00007fff1cf32fe9 /usr/sbin/sshd
-AT_PLATFORM     0x00007fff1cf32009 x86_64
+AT_EXECFN       0x00007ffd97c8cfe9 /usr/bin/sshd
+AT_PLATFORM     0x00007ffd97c8b089
 AT_RSEQ_FEATURE_SIZE 0x000000000000001c
 AT_RSEQ_ALIGN   0x0000000000000020
 ```
@@ -203,9 +209,9 @@ AT_RSEQ_ALIGN   0x0000000000000020
 
 ```text
 $ psig 1
-1: /usr/lib/systemd/systemd --switched-root --system --deserialize=47
-HUP       default blocked
-INT       default blocked
+1:	/usr/lib/systemd/systemd --switched-root --system --deserialize=48
+HUP       blocked,default
+INT       blocked,default
 QUIT      caught
 ILL       caught
 TRAP      default
@@ -213,12 +219,30 @@ ABRT      caught
 BUS       caught
 FPE       caught
 KILL      default
-USR1      default blocked
+USR1      blocked,default
 SEGV      caught
-USR2      default blocked
+USR2      blocked,default
 PIPE      ignored
 ALRM      default
-TERM      default blocked
+TERM      blocked,default
+STKFLT    default
+CLD       blocked,default
+CONT      default
+STOP      default
+TSTP      default
+TTIN      default
+TTOU      default
+URG       default
+XCPU      default
+XFSZ      default
+VTALRM    default
+PROF      default
+WINCH     blocked,default
+POLL      default
+PWR       blocked,default
+SYS       default
+SIG32     default
+SIG33     default
 ```
 
 ## Core Dump Support

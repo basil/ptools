@@ -581,8 +581,13 @@ $ plgrp -a 0-2 101398
                           disk, since pstack(1) reads symbols from the on-disk ELF image. \
                           This commonly occurs when a binary or library is reinstalled while \
                           a process still uses the older version.",
-            synopsis: "[-mv] [-n count] [pid[/tid] | core]...",
+            synopsis: "[-amv] [-n count] [pid[/tid] | core]...",
             options: &[
+                (
+                    "-a, --args",
+                    "Show values of arguments passed to functions. \
+                     Requires DWARF debug information.",
+                ),
                 ("-m, --module", "Show module file paths."),
                 (
                     "-n count",
@@ -591,7 +596,7 @@ $ plgrp -a 0-2 101398
                 ),
                 (
                     "-v, --verbose",
-                    "Show source locations, inline frames, and function arguments. \
+                    "Show source locations and inline frames. \
                      By default, only demangled symbol names are shown.",
                 ),
             ],
@@ -617,11 +622,12 @@ $ plgrp -a 0-2 101398
                        even briefly, can cause severe bottlenecks or hangs, making the process \
                        unavailable to users. Some applications, such as database servers, may \
                        terminate abnormally. Use caution when tracing production processes.\n\n\
-                       When the -v (verbose) option is used, DWARF debug information is used \
-                       to find source code information (file and line number), values of \
-                       arguments passed to functions, and inlined function frames. If DWARF \
-                       debug information is not installed, this information may not be available. \
-                       This option may slow down stack tracing.",
+                       The -v (verbose) option uses DWARF debug information to show source code \
+                       locations (file and line number) and inlined function frames. The -a \
+                       (args) option additionally reads function argument values, which requires \
+                       ptrace access to process registers and memory. If DWARF debug information \
+                       is not installed, this information may not be available. These options may \
+                       slow down stack tracing.",
         },
         out_dir,
     );
