@@ -108,6 +108,7 @@ version = "0.2.14"
 dependencies = [
  "foreign-types",
  "lexopt",
+ "libc",
  "nix",
  "pkg-config",
  "roff",
