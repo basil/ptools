@@ -315,16 +315,16 @@ fn add_threads(threads: &mut BTreeSet<TracedThread>, pid: u32, ptrace_attach: bo
     each_thread(pid, |tid| {
         if !threads.contains(&tid) {
             let thread = if ptrace_attach {
-                TracedThread::attach(pid)
+                TracedThread::attach(tid)
             } else {
-                TracedThread::traced(pid)
+                TracedThread::traced(tid)
             };
             let thread = match thread {
                 Ok(thread) => thread,
                 // ESRCH just means the thread died in the middle of things, which is fine
                 Err(e) => {
                     if e.raw_os_error() == Some(ESRCH) {
-                        eprintln!("error attaching to thread {}: {}", pid, e);
+                        eprintln!("error attaching to thread {}: {}", tid, e);
                         return Ok(());
                     } else {
                         return Err(Error(ErrorInner::Io(e)));
