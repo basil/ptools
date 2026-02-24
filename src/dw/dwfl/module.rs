@@ -16,6 +16,7 @@
 
 use foreign_types::{ForeignTypeRef, Opaque};
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 
@@ -63,10 +64,11 @@ impl ModuleRef {
                 Err(Error::new())
             } else {
                 Ok(AddrInfo {
-                    name: CStr::from_ptr(ptr),
+                    name: ptr,
                     offset,
                     sym: Symbol(sym),
                     bias,
+                    _module: PhantomData,
                 })
             }
         }
@@ -75,16 +77,19 @@ impl ModuleRef {
 
 /// Information about a symbol.
 pub struct AddrInfo<'a> {
-    name: &'a CStr,
+    name: *const libc::c_char,
     offset: u64,
     sym: Symbol,
     bias: u64,
+    _module: PhantomData<&'a ModuleRef>,
 }
 
 impl<'a> AddrInfo<'a> {
     /// Returns the name of the symbol.
     pub fn name(&self) -> &'a CStr {
-        self.name
+        // SAFETY: The pointer comes from dwfl_module_addrinfo and remains valid
+        // for the lifetime of the module, which outlives 'a.
+        unsafe { CStr::from_ptr(self.name) }
     }
 
     /// Returns the offset of the address from the base of the symbol.
