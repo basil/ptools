@@ -87,17 +87,17 @@ fn print_stack(
     handle: Option<&ProcHandle>,
     tid_filter: Option<u64>,
     core_path: Option<&Path>,
-    quiet: bool,
+    debug: bool,
 ) -> Result<(), ptools::stack::Error> {
     let mut opts = ptools::stack::TraceOptions::new();
     let opts = opts
         .thread_names(true)
         .symbols(true)
-        .demangle(!quiet)
-        .module(!quiet)
-        .source(!quiet)
-        .inlines(!quiet)
-        .args(!quiet);
+        .demangle(true)
+        .module(true)
+        .source(debug)
+        .inlines(debug)
+        .args(debug);
 
     if let Some(path) = core_path {
         opts.trace_core_each(
@@ -126,16 +126,16 @@ fn print_stack(
 }
 
 struct Args {
-    quiet: bool,
+    debug: bool,
     operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [-q] [pid[/thread] | core]...");
+    eprintln!("Usage: pstack [-d] [pid[/thread] | core]...");
     eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -q, --quiet      Suppress demangling, module, source, and argument info");
+    eprintln!("  -d, --debug      Show source locations, inline frames, and arguments");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
@@ -144,7 +144,7 @@ fn parse_args() -> Args {
     use lexopt::prelude::*;
 
     let mut args = Args {
-        quiet: false,
+        debug: false,
         operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
@@ -154,8 +154,8 @@ fn parse_args() -> Args {
         exit(2);
     }) {
         match arg {
-            Short('q') | Long("quiet") => {
-                args.quiet = true;
+            Short('d') | Long("debug") => {
+                args.debug = true;
             }
             Short('h') | Long("help") => {
                 print_usage();
@@ -204,7 +204,7 @@ fn main() {
                 } else {
                     None
                 };
-                if let Err(e) = print_stack(Some(&handle), tid, core_path, args.quiet) {
+                if let Err(e) = print_stack(Some(&handle), tid, core_path, args.debug) {
                     eprintln!("pstack: {}: {e}", handle.pid());
                     error = true;
                 }
@@ -217,7 +217,7 @@ fn main() {
                 // (no systemd-coredump metadata available).
                 let path = Path::new(operand.as_str());
                 if !operand.bytes().all(|b| b.is_ascii_digit()) && path.exists() {
-                    if let Err(e) = print_stack(None, None, Some(path), args.quiet) {
+                    if let Err(e) = print_stack(None, None, Some(path), args.debug) {
                         eprintln!("pstack: {}: {e}", path.display());
                         error = true;
                     }
