@@ -19,14 +19,20 @@ use std::borrow::Cow;
 use std::error;
 use std::ffi::CStr;
 use std::fmt;
+use std::io;
 
 /// A error returned by DWFL APIs.
-pub struct Error(c_int);
+pub struct Error {
+    code: c_int,
+    /// Fallback OS error captured at the point of failure, used when
+    /// `dwfl_errmsg` cannot provide a message.
+    os_error: Option<io::Error>,
+}
 
 impl fmt::Debug for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Error")
-            .field("code", &self.0)
+            .field("code", &self.code)
             .field("message", &self.as_str())
             .finish()
     }
@@ -42,13 +48,22 @@ impl error::Error for Error {}
 
 impl Error {
     pub(crate) fn new() -> Error {
-        unsafe { Error(crate::dw_sys::dwfl_errno()) }
+        // Capture errno before dwfl_errno() which may clear it.
+        let saved = io::Error::last_os_error();
+        let code = unsafe { crate::dw_sys::dwfl_errno() };
+        Error {
+            code,
+            os_error: saved.raw_os_error().filter(|&e| e != 0).map(|_| saved),
+        }
     }
 
     fn as_str(&self) -> Cow<'_, str> {
         unsafe {
-            let s = crate::dw_sys::dwfl_errmsg(self.0);
+            let s = crate::dw_sys::dwfl_errmsg(self.code);
             if s.is_null() {
+                if let Some(ref os_error) = self.os_error {
+                    return format!("{}", os_error).into();
+                }
                 "unknown error".into()
             } else {
                 CStr::from_ptr(s).to_string_lossy()
