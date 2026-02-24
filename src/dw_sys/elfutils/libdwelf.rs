@@ -14,7 +14,7 @@
 //   limitations under the License.
 //
 
-use libc::{c_char, c_void, size_t, ssize_t};
+use libc::{c_char, c_int, c_void, size_t, ssize_t};
 
 use super::super::*;
 
@@ -48,5 +48,11 @@ extern "C" {
 
     pub fn dwelf_strent_str(se: *mut Dwelf_Strent) -> *const c_char;
 
+    pub fn dwelf_strent_off(se: *mut Dwelf_Strent) -> size_t;
+
     pub fn dwelf_strtab_free(st: *mut Dwelf_Strtab);
+
+    pub fn dwelf_elf_begin(fd: c_int) -> *mut Elf;
+
+    pub fn dwelf_elf_e_machine_string(machine: c_int) -> *const c_char;
 }

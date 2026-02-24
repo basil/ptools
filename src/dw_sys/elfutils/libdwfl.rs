@@ -23,6 +23,7 @@ pub enum Dwfl_Module {}
 pub enum Dwfl_Thread {}
 pub enum Dwfl_Frame {}
 pub enum Dwfl_Line {}
+pub enum debuginfod_client {}
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -139,6 +140,14 @@ extern "C" {
         name: *const c_char,
         file_name: *const c_char,
         fd: c_int,
+    ) -> *mut Dwfl_Module;
+
+    pub fn dwfl_report_offline_memory(
+        dwfl: *mut Dwfl,
+        name: *const c_char,
+        file_name: *const c_char,
+        data: *mut c_char,
+        size: size_t,
     ) -> *mut Dwfl_Module;
 
     pub fn dwfl_report_end(
@@ -284,6 +293,17 @@ extern "C" {
         _: *mut *mut Elf,
     ) -> c_int;
 
+    pub fn dwfl_offline_section_address(
+        _: *mut Dwfl_Module,
+        _: *mut *mut c_void,
+        _: *const c_char,
+        _: Dwarf_Addr,
+        _: *const c_char,
+        _: GElf_Word,
+        _: *const GElf_Shdr,
+        addr: *mut Dwarf_Addr,
+    ) -> c_int;
+
     pub fn dwfl_module_relocations(mod_: *mut Dwfl_Module) -> c_int;
 
     pub fn dwfl_module_relocate_address(mod_: *mut Dwfl_Module, address: *mut Dwarf_Addr) -> c_int;
@@ -293,6 +313,12 @@ extern "C" {
         idx: c_uint,
         shndxp: *mut GElf_Word,
     ) -> *const c_char;
+
+    pub fn dwfl_validate_address(
+        dwfl: *mut Dwfl,
+        address: Dwarf_Addr,
+        offset: Dwarf_Sword,
+    ) -> c_int;
 
     pub fn dwfl_module_getelf(_: *mut Dwfl_Module, bias: *mut GElf_Addr) -> *mut Elf;
 
@@ -387,6 +413,8 @@ extern "C" {
     pub fn dwfl_cumodule(cudie: *mut Dwarf_Die) -> *mut Dwfl_Module;
 
     pub fn dwfl_getsrclines(cudie: *mut Dwarf_Die, nlines: *mut size_t) -> c_int;
+
+    pub fn dwfl_onesrcline(cudie: *mut Dwarf_Die, idx: size_t) -> *mut Dwfl_Line;
 
     pub fn dwfl_module_getsrc(mod_: *mut Dwfl_Module, addr: Dwarf_Addr) -> *mut Dwfl_Line;
 
@@ -501,4 +529,8 @@ extern "C" {
         pc: *mut Dwarf_Addr,
         isactivation: *mut bool,
     ) -> bool;
+
+    pub fn dwfl_frame_reg(state: *mut Dwfl_Frame, regno: c_uint, val: *mut Dwarf_Word) -> c_int;
+
+    pub fn dwfl_get_debuginfod_client(dwfl: *mut Dwfl) -> *mut debuginfod_client;
 }
