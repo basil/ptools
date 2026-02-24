@@ -127,20 +127,21 @@ fn print_stack(
             },
             |thread| print_thread(&thread, tid_filter, args.max_frames, true, &first_thread),
         )?;
+    } else if let Some(tid) = tid_filter {
+        // Single thread requested: print only that thread's TID in the header.
+        print!("{}:\t", tid);
+        ptools::print_cmd_summary_from(handle);
+        opts.trace_each(handle, |thread| {
+            print_thread(&thread, Some(tid), args.max_frames, false, &first_thread);
+        })?;
     } else {
-        let multithread = tid_filter.is_none() && handle.thread_count().is_ok_and(|n| n > 1);
+        let multithread = handle.thread_count().is_ok_and(|n| n > 1);
         ptools::print_proc_summary_from(handle);
         if multithread {
             println!();
         }
         opts.trace_each(handle, |thread| {
-            print_thread(
-                &thread,
-                tid_filter,
-                args.max_frames,
-                multithread,
-                &first_thread,
-            );
+            print_thread(&thread, None, args.max_frames, multithread, &first_thread);
         })?;
     }
 
