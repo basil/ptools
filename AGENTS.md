@@ -61,6 +61,9 @@ src/
     mod.rs            ProcSource trait
     live.rs           Live process backend (reads /proc)
     coredump.rs       Coredump backend (reads systemd journal + ELF notes)
+  stack/              Stack unwinding layer
+    mod.rs            TraceOptions, Process, Thread, Frame types
+    dw.rs             DWARF-based unwinding via elfutils libdw/libdwfl
   display.rs          Shared formatting helpers
 examples/             Example programs used as test targets
 tests/                Integration tests
@@ -70,9 +73,9 @@ build.rs              Man page generation (roff)
 
 ## Conventions & Patterns
 
-### Three-layer architecture
+### Layered architecture
 
-The codebase is organized into three layers with strict dependency rules:
+The codebase is organized into four layers with strict dependency rules:
 
 1. **Source layer** (`src/source/`): Abstracts where process data comes from.
    The `ProcSource` trait provides a uniform interface; `LiveProcess` reads
@@ -84,11 +87,18 @@ The codebase is organized into three layers with strict dependency rules:
    layer into typed Rust structures. The central type is `ProcHandle`, an
    opaque handle through which all process queries flow. This layer must never
    write to stdout/stderr; non-fatal diagnostics are accumulated in a warnings
-   vector. Types here should not implement `Display` (except `Error`).
-   Never format output in this layer -- it provides structured data only.
-   All output formatting belongs in the presentation/display layer.
+   vector via `ProcHandle::push_warning()`. Types here should not implement
+   `Display` (except `Error`). Never format output in this layer -- it
+   provides structured data only. All output formatting belongs in the
+   presentation/display layer.
 
-3. **Presentation/display layer** (`src/display.rs` and `src/bin/*.rs`):
+3. **Stack layer** (`src/stack/`): Unwinds thread stacks for remote
+   processes and core dumps. Like the process handle layer, this layer must
+   never write to stdout/stderr or implement `Display` (except `Error`).
+   Non-fatal diagnostics (attachment failures, tracing errors) are pushed to
+   `ProcHandle::push_warning()` and drained by the presentation layer.
+
+4. **Presentation/display layer** (`src/display.rs` and `src/bin/*.rs`):
    Formats structured data from the proc-handle layer for terminal output.
    Shared formatting lives in `display.rs`; tool-specific formatting lives in
    each binary. This layer must never consume the source layer directly.

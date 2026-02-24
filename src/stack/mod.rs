@@ -465,6 +465,7 @@ impl TraceOptions {
             },
             &read_mem,
             &mut each,
+            handle,
         );
         Ok(())
     }
@@ -490,17 +491,17 @@ impl TraceOptions {
             let thread = match thread {
                 Ok(thread) => thread,
                 Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
-                    eprintln!("error attaching to thread {}: {}", tid, e);
+                    handle.push_warning(format!("error attaching to thread {}: {}", tid, e));
                     return Ok(());
                 }
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
-            each(thread.info(pid, state, self, &read_mem));
+            each(thread.info(pid, state, self, &read_mem, handle));
             return Ok(());
         }
 
-        for t in snapshot_threads(pid, self.ptrace_attach)?.iter() {
-            each(t.info(pid, state, self, &read_mem));
+        for t in snapshot_threads(pid, self.ptrace_attach, handle)?.iter() {
+            each(t.info(pid, state, self, &read_mem, handle));
         }
         Ok(())
     }
@@ -526,12 +527,12 @@ impl TraceOptions {
             let thread = match thread {
                 Ok(thread) => thread,
                 Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
-                    eprintln!("error attaching to thread {}: {}", tid, e);
+                    handle.push_warning(format!("error attaching to thread {}: {}", tid, e));
                     return Ok(());
                 }
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
-            each(thread.info(pid, state, self, &read_mem));
+            each(thread.info(pid, state, self, &read_mem, handle));
             return Ok(());
         }
 
@@ -544,26 +545,30 @@ impl TraceOptions {
             let thread = match thread {
                 Ok(thread) => thread,
                 Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
-                    eprintln!("error attaching to thread {}: {}", tid, e);
+                    handle.push_warning(format!("error attaching to thread {}: {}", tid, e));
                     return Ok(());
                 }
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
 
-            each(thread.info(pid, state, self, &read_mem));
+            each(thread.info(pid, state, self, &read_mem, handle));
             Ok(())
         })
     }
 }
 
-fn snapshot_threads(pid: u32, ptrace_attach: bool) -> Result<BTreeSet<TracedThread>> {
+fn snapshot_threads(
+    pid: u32,
+    ptrace_attach: bool,
+    handle: &crate::ProcHandle,
+) -> Result<BTreeSet<TracedThread>> {
     let mut threads = BTreeSet::new();
 
     // new threads may be created while we're in the process of stopping them all, so loop a couple
     // of times to hopefully converge
     for _ in 0..5 {
         let prev = threads.len();
-        add_threads(&mut threads, pid, ptrace_attach)?;
+        add_threads(&mut threads, pid, ptrace_attach, handle)?;
         if prev == threads.len() {
             break;
         }
@@ -572,7 +577,12 @@ fn snapshot_threads(pid: u32, ptrace_attach: bool) -> Result<BTreeSet<TracedThre
     Ok(threads)
 }
 
-fn add_threads(threads: &mut BTreeSet<TracedThread>, pid: u32, ptrace_attach: bool) -> Result<()> {
+fn add_threads(
+    threads: &mut BTreeSet<TracedThread>,
+    pid: u32,
+    ptrace_attach: bool,
+    handle: &crate::ProcHandle,
+) -> Result<()> {
     each_thread(pid, |tid| {
         if !threads.contains(&tid) {
             let thread = if ptrace_attach {
@@ -585,7 +595,7 @@ fn add_threads(threads: &mut BTreeSet<TracedThread>, pid: u32, ptrace_attach: bo
                 // ESRCH just means the thread died in the middle of things, which is fine
                 Err(e) => {
                     if e.raw_os_error() == Some(ESRCH) {
-                        eprintln!("error attaching to thread {}: {}", tid, e);
+                        handle.push_warning(format!("error attaching to thread {}: {}", tid, e));
                         return Ok(());
                     } else {
                         return Err(Error(ErrorInner::Io(e)));
@@ -789,14 +799,15 @@ impl TracedThread {
         state: &mut imp::State,
         options: &TraceOptions,
         read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
+        handle: &crate::ProcHandle,
     ) -> Thread {
         let name = if options.thread_names {
-            self.name(pid)
+            self.name(pid, handle)
         } else {
             None
         };
 
-        let frames = self.dump(state, options, read_mem);
+        let frames = self.dump(state, options, read_mem, handle);
 
         Thread {
             id: self.id,
@@ -810,23 +821,24 @@ impl TracedThread {
         state: &mut imp::State,
         options: &TraceOptions,
         read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
+        handle: &crate::ProcHandle,
     ) -> Vec<Frame> {
         let mut frames = vec![];
 
         if let Err(e) = self.dump_inner(state, options, read_mem, &mut frames) {
-            eprintln!("error tracing thread {}: {}", self.id, e);
+            handle.push_warning(format!("error tracing thread {}: {}", self.id, e));
         }
 
         frames
     }
 
-    fn name(&self, pid: u32) -> Option<String> {
+    fn name(&self, pid: u32, handle: &crate::ProcHandle) -> Option<String> {
         let path = format!("/proc/{}/task/{}/comm", pid, self.id);
         let mut name = vec![];
         match File::open(path).and_then(|mut f| f.read_to_end(&mut name)) {
             Ok(_) => Some(String::from_utf8_lossy(&name).trim().to_string()),
             Err(e) => {
-                eprintln!("error getting name for thread {}: {}", self.id, e);
+                handle.push_warning(format!("error getting name for thread {}: {}", self.id, e));
                 None
             }
         }

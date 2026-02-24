@@ -120,6 +120,11 @@ impl ProcHandle {
         std::mem::take(&mut *self.warnings.borrow_mut())
     }
 
+    /// Append a warning to the handle's warning list.
+    pub(crate) fn push_warning(&self, msg: String) {
+        self.warnings.borrow_mut().push(msg);
+    }
+
     /// Whether the handle was opened from a coredump (as opposed to a live
     /// process).
     pub fn is_core(&self) -> bool {

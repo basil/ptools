@@ -878,6 +878,7 @@ impl State {
         thread_name: &dyn Fn(u32) -> Option<String>,
         read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
         each: &mut dyn FnMut(super::Thread),
+        handle: &crate::ProcHandle,
     ) {
         let result = self.dwfl.threads(|thread_ref| {
             let tid = thread_ref.tid();
@@ -905,7 +906,7 @@ impl State {
                 Ok(())
             });
             if let Err(e) = frame_result {
-                eprintln!("error tracing thread {}: {}", tid, e);
+                handle.push_warning(format!("error tracing thread {}: {}", tid, e));
             }
             let name = if options.thread_names {
                 thread_name(tid)
@@ -920,7 +921,7 @@ impl State {
             Ok(())
         });
         if let Err(e) = result {
-            eprintln!("error enumerating threads: {}", e);
+            handle.push_warning(format!("error enumerating threads: {}", e));
         }
     }
 }
