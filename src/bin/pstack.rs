@@ -17,26 +17,39 @@
 use std::path::Path;
 use std::process::exit;
 
+use ptools::stack::SourceLocation;
 use ptools::ProcHandle;
+
+fn format_source(src: &SourceLocation) -> String {
+    let basename = Path::new(src.file())
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_else(|| src.file().into());
+    if src.line() > 0 {
+        format!("{basename}:{}", src.line())
+    } else {
+        basename.into_owned()
+    }
+}
 
 fn print_stack(
     handle: Option<&ProcHandle>,
     tid_filter: Option<u64>,
-    raw: bool,
     core_path: Option<&Path>,
+    quiet: bool,
 ) -> Result<(), ptools::stack::Error> {
+    let mut opts = ptools::stack::TraceOptions::new();
+    let opts = opts
+        .thread_names(true)
+        .symbols(true)
+        .demangle(!quiet)
+        .module(!quiet)
+        .source(!quiet)
+        .inlines(!quiet);
     let process = if let Some(path) = core_path {
-        ptools::stack::TraceOptions::new()
-            .thread_names(true)
-            .symbols(true)
-            .demangle(!raw)
-            .trace_core(path, handle)?
+        opts.trace_core(path, handle)?
     } else {
-        ptools::stack::TraceOptions::new()
-            .thread_names(true)
-            .symbols(true)
-            .demangle(!raw)
-            .trace(handle.unwrap().pid() as u32)?
+        opts.trace(handle.unwrap().pid() as u32)?
     };
 
     if let Some(h) = handle {
@@ -53,17 +66,33 @@ fn print_stack(
         }
         println!("{}: {}", thread.id(), thread.name().unwrap_or("<unknown>"));
         for frame in thread.frames() {
-            match frame.symbol() {
-                Some(symbol) => {
-                    println!(
-                        "{:#016x} {}+{:#x}",
-                        frame.ip(),
-                        symbol.name(),
-                        symbol.offset()
-                    );
+            if frame.is_inline() {
+                match frame.symbol() {
+                    Some(symbol) => {
+                        print!("{:#016x} {} [inlined]", frame.ip(), symbol.name());
+                    }
+                    None => print!("{:#016x} - ??? [inlined]", frame.ip()),
                 }
-                None => println!("{:#016x} - ???", frame.ip()),
+            } else {
+                match frame.symbol() {
+                    Some(symbol) => {
+                        print!(
+                            "{:#016x} {}+{:#x}",
+                            frame.ip(),
+                            symbol.name(),
+                            symbol.offset()
+                        );
+                    }
+                    None => print!("{:#016x} - ???", frame.ip()),
+                }
             }
+            if let Some(module) = frame.module() {
+                print!(" in {module}");
+            }
+            if let Some(src) = frame.source() {
+                print!(" at {}", format_source(src));
+            }
+            println!();
         }
         println!();
     }
@@ -72,16 +101,16 @@ fn print_stack(
 }
 
 struct Args {
-    raw: bool,
+    quiet: bool,
     operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [-r] [pid[/thread] | core]...");
+    eprintln!("Usage: pstack [-q] [pid[/thread] | core]...");
     eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -r, --raw        Show raw function symbol names; do not demangle");
+    eprintln!("  -q, --quiet      Suppress demangling, module, and source info");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
@@ -90,7 +119,7 @@ fn parse_args() -> Args {
     use lexopt::prelude::*;
 
     let mut args = Args {
-        raw: false,
+        quiet: false,
         operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
@@ -100,6 +129,9 @@ fn parse_args() -> Args {
         exit(2);
     }) {
         match arg {
+            Short('q') | Long("quiet") => {
+                args.quiet = true;
+            }
             Short('h') | Long("help") => {
                 print_usage();
                 exit(0);
@@ -107,9 +139,6 @@ fn parse_args() -> Args {
             Short('V') | Long("version") => {
                 println!("pstack {}", env!("CARGO_PKG_VERSION"));
                 exit(0);
-            }
-            Short('r') | Long("raw") => {
-                args.raw = true;
             }
             Value(val) => {
                 args.operands.push(val.to_string_lossy().into_owned());
@@ -150,7 +179,7 @@ fn main() {
                 } else {
                     None
                 };
-                if let Err(e) = print_stack(Some(&handle), tid, args.raw, core_path) {
+                if let Err(e) = print_stack(Some(&handle), tid, core_path, args.quiet) {
                     eprintln!("pstack: {}: {e}", handle.pid());
                     error = true;
                 }
@@ -163,7 +192,7 @@ fn main() {
                 // (no systemd-coredump metadata available).
                 let path = Path::new(operand.as_str());
                 if !operand.bytes().all(|b| b.is_ascii_digit()) && path.exists() {
-                    if let Err(e) = print_stack(None, None, args.raw, Some(path)) {
+                    if let Err(e) = print_stack(None, None, Some(path), args.quiet) {
                         eprintln!("pstack: {}: {e}", path.display());
                         error = true;
                     }

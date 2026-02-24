@@ -117,7 +117,10 @@ impl Thread {
 pub struct Frame {
     ip: u64,
     is_signal: bool,
+    is_inline: bool,
     symbol: Option<Symbol>,
+    module: Option<String>,
+    source: Option<SourceLocation>,
 }
 
 impl Frame {
@@ -133,10 +136,49 @@ impl Frame {
         self.is_signal
     }
 
+    /// Determines if the frame represents an inlined function call.
+    #[inline]
+    pub fn is_inline(&self) -> bool {
+        self.is_inline
+    }
+
     /// Returns information about the symbol corresponding to this frame's instruction pointer, if known.
     #[inline]
     pub fn symbol(&self) -> Option<&Symbol> {
         self.symbol.as_ref()
+    }
+
+    /// Returns the module (shared library) containing this frame, if available.
+    #[inline]
+    pub fn module(&self) -> Option<&str> {
+        self.module.as_deref()
+    }
+
+    /// Returns the source file and line number for this frame, if available.
+    #[inline]
+    pub fn source(&self) -> Option<&SourceLocation> {
+        self.source.as_ref()
+    }
+}
+
+/// Source file and line number for a stack frame.
+#[derive(Debug, Clone)]
+pub struct SourceLocation {
+    file: String,
+    line: i32,
+}
+
+impl SourceLocation {
+    /// Returns the source file path.
+    #[inline]
+    pub fn file(&self) -> &str {
+        &self.file
+    }
+
+    /// Returns the line number.
+    #[inline]
+    pub fn line(&self) -> i32 {
+        self.line
     }
 }
 
@@ -191,6 +233,9 @@ pub struct TraceOptions {
     thread_names: bool,
     symbols: bool,
     demangle: bool,
+    module: bool,
+    source: bool,
+    inlines: bool,
     ptrace_attach: bool,
 }
 
@@ -201,6 +246,9 @@ impl Default for TraceOptions {
             thread_names: false,
             symbols: false,
             demangle: false,
+            module: false,
+            source: false,
+            inlines: false,
             ptrace_attach: true,
         }
     }
@@ -244,6 +292,31 @@ impl TraceOptions {
     /// Only effective when `symbols` is also enabled. Defaults to `false`.
     pub fn demangle(&mut self, demangle: bool) -> &mut TraceOptions {
         self.demangle = demangle;
+        self
+    }
+
+    /// If set, the module (shared library) file path will be recorded for each frame.
+    ///
+    /// Defaults to `false`.
+    pub fn module(&mut self, module: bool) -> &mut TraceOptions {
+        self.module = module;
+        self
+    }
+
+    /// If set, source file and line number information will be recorded for each frame.
+    ///
+    /// Requires debug information to be available. Defaults to `false`.
+    pub fn source(&mut self, source: bool) -> &mut TraceOptions {
+        self.source = source;
+        self
+    }
+
+    /// If set, inlined function frames will be shown using DWARF debuginfo.
+    ///
+    /// When a function is inlined at a call site, additional frames are emitted
+    /// for each level of inlining. Requires debug information. Defaults to `false`.
+    pub fn inlines(&mut self, inlines: bool) -> &mut TraceOptions {
+        self.inlines = inlines;
         self
     }
 

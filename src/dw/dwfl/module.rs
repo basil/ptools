@@ -18,6 +18,7 @@ use foreign_types::{ForeignTypeRef, Opaque};
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
+use std::os::raw::c_int;
 use std::ptr;
 
 use super::super::elf::Symbol;
@@ -31,6 +32,54 @@ unsafe impl ForeignTypeRef for ModuleRef {
 }
 
 impl ModuleRef {
+    /// Returns the module name (e.g. the shared library path).
+    pub fn name(&self) -> Option<&CStr> {
+        unsafe {
+            let name = crate::dw_sys::dwfl_module_info(
+                self.as_ptr(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            );
+            if name.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(name))
+            }
+        }
+    }
+
+    /// Returns source file and line number for an address, if available.
+    pub fn getsrc(&self, addr: u64) -> Option<SourceLine<'_>> {
+        unsafe {
+            let line = crate::dw_sys::dwfl_module_getsrc(self.as_ptr(), addr);
+            if line.is_null() {
+                return None;
+            }
+            let mut lineno: libc::c_int = 0;
+            let file = crate::dw_sys::dwfl_lineinfo(
+                line,
+                ptr::null_mut(),
+                &mut lineno,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            );
+            if file.is_null() {
+                return None;
+            }
+            Some(SourceLine {
+                file: CStr::from_ptr(file),
+                line: lineno,
+                _module: PhantomData,
+            })
+        }
+    }
+
     /// Returns the name of the containing the address.
     pub fn addr_name(&self, addr: u64) -> Result<&CStr, Error> {
         unsafe {
@@ -39,6 +88,43 @@ impl ModuleRef {
                 Err(Error::new())
             } else {
                 Ok(CStr::from_ptr(ptr))
+            }
+        }
+    }
+
+    /// Returns the CU DIE and bias for an address in this module.
+    ///
+    /// The returned `Dwarf_Die` is the compilation unit DIE that covers `addr`.
+    /// The bias is the relocation offset applied to the module.
+    pub fn addrdie(&self, addr: u64) -> Option<(crate::dw_sys::Dwarf_Die, u64)> {
+        unsafe {
+            let mut bias: crate::dw_sys::Dwarf_Addr = 0;
+            let result = crate::dw_sys::dwfl_module_addrdie(self.as_ptr(), addr, &mut bias);
+            if result.is_null() {
+                None
+            } else {
+                Some((*result, bias))
+            }
+        }
+    }
+
+    /// Returns the DWARF scopes (DIEs) containing the given PC within this
+    /// module's compilation unit DIE.
+    ///
+    /// Returns the scope array and its length on success. The caller must
+    /// free the returned pointer with `libc::free`.
+    pub fn getscopes(
+        &self,
+        cudie: &mut crate::dw_sys::Dwarf_Die,
+        pc: u64,
+    ) -> Option<(*mut crate::dw_sys::Dwarf_Die, c_int)> {
+        unsafe {
+            let mut scopes: *mut crate::dw_sys::Dwarf_Die = ptr::null_mut();
+            let n = crate::dw_sys::dwarf_getscopes(cudie, pc, &mut scopes);
+            if n <= 0 {
+                None
+            } else {
+                Some((scopes, n))
             }
         }
     }
@@ -82,6 +168,25 @@ pub struct AddrInfo<'a> {
     sym: Symbol,
     bias: u64,
     _module: PhantomData<&'a ModuleRef>,
+}
+
+/// Source file and line number for an address.
+pub struct SourceLine<'a> {
+    file: &'a CStr,
+    line: libc::c_int,
+    _module: PhantomData<&'a ModuleRef>,
+}
+
+impl<'a> SourceLine<'a> {
+    /// Returns the source file path.
+    pub fn file(&self) -> &'a CStr {
+        self.file
+    }
+
+    /// Returns the line number, or 0 if unknown.
+    pub fn line(&self) -> i32 {
+        self.line
+    }
 }
 
 impl<'a> AddrInfo<'a> {
