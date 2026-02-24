@@ -343,31 +343,55 @@ fn lookup_journal_fields(
     existing: &HashMap<String, Vec<u8>>,
 ) -> HashMap<String, Vec<u8>> {
     let empty = HashMap::new();
-
-    let journal = match Journal::open() {
-        Some(j) => j,
-        None => return empty,
-    };
-
-    // Match coredump entries by MESSAGE_ID.
     let msg_match = format!("MESSAGE_ID={}", SD_MESSAGE_COREDUMP);
-    if !journal.add_match(msg_match.as_bytes()) {
-        return empty;
-    }
 
-    // Primary match: by canonical filename.
+    // Primary match: by canonical filename.  The journal stores the path
+    // with a compression suffix, but the user may pass either the compressed
+    // or uncompressed name.  Try the canonical path first, then alternates
+    // with the compression extension stripped or appended.
+    const COMPRESSION_EXTS: &[&str] = &["zst", "lz4", "xz", "gz", "bz2"];
+
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let file_match = format!("COREDUMP_FILENAME={}", canonical.display());
-    if !journal.add_match(file_match.as_bytes()) {
-        return empty;
+
+    let mut alternates = Vec::new();
+    if canonical
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| COMPRESSION_EXTS.contains(&e))
+    {
+        // Compressed path given; also try without the compression extension.
+        alternates.push(canonical.with_extension(""));
+    } else {
+        // Uncompressed path given; also try with each compression extension.
+        let base_ext = canonical.extension().unwrap_or_default().to_string_lossy();
+        for ext in COMPRESSION_EXTS {
+            alternates.push(canonical.with_extension(format!("{base_ext}.{ext}")));
+        }
     }
 
-    if !journal.seek_tail() {
-        return empty;
-    }
+    for candidate in std::iter::once(&canonical).chain(alternates.iter()) {
+        // Re-open journal for a fresh set of matches each iteration.
+        let journal = match Journal::open() {
+            Some(j) => j,
+            None => return empty,
+        };
 
-    if journal.previous() {
-        return collect_coredump_fields(&journal);
+        if !journal.add_match(msg_match.as_bytes()) {
+            continue;
+        }
+
+        let file_match = format!("COREDUMP_FILENAME={}", candidate.display());
+        if !journal.add_match(file_match.as_bytes()) {
+            continue;
+        }
+
+        if !journal.seek_tail() {
+            continue;
+        }
+
+        if journal.previous() {
+            return collect_coredump_fields(&journal);
+        }
     }
 
     // Fallback: match on PID + timestamp from xattrs (file may have been
