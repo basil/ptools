@@ -1,0 +1,23 @@
+ptools
+Copyright 2026 Basil Crow
+
+This product is licensed under the Apache License, Version 2.0.
+
+This product dynamically links against the following third-party
+libraries at runtime. These libraries are not distributed with ptools
+and retain their own licenses:
+
+  elfutils
+    Licensed under GPLv2+ or LGPLv3+
+    https://sourceware.org/elfutils/
+
+  systemd
+    Licensed under LGPL-2.1-or-later
+    https://github.com/systemd/systemd
+
+This product contains code derived from the rstack project by Steven
+Fackler, licensed under Apache-2.0 or MIT:
+
+  rstack
+    Licensed under Apache-2.0 or MIT
+    https://github.com/sfackler/rstack
