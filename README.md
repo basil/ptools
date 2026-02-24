@@ -36,6 +36,29 @@ Releases page](https://github.com/basil/ptools/releases).
 
 ## Examples
 
+`pstack(1)` shows you thread stack traces for the processes you give it. This is
+incredibly useful as a first step for figuring out what a program is doing when
+it’s slow or not responsive.
+
+```text
+$ pstack $$
+97060:  /bin/zsh
+0x00007f46d0d31c5e __internal_syscall_cancel+0x7e
+0x00007f46d0d31c84 __syscall_cancel+0x14
+0x00007f46d0cdd525 __sigsuspend+0x25
+0x000055a071737dad zwaitjob+0x5cd
+0x000055a071737e8f waitjobs+0x2f
+0x000055a07170c682 execpline.lto_priv.0+0xba2
+0x000055a07170dbfe execlist+0x52e
+0x000055a07170e4ce execode+0xae
+0x000055a07172d532 loop+0x792
+0x000055a0717350e6 zsh_main+0x5a6
+0x000055a0716e1d0d main+0xd
+0x00007f46d0cc65b5 __libc_start_call_main+0x75
+0x00007f46d0cc6668 __libc_start_main@@GLIBC_2.34+0x88
+0x000055a0716e1d35 _start+0x25
+```
+
 `pfiles(1)` shows you every file descriptor a process has open (similar to
 `lsof`, but for a specific process). This includes details on regular files
 (including offset, which is great for checking on programs that scan through
