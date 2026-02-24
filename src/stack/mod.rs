@@ -56,7 +56,7 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self.0 {
             ErrorInner::Io(ref e) => Some(e),
             ErrorInner::Unwind(ref e) => Some(e),
