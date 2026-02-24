@@ -63,7 +63,7 @@ If DWARF debug information is installed, you can use `-v` to show source code
 locations (file and line number) and inlined function frames.
 
 ```text
-$ pstack -v 27888/27981
+$ pstack -v $(pgrep firefox)
 27981: /usr/lib64/firefox/firefox
 0x00007fa051e879a2 __syscall_cancel_arch+0x32 (syscall_cancel.S:56)
 0x00007fa051e7bc3c __internal_syscall_cancel+0x5c (cancellation.c:49)
