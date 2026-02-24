@@ -31,6 +31,10 @@ pub const DWARF_CB_ABORT: c_int = 1;
 
 pub const DW_TAG_invalid: c_int = 0;
 
+pub const LIBDW_CIE_ID: u64 = 0xffffffffffffffff;
+
+pub const DWARF_GETMACROS_START: ptrdiff_t = ptrdiff_t::MIN;
+
 pub type Dwarf_Off = GElf_Off;
 
 pub type Dwarf_Addr = GElf_Addr;
@@ -177,6 +181,27 @@ extern "C" {
         type_offsetp: *mut Dwarf_Off,
     ) -> c_int;
 
+    pub fn dwarf_get_units(
+        dwarf: *mut Dwarf,
+        cu: *mut Dwarf_CU,
+        next_cu: *mut *mut Dwarf_CU,
+        version: *mut Dwarf_Half,
+        unit_type: *mut u8,
+        cudie: *mut Dwarf_Die,
+        subdie: *mut Dwarf_Die,
+    ) -> c_int;
+
+    pub fn dwarf_cu_info(
+        cu: *mut Dwarf_CU,
+        version: *mut Dwarf_Half,
+        unit_type: *mut u8,
+        cudie: *mut Dwarf_Die,
+        subdie: *mut Dwarf_Die,
+        unit_id: *mut u64,
+        address_size: *mut u8,
+        offset_size: *mut u8,
+    ) -> c_int;
+
     pub fn dwarf_next_cfi(
         e_ident: *const c_uchar,
         data: *mut Elf_Data,
@@ -224,6 +249,12 @@ extern "C" {
         offset_sizep: *mut u8,
         type_signaturep: *mut u64,
         type_offsetp: *mut Dwarf_Off,
+    ) -> *mut Dwarf_Die;
+
+    pub fn dwarf_die_addr_die(
+        dbg: *mut Dwarf,
+        addr: *mut c_void,
+        result: *mut Dwarf_Die,
     ) -> *mut Dwarf_Die;
 
     pub fn dwarf_addrdie(
@@ -278,6 +309,8 @@ extern "C" {
     pub fn dwarf_formsdata(attr: *mut Dwarf_Attribute, return_uval: *mut Dwarf_Sword) -> c_int;
 
     pub fn dwarf_formaddr(attr: *mut Dwarf_Attribute, return_addr: *mut Dwarf_Addr) -> c_int;
+
+    pub fn dwarf_formref(attr: *mut Dwarf_Attribute, return_offset: *mut Dwarf_Off) -> c_int;
 
     pub fn dwarf_formref_die(attr: *mut Dwarf_Attribute, die_mem: *mut Dwarf_Die)
         -> *mut Dwarf_Die;
@@ -340,6 +373,15 @@ extern "C" {
         idx: size_t,
         namep: *mut c_uint,
         formp: *mut c_uint,
+        offset: *mut Dwarf_Off,
+    ) -> c_int;
+
+    pub fn dwarf_getabbrevattr_data(
+        abbrev: *mut Dwarf_Abbrev,
+        idx: size_t,
+        namep: *mut c_uint,
+        formp: *mut c_uint,
+        datap: *mut Dwarf_Sword,
         offset: *mut Dwarf_Off,
     ) -> c_int;
 
@@ -407,6 +449,10 @@ extern "C" {
         length: *mut Dwarf_Word,
     ) -> *const c_char;
 
+    pub fn dwarf_linecontext(lines: *mut Dwarf_Lines, line: *mut Dwarf_Line) -> *mut Dwarf_Line;
+
+    pub fn dwarf_linefunctionname(dbg: *mut Dwarf, line: *mut Dwarf_Line) -> *const c_char;
+
     pub fn dwarf_filesrc(
         file: *mut Dwarf_Files,
         idx: size_t,
@@ -414,10 +460,27 @@ extern "C" {
         length: *mut Dwarf_Word,
     ) -> *const c_char;
 
+    pub fn dwarf_line_file(
+        line: *mut Dwarf_Line,
+        files: *mut *mut Dwarf_Files,
+        idx: *mut size_t,
+    ) -> c_int;
+
     pub fn dwarf_getsrcdirs(
         files: *mut Dwarf_Files,
         result: *mut *const *const c_char,
         ndirs: *mut size_t,
+    ) -> c_int;
+
+    pub fn dwarf_next_lines(
+        dwarf: *mut Dwarf,
+        off: Dwarf_Off,
+        next_off: *mut Dwarf_Off,
+        cu: *mut *mut Dwarf_CU,
+        srcfiles: *mut *mut Dwarf_Files,
+        nfiles: *mut size_t,
+        srclines: *mut *mut Dwarf_Lines,
+        nlines: *mut size_t,
     ) -> c_int;
 
     pub fn dwarf_getlocation(
@@ -469,6 +532,8 @@ extern "C" {
     ) -> c_int;
 
     pub fn dwarf_aggregate_size(die: *mut Dwarf_Die, size: *mut Dwarf_Word) -> c_int;
+
+    pub fn dwarf_default_lower_bound(lang: c_int, result: *mut Dwarf_Sword) -> c_int;
 
     pub fn dwarf_getscopes(
         cudie: *mut Dwarf_Die,

@@ -48,6 +48,8 @@ c_enum! {
         ELF_T_GNUHASH = 23,
         ELF_T_AUXV = 24,
         ELF_T_CHDR = 25,
+        ELF_T_NHDR8 = 26,
+        ELF_T_RELR = 27,
     }
 }
 
@@ -184,6 +186,8 @@ extern "C" {
 
     pub fn elf_compress(scn: *mut Elf_Scn, type_: c_int, flags: c_uint) -> c_int;
 
+    pub fn elf_compress_gnu(scn: *mut Elf_Scn, compress: c_int, flags: c_uint) -> c_int;
+
     pub fn elf_flagelf(__elf: *mut Elf, __cmd: Elf_Cmd, __flags: c_uint) -> c_uint;
 
     pub fn elf_flagehdr(__elf: *mut Elf, __cmd: Elf_Cmd, __flags: c_uint) -> c_uint;
@@ -208,6 +212,8 @@ extern "C" {
         __size: size_t,
         __type: Elf_Type,
     ) -> *mut Elf_Data;
+
+    pub fn elf_strptr(__elf: *mut Elf, __index: size_t, __offset: size_t) -> *mut c_char;
 
     pub fn elf_getarhdr(__elf: *mut Elf) -> *mut Elf_Arhdr;
 
