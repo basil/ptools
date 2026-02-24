@@ -15,8 +15,13 @@
 //
 
 mod display;
+#[allow(dead_code)]
+mod dw;
+#[allow(dead_code)]
+mod dw_sys;
 mod proc;
 mod source;
+pub mod stack;
 
 // Re-export public API at crate root.
 pub use display::{

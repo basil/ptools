@@ -184,6 +184,9 @@ fn main() {
         .probe("libsystemd")
         .expect("libsystemd not found (install systemd-devel or libsystemd-dev)");
 
+    pkg_config::probe_library("libdw")
+        .expect("libdw not found (install elfutils-devel or libdw-dev)");
+
     let out_dir = Path::new("target/man");
     fs::create_dir_all(out_dir).unwrap();
 

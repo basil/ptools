@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsystemd-dev
+        run: sudo apt-get update && sudo apt-get install -y libdw-dev libsystemd-dev
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -76,7 +76,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsystemd-dev
+        run: sudo apt-get update && sudo apt-get install -y libdw-dev libsystemd-dev
 
       - name: Install cargo-deb and cargo-generate-rpm
         run: |
