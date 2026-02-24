@@ -20,7 +20,7 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::panic::{self, AssertUnwindSafe};
-use std::ptr;
+use std::ptr::{self, null};
 
 use super::{cvt, Callbacks, Error, FrameRef, ModuleRef, ThreadRef};
 
@@ -156,6 +156,25 @@ impl<'a> DwflRef<'a> {
         }
     }
 
+    /// Attaches to threads described in an ELF core file.
+    ///
+    /// # Safety
+    ///
+    /// The `elf` pointer must remain valid for the lifetime of the Dwfl session.
+    pub unsafe fn core_file_attach(&mut self, elf: *mut crate::dw_sys::Elf) -> Result<(), Error> {
+        let r = crate::dw_sys::dwfl_core_file_attach(self.as_ptr(), elf);
+        if r < 0 {
+            Err(Error::new())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Returns the PID of the attached process or core dump.
+    pub fn pid(&self) -> u32 {
+        unsafe { crate::dw_sys::dwfl_pid(self.as_ptr()) as u32 }
+    }
+
     /// Looks up the module containing the address.
     pub fn addr_module(&self, address: u64) -> Result<&ModuleRef, Error> {
         unsafe {
@@ -190,6 +209,22 @@ impl<'a, 'b> Report<'a, 'b> {
                 self.0.as_ptr(),
                 pid as pid_t,
             ))
+        }
+    }
+
+    /// Registers modules from an ELF core file.
+    ///
+    /// The `FindElf::BUILD_ID` callback should be used with this method.
+    ///
+    /// # Safety
+    ///
+    /// The `elf` pointer must remain valid for the lifetime of the Dwfl session.
+    pub unsafe fn core_file(&mut self, elf: *mut crate::dw_sys::Elf) -> Result<(), Error> {
+        let r = crate::dw_sys::dwfl_core_file_report(self.0.as_ptr(), elf, null());
+        if r < 0 {
+            Err(Error::new())
+        } else {
+            Ok(())
         }
     }
 }
