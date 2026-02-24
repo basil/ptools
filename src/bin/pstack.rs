@@ -14,22 +14,36 @@
 //   limitations under the License.
 //
 
+use std::path::Path;
 use std::process::exit;
 
 use ptools::ProcHandle;
 
 fn print_stack(
-    handle: &ProcHandle,
+    handle: Option<&ProcHandle>,
     tid_filter: Option<u64>,
     raw: bool,
+    core_path: Option<&Path>,
 ) -> Result<(), ptools::stack::Error> {
-    let process = ptools::stack::TraceOptions::new()
-        .thread_names(true)
-        .symbols(true)
-        .demangle(!raw)
-        .trace(handle.pid() as u32)?;
+    let process = if let Some(path) = core_path {
+        ptools::stack::TraceOptions::new()
+            .thread_names(true)
+            .symbols(true)
+            .demangle(!raw)
+            .trace_core(path, handle)?
+    } else {
+        ptools::stack::TraceOptions::new()
+            .thread_names(true)
+            .symbols(true)
+            .demangle(!raw)
+            .trace(handle.unwrap().pid() as u32)?
+    };
 
-    ptools::print_proc_summary_from(handle);
+    if let Some(h) = handle {
+        ptools::print_proc_summary_from(h);
+    } else {
+        print!("{}:", process.id());
+    }
     println!();
     for thread in process.threads() {
         if let Some(tid) = tid_filter {
@@ -63,8 +77,8 @@ struct Args {
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [-r] [pid[/thread]]...");
-    eprintln!("Print stack traces of running processes.");
+    eprintln!("Usage: pstack [-r] [pid[/thread] | core]...");
+    eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -r, --raw        Show raw function symbol names; do not demangle");
@@ -108,7 +122,7 @@ fn parse_args() -> Args {
     }
 
     if args.operands.is_empty() {
-        eprintln!("pstack: at least one PID required");
+        eprintln!("pstack: at least one operand required");
         exit(2);
     }
     args
@@ -125,23 +139,39 @@ fn main() {
             println!();
         }
         first = false;
-        let (handle, tid) = match ptools::resolve_operand_with_tid(operand) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("pstack: {e}");
-                error = true;
-                continue;
+
+        match ptools::resolve_operand_with_tid(operand) {
+            Ok((handle, tid)) => {
+                for w in handle.drain_warnings() {
+                    eprintln!("{w}");
+                }
+                let core_path = if handle.is_core() {
+                    Some(Path::new(operand.as_str()))
+                } else {
+                    None
+                };
+                if let Err(e) = print_stack(Some(&handle), tid, args.raw, core_path) {
+                    eprintln!("pstack: {}: {e}", handle.pid());
+                    error = true;
+                }
+                for w in handle.drain_warnings() {
+                    eprintln!("{w}");
+                }
             }
-        };
-        for w in handle.drain_warnings() {
-            eprintln!("{w}");
-        }
-        if let Err(e) = print_stack(&handle, tid, args.raw) {
-            eprintln!("pstack: {}: {e}", handle.pid());
-            error = true;
-        }
-        for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            Err(e) => {
+                // If it looks like a file path, try as a bare core dump
+                // (no systemd-coredump metadata available).
+                let path = Path::new(operand.as_str());
+                if !operand.bytes().all(|b| b.is_ascii_digit()) && path.exists() {
+                    if let Err(e) = print_stack(None, None, args.raw, Some(path)) {
+                        eprintln!("pstack: {}: {e}", path.display());
+                        error = true;
+                    }
+                } else {
+                    eprintln!("pstack: {e}");
+                    error = true;
+                }
+            }
         }
     }
     if error {

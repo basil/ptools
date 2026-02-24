@@ -27,6 +27,7 @@ use std::error;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, Read};
+use std::path::Path;
 use std::ptr;
 use std::result;
 
@@ -267,6 +268,25 @@ impl TraceOptions {
             self.trace_rolling(pid, &mut state)?
         };
 
+        Ok(Process { id: pid, threads })
+    }
+
+    /// Traces the threads captured in a core dump file.
+    ///
+    /// If a `ProcHandle` is available, it is used to resolve the main
+    /// thread's name via systemd-coredump metadata (`COREDUMP_COMM`).
+    pub fn trace_core(&self, path: &Path, handle: Option<&crate::ProcHandle>) -> Result<Process> {
+        let fd = File::open(path).map_err(|e| Error(ErrorInner::Io(e)))?;
+        let mut state = imp::State::new_core(fd).map_err(|e| Error(ErrorInner::Unwind(e)))?;
+        let pid = state.pid();
+        let comm = handle.and_then(|h| h.comm().ok());
+        let threads = state.trace_threads(self, &|tid| {
+            if tid == pid {
+                comm.clone()
+            } else {
+                None
+            }
+        });
         Ok(Process { id: pid, threads })
     }
 

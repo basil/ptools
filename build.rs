@@ -557,23 +557,43 @@ $ plgrp -a 0-2 101398
     render_man_page(
         &ManPage {
             name: "pstack",
-            about: "print stack traces of a running process",
-            description: "Print the stack backtraces of all threads in each running process. \
-                          It attaches to the target using the ptrace(2) debugging interface. \
-                          The first line of output displays the PID and binary name as reported by \
-                          the kernel. For each thread, the thread ID and name is displayed followed \
+            about: "print stack traces of a running process or core dump",
+            description: "Print the stack backtraces of all threads in each running process \
+                          or process core file. \
+                          For live processes, it attaches to the target using the ptrace(2) \
+                          debugging interface. \
+                          For core files, modules and threads are discovered from the ELF \
+                          core image. \
+                          The first line of output displays the PID and binary name. \
+                          For each thread, the thread ID and name is displayed followed \
                           by its backtrace. Each frame shows an address and a symbol with offset. \
-                          C++ symbol names are demangled by default.",
-            synopsis: "[-r] [pid[/tid]]...",
+                          C++ symbol names are demangled by default.\n\n\
+                          pstack(1) can operate on core files. A core file is a snapshot of a \
+                          process's state, produced by the kernel when terminating a process \
+                          with a signal or by the gcore(1) utility. To provide symbol table \
+                          information, pstack(1) needs to locate the executable corresponding \
+                          to the process that dumped core and any shared libraries it was \
+                          using. If pstack(1) cannot find these files, some symbol information \
+                          will be unavailable. Similarly, if a core file from one OS release \
+                          is examined on a different release, symbol information for shared \
+                          libraries may not be available. Symbol names also cannot be resolved \
+                          if the corresponding binary or shared object has been deleted from \
+                          disk, since pstack(1) reads symbols from the on-disk ELF image. \
+                          This commonly occurs when a binary or library is reinstalled while \
+                          a process still uses the older version.",
+            synopsis: "[-r] [pid[/tid] | core]...",
             options: &[(
                 "-r, --raw",
                 "Show raw function symbol names. Do not attempt to demangle C++ names.",
             )],
-            operands: &[(
+            operands: &[
+                (
                     "pid[/tid]",
                     "Process ID, optionally followed by a slash and a thread ID \
                      to display a single thread.",
-            )],
+                ),
+                ("core", "Process core file"),
+            ],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -582,7 +602,7 @@ $ plgrp -a 0-2 101398
                     The ptrace(2) interface used to obtain live process information may cause \
                     some syscalls in the target to return EINTR on detach.",
             see_also: "ptrace(2), proc(5)",
-            warnings: "pstack stops the entire target process while inspecting it, even if \
+            warnings: "pstack(1) stops the entire target process while inspecting it, even if \
                        invoked against an individual thread. The process can do nothing while \
                        stopped. Stopping a heavily loaded process in a production environment, \
                        even briefly, can cause severe bottlenecks or hangs, making the process \
