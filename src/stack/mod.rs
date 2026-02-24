@@ -274,6 +274,7 @@ pub struct TraceOptions {
     inlines: bool,
     args: bool,
     ptrace_attach: bool,
+    tid: Option<u32>,
 }
 
 impl Default for TraceOptions {
@@ -288,6 +289,7 @@ impl Default for TraceOptions {
             inlines: false,
             args: false,
             ptrace_attach: true,
+            tid: None,
         }
     }
 }
@@ -374,6 +376,17 @@ impl TraceOptions {
     /// Defaults to `true`.
     pub fn ptrace_attach(&mut self, ptrace_attach: bool) -> &mut TraceOptions {
         self.ptrace_attach = ptrace_attach;
+        self
+    }
+
+    /// If set, only the specified thread will be traced.
+    ///
+    /// When tracing a live process, this avoids attaching to every thread
+    /// just to discard all but one.
+    ///
+    /// Defaults to `None` (trace all threads).
+    pub fn tid(&mut self, tid: u32) -> &mut TraceOptions {
+        self.tid = Some(tid);
         self
     }
 
@@ -467,6 +480,25 @@ impl TraceOptions {
         F: FnMut(Thread),
     {
         let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
+
+        if let Some(tid) = self.tid {
+            let thread = if self.ptrace_attach {
+                TracedThread::attach(tid)
+            } else {
+                TracedThread::traced(tid)
+            };
+            let thread = match thread {
+                Ok(thread) => thread,
+                Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
+                    eprintln!("error attaching to thread {}: {}", tid, e);
+                    return Ok(());
+                }
+                Err(e) => return Err(Error(ErrorInner::Io(e))),
+            };
+            each(thread.info(pid, state, self, &read_mem));
+            return Ok(());
+        }
+
         for t in snapshot_threads(pid, self.ptrace_attach)?.iter() {
             each(t.info(pid, state, self, &read_mem));
         }
@@ -484,6 +516,25 @@ impl TraceOptions {
         F: FnMut(Thread),
     {
         let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
+
+        if let Some(tid) = self.tid {
+            let thread = if self.ptrace_attach {
+                TracedThread::attach(tid)
+            } else {
+                TracedThread::traced(tid)
+            };
+            let thread = match thread {
+                Ok(thread) => thread,
+                Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
+                    eprintln!("error attaching to thread {}: {}", tid, e);
+                    return Ok(());
+                }
+                Err(e) => return Err(Error(ErrorInner::Io(e))),
+            };
+            each(thread.info(pid, state, self, &read_mem));
+            return Ok(());
+        }
+
         each_thread(pid, |tid| {
             let thread = if self.ptrace_attach {
                 TracedThread::attach(tid)

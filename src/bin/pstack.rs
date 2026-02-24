@@ -128,7 +128,9 @@ fn print_stack(
             |thread| print_thread(&thread, tid_filter, args.max_frames, true, &first_thread),
         )?;
     } else if let Some(tid) = tid_filter {
-        // Single thread requested: print only that thread's TID in the header.
+        // Single thread requested: push the filter into the backend so it only
+        // attaches to (and unwinds) this one TID instead of every thread.
+        opts.tid(tid as u32);
         print!("{}:\t", tid);
         ptools::print_cmd_summary_from(handle);
         opts.trace_each(handle, |thread| {
