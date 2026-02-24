@@ -59,6 +59,29 @@ $ pstack $$
 0x000055a0716e1d35 _start+0x25
 ```
 
+If DWARF debug information is installed, you can use verbose mode to
+find source code information (file and line number), values of arguments
+passed to functions, and inlined function frames.
+
+```text
+$ pstack -v $$
+194145: /bin/zsh
+0x00007f7a7e2aec5e __internal_syscall_cancel(a1=140728959537968, a2=8, a3=0, a4=0, a5=0, a6=0, nr=130)+0x7e (cancellation.c:64)
+0x00007f7a7e2aec84 __syscall_cancel(nr=130)+0x14 (cancellation.c:75)
+0x00007f7a7e25a525 __sigsuspend()+0x25 (sigsuspend.c:26)
+0x000055cbe14bfdad zwaitjob()+0x5cd (signals.c:393)
+0x000055cbe14bfe8f waitjobs()+0x2f (jobs.c:1702)
+0x000055cbe1494682 execpline.lto_priv.0()+0xba2 (exec.c:1785)
+0x000055cbe1495bfe execlist()+0x52e (exec.c:1444)
+0x000055cbe14964ce execode()+0xae (exec.c:1221)
+0x000055cbe14b5532 loop()+0x792 (init.c:212)
+0x000055cbe14bd0e6 zsh_main()+0x5a6 (init.c:1794)
+0x000055cbe1469d0d main()+0xd (main.c:93)
+0x00007f7a7e2435b5 __libc_start_call_main(main=0x55cbe1469d00, argc=1, argv=0x7ffe03a49cf8)+0x75 (libc_start_call_main.h:58)
+0x00007f7a7e243668 __libc_start_main@@GLIBC_2.34(main=0x55cbe1469d00, argc=1, argv=0x7ffe03a49cf8, stack_end=0x7ffe03a49ce8)+0x88 (libc-start.c:360)
+0x000055cbe1469d35 _start()+0x25 (main.c:93)
+```
+
 `pfiles(1)` shows you every file descriptor a process has open (similar to
 `lsof`, but for a specific process). This includes details on regular files
 (including offset, which is great for checking on programs that scan through
