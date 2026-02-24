@@ -17,6 +17,8 @@
 use std::io;
 use std::path::PathBuf;
 
+use nix::libc;
+
 use super::ProcSource;
 
 /// Live-process backend: reads everything from `/proc/[pid]/...`.
@@ -104,5 +106,20 @@ impl ProcSource for LiveProcess {
 
     fn read_net_file(&self, name: &str) -> io::Result<String> {
         std::fs::read_to_string(format!("/proc/{}/net/{}", self.pid, name))
+    }
+
+    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
+        let local = libc::iovec {
+            iov_base: buf.as_mut_ptr().cast(),
+            iov_len: buf.len(),
+        };
+        let remote = libc::iovec {
+            iov_base: addr as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        unsafe {
+            libc::process_vm_readv(self.pid as libc::pid_t, &local, 1, &remote, 1, 0)
+                == buf.len() as isize
+        }
     }
 }

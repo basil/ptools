@@ -92,9 +92,9 @@ fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize, fir
 }
 
 fn print_stack(
-    handle: Option<&ProcHandle>,
+    handle: &ProcHandle,
     tid_filter: Option<u64>,
-    core_path: Option<&Path>,
+    is_core: bool,
     args: &Args,
 ) -> Result<(), ptools::stack::Error> {
     let mut opts = ptools::stack::TraceOptions::new();
@@ -108,27 +108,21 @@ fn print_stack(
         .args(args.verbose);
 
     let first_thread = Cell::new(true);
-    if let Some(path) = core_path {
+    if is_core {
         opts.trace_core_each(
-            path,
             handle,
             |pid| {
                 print!("{pid}:\t");
-                if let Some(h) = handle {
-                    ptools::print_cmd_summary_from(h);
-                } else {
-                    println!();
-                }
+                ptools::print_cmd_summary_from(handle);
                 println!();
                 first_thread.set(true);
             },
             |thread| print_thread(&thread, tid_filter, args.max_frames, &first_thread),
         )?;
     } else {
-        let h = handle.unwrap();
-        ptools::print_proc_summary_from(h);
+        ptools::print_proc_summary_from(handle);
         println!();
-        opts.trace_each(h.pid() as u32, |thread| {
+        opts.trace_each(handle, |thread| {
             print_thread(&thread, tid_filter, args.max_frames, &first_thread);
         })?;
     }
@@ -240,12 +234,7 @@ fn main() {
                 for w in handle.drain_warnings() {
                     eprintln!("{w}");
                 }
-                let core_path = if handle.is_core() {
-                    Some(Path::new(operand.as_str()))
-                } else {
-                    None
-                };
-                if let Err(e) = print_stack(Some(&handle), tid, core_path, &args) {
+                if let Err(e) = print_stack(&handle, tid, handle.is_core(), &args) {
                     eprintln!("pstack: {}: {e}", handle.pid());
                     error = true;
                 }

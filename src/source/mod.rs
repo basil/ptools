@@ -33,10 +33,12 @@
 //!   the responsibility of the presentation layer.
 
 mod coredump;
+mod elf;
 mod live;
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Abstraction over process data sources.
 ///
@@ -67,6 +69,14 @@ pub(crate) trait ProcSource {
 
     // Network namespace
     fn read_net_file(&self, name: &str) -> io::Result<String>;
+
+    // Memory
+    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool;
+
+    /// Return a raw ELF pointer for the core dump, if available.
+    fn core_elf_ptr(&self) -> Option<*mut crate::dw_sys::Elf> {
+        None
+    }
 }
 
 pub(crate) fn open_live(pid: u64) -> Box<dyn ProcSource> {
@@ -74,7 +84,8 @@ pub(crate) fn open_live(pid: u64) -> Box<dyn ProcSource> {
 }
 
 pub(crate) fn open_coredump(path: &Path) -> io::Result<(Box<dyn ProcSource>, Vec<String>)> {
-    let source = coredump::CoredumpSource::from_corefile(path)?;
+    let core_elf = Arc::new(elf::CoreElf::open(path)?);
+    let source = coredump::CoredumpSource::from_corefile(path, &core_elf)?;
     let warnings = source.warnings().to_vec();
     Ok((Box::new(source), warnings))
 }

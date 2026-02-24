@@ -18,9 +18,11 @@ use std::collections::HashMap;
 use std::io;
 use std::os::raw::{c_int, c_void};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use nix::libc;
 
+use super::elf::CoreElf;
 use super::ProcSource;
 
 // ---------------------------------------------------------------------------
@@ -110,6 +112,7 @@ impl Drop for Journal {
 /// journal entry matching the coredump.
 pub(super) struct CoredumpSource {
     pid: u64,
+    core_elf: Arc<CoreElf>,
     fields: HashMap<String, Vec<u8>>,
     warnings: Vec<String>,
 }
@@ -141,7 +144,7 @@ impl CoredumpSource {
     /// (pid, comm, exe, uid, gid, signal, etc.). Then queries the systemd
     /// journal for the matching coredump entry to fill in rich fields like
     /// `COREDUMP_PROC_STATUS`, `COREDUMP_ENVIRON`, `COREDUMP_CMDLINE`, etc.
-    pub(super) fn from_corefile(path: &Path) -> io::Result<Self> {
+    pub(super) fn from_corefile(path: &Path, core_elf: &Arc<CoreElf>) -> io::Result<Self> {
         let file_exists = path.exists();
 
         // Read what we can from extended attributes (only possible if
@@ -185,12 +188,10 @@ impl CoredumpSource {
             fields.entry(key).or_insert(value);
         }
 
-        // No PID metadata from xattrs or journal is OK: the stack-tracing
-        // layer extracts the real PID from ELF core notes; other tools will
-        // see individual field errors.
-        let pid = extract_pid(&fields).unwrap_or_default();
+        let pid = extract_pid(&fields).unwrap_or_else(|_| core_elf.pid() as u64);
         Ok(CoredumpSource {
             pid,
+            core_elf: Arc::clone(core_elf),
             fields,
             warnings,
         })
@@ -326,6 +327,14 @@ impl ProcSource for CoredumpSource {
 
     fn read_net_file(&self, _name: &str) -> io::Result<String> {
         Err(unsupported("network info"))
+    }
+
+    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
+        self.core_elf.read_memory(addr, buf)
+    }
+
+    fn core_elf_ptr(&self) -> Option<*mut crate::dw_sys::Elf> {
+        Some(self.core_elf.as_elf_ptr())
     }
 }
 

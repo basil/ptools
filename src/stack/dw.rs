@@ -18,7 +18,6 @@ pub use crate::dw::dwfl::Error;
 use crate::dw::dwfl::{Callbacks, Dwfl, FindDebuginfo, FindElf, FrameRef, ModuleRef};
 use std::ffi::CStr;
 use std::os::raw::c_int;
-use std::os::unix::io::AsRawFd;
 use std::sync::LazyLock;
 
 use super::{Argument, Frame, FrameArgs, SourceLocation, Symbol, TraceOptions, TracedThread};
@@ -111,60 +110,6 @@ fn is_function_tag(tag: c_int) -> bool {
     tag == crate::dw_sys::DW_TAG_subprogram
         || tag == crate::dw_sys::DW_TAG_inlined_subroutine
         || tag == crate::dw_sys::DW_TAG_entry_point
-}
-
-/// Read memory from a live process using process_vm_readv.
-fn read_process_memory(pid: u32, addr: u64, buf: &mut [u8]) -> bool {
-    let local = libc::iovec {
-        iov_base: buf.as_mut_ptr().cast(),
-        iov_len: buf.len(),
-    };
-    let remote = libc::iovec {
-        iov_base: addr as *mut libc::c_void,
-        iov_len: buf.len(),
-    };
-    unsafe {
-        libc::process_vm_readv(pid as libc::pid_t, &local, 1, &remote, 1, 0) == buf.len() as isize
-    }
-}
-
-/// Read memory from a core file's ELF PT_LOAD segments.
-fn read_core_memory(elf: *mut crate::dw_sys::Elf, addr: u64, buf: &mut [u8]) -> bool {
-    unsafe {
-        let mut phnum: libc::size_t = 0;
-        if crate::dw_sys::elf_getphdrnum(elf, &mut phnum) != 0 {
-            return false;
-        }
-        for i in 0..phnum as c_int {
-            let mut phdr = std::mem::zeroed::<crate::dw_sys::GElf_Phdr>();
-            if crate::dw_sys::gelf_getphdr(elf, i, &mut phdr).is_null() {
-                continue;
-            }
-            // PT_LOAD = 1
-            if phdr.p_type != 1 {
-                continue;
-            }
-            if addr >= phdr.p_vaddr && addr + buf.len() as u64 <= phdr.p_vaddr + phdr.p_filesz {
-                let offset = (addr - phdr.p_vaddr + phdr.p_offset) as i64;
-                let data = crate::dw_sys::elf_getdata_rawchunk(
-                    elf,
-                    offset,
-                    buf.len(),
-                    crate::dw_sys::ELF_T_BYTE,
-                );
-                if data.is_null() {
-                    return false;
-                }
-                let d = &*data;
-                if d.d_buf.is_null() || d.d_size < buf.len() {
-                    return false;
-                }
-                std::ptr::copy_nonoverlapping(d.d_buf.cast::<u8>(), buf.as_mut_ptr(), buf.len());
-                return true;
-            }
-        }
-    }
-    false
 }
 
 /// Result of evaluating a DWARF location expression.
@@ -901,24 +846,8 @@ static CALLBACKS: LazyLock<Callbacks> =
 static CORE_CALLBACKS: LazyLock<Callbacks> =
     LazyLock::new(|| Callbacks::new(FindElf::BUILD_ID, FindDebuginfo::STANDARD));
 
-struct OwnedElf(*mut crate::dw_sys::Elf);
-
-impl Drop for OwnedElf {
-    fn drop(&mut self) {
-        unsafe {
-            crate::dw_sys::elf_end(self.0);
-        }
-    }
-}
-
-struct CoreResources {
-    _elf: OwnedElf,     // dropped first
-    _fd: std::fs::File, // dropped second (keeps fd alive while elf uses it)
-}
-
 pub struct State {
     dwfl: Dwfl<'static>,
-    _core: Option<CoreResources>, // dropped after dwfl
 }
 
 impl State {
@@ -926,62 +855,30 @@ impl State {
         let mut dwfl = Dwfl::begin(&CALLBACKS)?;
         dwfl.report().linux_proc(pid)?;
         dwfl.linux_proc_attach(pid, true)?;
-        Ok(State { dwfl, _core: None })
+        Ok(State { dwfl })
     }
 
-    pub fn new_core(fd: std::fs::File) -> Result<State, Error> {
-        unsafe {
-            crate::dw_sys::elf_version(1); // EV_CURRENT
-        }
-
-        let elf_ptr = unsafe {
-            crate::dw_sys::elf_begin(
-                fd.as_raw_fd(),
-                crate::dw_sys::ELF_C_READ_MMAP,
-                std::ptr::null_mut(),
-            )
-        };
-        if elf_ptr.is_null() {
-            return Err(Error::new());
-        }
-        let elf = OwnedElf(elf_ptr);
-
+    /// # Safety
+    ///
+    /// `elf_ptr` must remain valid for the lifetime of the returned `State`.
+    pub unsafe fn new_core(elf_ptr: *mut crate::dw_sys::Elf) -> Result<State, Error> {
         let mut dwfl = Dwfl::begin(&CORE_CALLBACKS)?;
-        unsafe {
-            dwfl.report().core_file(elf.0)?;
-            dwfl.core_file_attach(elf.0)?;
-        }
-
-        Ok(State {
-            dwfl,
-            _core: Some(CoreResources { _elf: elf, _fd: fd }),
-        })
+        dwfl.report().core_file(elf_ptr)?;
+        dwfl.core_file_attach(elf_ptr)?;
+        Ok(State { dwfl })
     }
 
     pub fn pid(&self) -> u32 {
         self.dwfl.pid()
     }
 
-    fn mem_reader_params(&self) -> (u32, Option<*mut crate::dw_sys::Elf>) {
-        let pid = self.pid();
-        let elf_ptr = self._core.as_ref().map(|c| c._elf.0);
-        (pid, elf_ptr)
-    }
-
     pub fn trace_threads_each(
         &mut self,
         options: &TraceOptions,
         thread_name: &dyn Fn(u32) -> Option<String>,
+        read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
         each: &mut dyn FnMut(super::Thread),
     ) {
-        let (pid, elf_ptr) = self.mem_reader_params();
-        let read_mem = move |addr: u64, buf: &mut [u8]| -> bool {
-            if let Some(elf) = elf_ptr {
-                read_core_memory(elf, addr, buf)
-            } else {
-                read_process_memory(pid, addr, buf)
-            }
-        };
         let result = self.dwfl.threads(|thread_ref| {
             let tid = thread_ref.tid();
             let mut frames = Vec::new();
@@ -1001,7 +898,7 @@ impl State {
                     signal_adjust,
                     options,
                     frame,
-                    &read_mem,
+                    read_mem,
                     &mut frames,
                 );
 
@@ -1033,16 +930,9 @@ impl TracedThread {
         &self,
         dwfl: &mut State,
         options: &TraceOptions,
+        read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
         frames: &mut Vec<Frame>,
     ) -> Result<(), Error> {
-        let (pid, elf_ptr) = dwfl.mem_reader_params();
-        let read_mem = move |addr: u64, buf: &mut [u8]| -> bool {
-            if let Some(elf) = elf_ptr {
-                read_core_memory(elf, addr, buf)
-            } else {
-                read_process_memory(pid, addr, buf)
-            }
-        };
         dwfl.dwfl.thread_frames(self.id, |frame| {
             let mut is_signal = false;
             let ip = frame.pc(Some(&mut is_signal))?;
@@ -1059,7 +949,7 @@ impl TracedThread {
                 signal_adjust,
                 options,
                 frame,
-                &read_mem,
+                read_mem,
                 frames,
             );
 

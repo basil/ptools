@@ -126,6 +126,17 @@ impl ProcHandle {
         self.is_core
     }
 
+    /// Return a raw ELF pointer for the core dump, if available.
+    pub(crate) fn core_elf_ptr(&self) -> Option<*mut crate::dw_sys::Elf> {
+        self.source.core_elf_ptr()
+    }
+
+    /// Read memory from the process — core dump PT_LOAD segments or live
+    /// `process_vm_readv(2)`.
+    pub(crate) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
+        self.source.read_memory(addr, buf)
+    }
+
     // -- Pure delegation ---------------------------------------------
 
     pub fn pid(&self) -> u64 {

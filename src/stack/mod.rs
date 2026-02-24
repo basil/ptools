@@ -26,8 +26,7 @@ use std::collections::BTreeSet;
 use std::error;
 use std::fmt;
 use std::fs::{self, File};
-use std::io::{self, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::io::{self, Read};
 use std::ptr;
 use std::result;
 
@@ -255,12 +254,12 @@ impl Symbol {
 }
 
 /// A convenience wrapper over `TraceOptions` which returns a maximally verbose trace.
-pub fn trace(pid: u32) -> Result<Process> {
+pub fn trace(handle: &crate::ProcHandle) -> Result<Process> {
     TraceOptions::new()
         .thread_names(true)
         .symbols(true)
         .demangle(true)
-        .trace(pid)
+        .trace(handle)
 }
 
 /// Options controlling the behavior of tracing.
@@ -379,23 +378,25 @@ impl TraceOptions {
     }
 
     /// Traces the threads of the specified process.
-    pub fn trace(&self, pid: u32) -> Result<Process> {
+    pub fn trace(&self, handle: &crate::ProcHandle) -> Result<Process> {
+        let pid = handle.pid() as u32;
         let mut threads = Vec::new();
-        self.trace_each(pid, |thread| threads.push(thread))?;
+        self.trace_each(handle, |thread| threads.push(thread))?;
         Ok(Process { id: pid, threads })
     }
 
     /// Traces the threads of the specified process, calling `each` per thread.
-    pub fn trace_each<F>(&self, pid: u32, mut each: F) -> Result<()>
+    pub fn trace_each<F>(&self, handle: &crate::ProcHandle, mut each: F) -> Result<()>
     where
         F: FnMut(Thread),
     {
+        let pid = handle.pid() as u32;
         let mut state = imp::State::new(pid).map_err(|e| Error(ErrorInner::Unwind(e)))?;
 
         if self.snapshot {
-            self.trace_snapshot_each(pid, &mut state, &mut each)?;
+            self.trace_snapshot_each(handle, pid, &mut state, &mut each)?;
         } else {
-            self.trace_rolling_each(pid, &mut state, &mut each)?;
+            self.trace_rolling_each(handle, pid, &mut state, &mut each)?;
         }
 
         Ok(())
@@ -403,12 +404,13 @@ impl TraceOptions {
 
     /// Traces the threads captured in a core dump file.
     ///
-    /// If a `ProcHandle` is available, it is used to resolve the main
-    /// thread's name via systemd-coredump metadata (`COREDUMP_COMM`).
-    pub fn trace_core(&self, path: &Path, handle: Option<&crate::ProcHandle>) -> Result<Process> {
+    /// The `ProcHandle` provides the core-file ELF data and is used to
+    /// resolve the main thread's name via systemd-coredump metadata
+    /// (`COREDUMP_COMM`).
+    pub fn trace_core(&self, handle: &crate::ProcHandle) -> Result<Process> {
         let mut pid = 0;
         let mut threads = Vec::new();
-        self.trace_core_each(path, handle, |p| pid = p, |thread| threads.push(thread))?;
+        self.trace_core_each(handle, |p| pid = p, |thread| threads.push(thread))?;
         Ok(Process { id: pid, threads })
     }
 
@@ -417,8 +419,7 @@ impl TraceOptions {
     /// `header` is called with the core pid before any threads are streamed.
     pub fn trace_core_each<H, F>(
         &self,
-        path: &Path,
-        handle: Option<&crate::ProcHandle>,
+        handle: &crate::ProcHandle,
         header: H,
         mut each: F,
     ) -> Result<()>
@@ -426,29 +427,20 @@ impl TraceOptions {
         H: FnOnce(u32),
         F: FnMut(Thread),
     {
-        let mut fd = File::open(path).map_err(|e| Error(ErrorInner::Io(e)))?;
-        let mut magic = [0u8; 4];
-        let is_zst = fd.read_exact(&mut magic).is_ok() && magic == [0x28, 0xB5, 0x2F, 0xFD];
-        fd.seek(SeekFrom::Start(0))
-            .map_err(|e| Error(ErrorInner::Io(e)))?;
-        let fd = if is_zst {
-            let mut decoder = zstd::Decoder::new(fd).map_err(|e| Error(ErrorInner::Io(e)))?;
-            let name = c"pstack-core";
-            let memfd = nix::sys::memfd::memfd_create(name, nix::sys::memfd::MFdFlags::empty())
-                .map_err(|e| Error(ErrorInner::Io(io::Error::from(e))))?;
-            let mut memfile = File::from(memfd);
-            io::copy(&mut decoder, &mut memfile).map_err(|e| Error(ErrorInner::Io(e)))?;
-            memfile
-                .seek(SeekFrom::Start(0))
-                .map_err(|e| Error(ErrorInner::Io(e)))?;
-            memfile
-        } else {
-            fd
-        };
-        let mut state = imp::State::new_core(fd).map_err(|e| Error(ErrorInner::Unwind(e)))?;
+        let elf_ptr = handle.core_elf_ptr().ok_or_else(|| {
+            Error(ErrorInner::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ProcHandle has no core file",
+            )))
+        })?;
+        // SAFETY: `handle.source` owns the Arc<CoreElf> backing `elf_ptr`.
+        // `state` does not escape this function.
+        let mut state =
+            unsafe { imp::State::new_core(elf_ptr) }.map_err(|e| Error(ErrorInner::Unwind(e)))?;
         let pid = state.pid();
         header(pid);
-        let comm = handle.and_then(|h| h.comm().ok());
+        let comm = handle.comm().ok();
+        let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
         state.trace_threads_each(
             self,
             &|tid| {
@@ -458,25 +450,40 @@ impl TraceOptions {
                     None
                 }
             },
+            &read_mem,
             &mut each,
         );
         Ok(())
     }
 
-    fn trace_snapshot_each<F>(&self, pid: u32, state: &mut imp::State, each: &mut F) -> Result<()>
+    fn trace_snapshot_each<F>(
+        &self,
+        handle: &crate::ProcHandle,
+        pid: u32,
+        state: &mut imp::State,
+        each: &mut F,
+    ) -> Result<()>
     where
         F: FnMut(Thread),
     {
+        let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
         for t in snapshot_threads(pid, self.ptrace_attach)?.iter() {
-            each(t.info(pid, state, self));
+            each(t.info(pid, state, self, &read_mem));
         }
         Ok(())
     }
 
-    fn trace_rolling_each<F>(&self, pid: u32, state: &mut imp::State, each: &mut F) -> Result<()>
+    fn trace_rolling_each<F>(
+        &self,
+        handle: &crate::ProcHandle,
+        pid: u32,
+        state: &mut imp::State,
+        each: &mut F,
+    ) -> Result<()>
     where
         F: FnMut(Thread),
     {
+        let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
         each_thread(pid, |tid| {
             let thread = if self.ptrace_attach {
                 TracedThread::attach(tid)
@@ -492,7 +499,7 @@ impl TraceOptions {
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
 
-            each(thread.info(pid, state, self));
+            each(thread.info(pid, state, self, &read_mem));
             Ok(())
         })
     }
@@ -725,14 +732,20 @@ impl TracedThread {
         }
     }
 
-    fn info(&self, pid: u32, state: &mut imp::State, options: &TraceOptions) -> Thread {
+    fn info(
+        &self,
+        pid: u32,
+        state: &mut imp::State,
+        options: &TraceOptions,
+        read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
+    ) -> Thread {
         let name = if options.thread_names {
             self.name(pid)
         } else {
             None
         };
 
-        let frames = self.dump(state, options);
+        let frames = self.dump(state, options, read_mem);
 
         Thread {
             id: self.id,
@@ -741,10 +754,15 @@ impl TracedThread {
         }
     }
 
-    fn dump(&self, state: &mut imp::State, options: &TraceOptions) -> Vec<Frame> {
+    fn dump(
+        &self,
+        state: &mut imp::State,
+        options: &TraceOptions,
+        read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
+    ) -> Vec<Frame> {
         let mut frames = vec![];
 
-        if let Err(e) = self.dump_inner(state, options, &mut frames) {
+        if let Err(e) = self.dump_inner(state, options, read_mem, &mut frames) {
             eprintln!("error tracing thread {}: {}", self.id, e);
         }
 
