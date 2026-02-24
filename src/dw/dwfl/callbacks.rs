@@ -15,10 +15,11 @@
 //
 
 use libc::{c_char, c_int, c_void};
+use std::cell::UnsafeCell;
 use std::ptr;
 
 /// Callbacks used to configure the behavior of a `Dwfl`.
-pub struct Callbacks(crate::dw_sys::Dwfl_Callbacks);
+pub struct Callbacks(UnsafeCell<crate::dw_sys::Dwfl_Callbacks>);
 
 unsafe impl Sync for Callbacks {}
 unsafe impl Send for Callbacks {}
@@ -29,17 +30,17 @@ impl Callbacks {
     /// The find_elf and find_debuginfo callbacks are required. The section address callback and debuginfo_path
     /// value are initialized to NULL.
     pub fn new(find_elf: FindElf, find_debuginfo: FindDebuginfo) -> Callbacks {
-        Callbacks(crate::dw_sys::Dwfl_Callbacks {
+        Callbacks(UnsafeCell::new(crate::dw_sys::Dwfl_Callbacks {
             find_elf: Some(find_elf.0),
             find_debuginfo: Some(find_debuginfo.0),
             section_address: None,
             debuginfo_path: ptr::null_mut(),
-        })
+        }))
     }
 
     /// Returns the pointer representation of the callbacks.
-    pub fn as_ptr(&self) -> *mut crate::dw_sys::Dwfl_Callbacks {
-        &self.0 as *const _ as *mut _
+    pub fn as_ptr(&self) -> *const crate::dw_sys::Dwfl_Callbacks {
+        self.0.get()
     }
 }
 
