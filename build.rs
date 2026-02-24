@@ -614,8 +614,5 @@ $ plgrp -a 0-2 101398
         out_dir,
     );
 
-    // Link libstdc++ for __cxa_demangle (C++ symbol demangling in pstack).
-    println!("cargo:rustc-link-lib=stdc++");
-
     println!("cargo:rerun-if-changed=build.rs");
 }

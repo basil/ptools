@@ -16,47 +16,25 @@
 
 pub use crate::dw::dwfl::Error;
 use crate::dw::dwfl::{Callbacks, Dwfl, FindDebuginfo, FindElf, FrameRef, ModuleRef};
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::ffi::CStr;
+use std::os::raw::c_int;
 use std::os::unix::io::AsRawFd;
 use std::sync::LazyLock;
 
 use super::{Argument, Frame, FrameArgs, SourceLocation, Symbol, TraceOptions, TracedThread};
 
-unsafe extern "C" {
-    fn __cxa_demangle(
-        mangled_name: *const c_char,
-        output_buffer: *mut c_char,
-        length: *mut libc::size_t,
-        status: *mut c_int,
-    ) -> *mut c_char;
-}
-
-/// Demangle a GNU v3 ABI C++ symbol name, returning `None` if the name is not
+/// Demangle a C++ or Rust symbol name, returning `None` if the name is not
 /// mangled or demangling fails.
 fn demangle(name: &str) -> Option<String> {
-    // Require GNU v3 ABI by the "_Z" prefix, matching elfutils stack.c behavior.
-    if !name.starts_with("_Z") {
-        return None;
+    // Try C++ Itanium ABI demangling (_Z prefix).
+    if name.starts_with("_Z") {
+        if let Ok(sym) = cpp_demangle::Symbol::new(name) {
+            return Some(sym.to_string());
+        }
     }
-    let mangled = CString::new(name).ok()?;
-    let mut status: c_int = -1;
-    let demangled = unsafe {
-        __cxa_demangle(
-            mangled.as_ptr(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            &mut status,
-        )
-    };
-    if status != 0 {
-        return None;
-    }
-    let result = unsafe { CStr::from_ptr(demangled) }
-        .to_string_lossy()
-        .into_owned();
-    unsafe { libc::free(demangled.cast()) };
-    Some(result)
+    // Try Rust symbol demangling (_R prefix for v0, _ZN...E for legacy).
+    let demangled = rustc_demangle::try_demangle(name).ok()?;
+    Some(demangled.to_string())
 }
 
 /// Get the linkage name or plain name of a DWARF DIE, matching elfutils die_name().
