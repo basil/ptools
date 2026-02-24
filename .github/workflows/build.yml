@@ -96,7 +96,7 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib libdw-dev:i386 libsystemd-dev:i386
+          sudo apt-get install -y g++-multilib libdw-dev:i386 libsystemd-dev:i386
 
       - name: Install Rust i686 target
         run: rustup target add i686-unknown-linux-gnu
