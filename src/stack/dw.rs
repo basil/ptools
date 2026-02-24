@@ -16,9 +16,47 @@
 
 pub use crate::dw::dwfl::Error;
 use crate::dw::dwfl::{Callbacks, Dwfl, FindDebuginfo, FindElf};
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_int};
 use std::sync::LazyLock;
 
 use super::{Frame, Symbol, TraceOptions, TracedThread};
+
+unsafe extern "C" {
+    fn __cxa_demangle(
+        mangled_name: *const c_char,
+        output_buffer: *mut c_char,
+        length: *mut libc::size_t,
+        status: *mut c_int,
+    ) -> *mut c_char;
+}
+
+/// Demangle a GNU v3 ABI C++ symbol name, returning `None` if the name is not
+/// mangled or demangling fails.
+fn demangle(name: &str) -> Option<String> {
+    // Require GNU v3 ABI by the "_Z" prefix, matching elfutils stack.c behavior.
+    if !name.starts_with("_Z") {
+        return None;
+    }
+    let mangled = CString::new(name).ok()?;
+    let mut status: c_int = -1;
+    let demangled = unsafe {
+        __cxa_demangle(
+            mangled.as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut status,
+        )
+    };
+    if status != 0 {
+        return None;
+    }
+    let result = unsafe { CStr::from_ptr(demangled) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { libc::free(demangled.cast()) };
+    Some(result)
+}
 
 static CALLBACKS: LazyLock<Callbacks> =
     LazyLock::new(|| Callbacks::new(FindElf::LINUX_PROC, FindDebuginfo::STANDARD));
@@ -55,8 +93,14 @@ impl TracedThread {
                     .addr_module(ip - signal_adjust)
                     .and_then(|module| module.addr_info(ip - signal_adjust))
                 {
+                    let raw_name = i.name().to_string_lossy().into_owned();
+                    let name = if options.demangle {
+                        demangle(&raw_name).unwrap_or(raw_name)
+                    } else {
+                        raw_name
+                    };
                     symbol = Some(Symbol {
-                        name: i.name().to_string_lossy().into_owned(),
+                        name,
                         offset: i.offset() + signal_adjust,
                         address: i.bias() + i.symbol().value(),
                         size: i.symbol().size(),

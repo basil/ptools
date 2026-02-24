@@ -18,8 +18,16 @@ use std::process::exit;
 
 use ptools::ProcHandle;
 
-fn print_stack(handle: &ProcHandle, tid_filter: Option<u64>) -> Result<(), ptools::stack::Error> {
-    let process = ptools::stack::trace(handle.pid() as u32)?;
+fn print_stack(
+    handle: &ProcHandle,
+    tid_filter: Option<u64>,
+    raw: bool,
+) -> Result<(), ptools::stack::Error> {
+    let process = ptools::stack::TraceOptions::new()
+        .thread_names(true)
+        .symbols(true)
+        .demangle(!raw)
+        .trace(handle.pid() as u32)?;
 
     ptools::print_proc_summary_from(handle);
     println!();
@@ -32,12 +40,14 @@ fn print_stack(handle: &ProcHandle, tid_filter: Option<u64>) -> Result<(), ptool
         println!("{}: {}", thread.id(), thread.name().unwrap_or("<unknown>"));
         for frame in thread.frames() {
             match frame.symbol() {
-                Some(symbol) => println!(
-                    "{:#016x} - {} + {:#x}",
-                    frame.ip(),
-                    symbol.name(),
-                    symbol.offset(),
-                ),
+                Some(symbol) => {
+                    println!(
+                        "{:#016x} {}+{:#x}",
+                        frame.ip(),
+                        symbol.name(),
+                        symbol.offset()
+                    );
+                }
                 None => println!("{:#016x} - ???", frame.ip()),
             }
         }
@@ -48,14 +58,16 @@ fn print_stack(handle: &ProcHandle, tid_filter: Option<u64>) -> Result<(), ptool
 }
 
 struct Args {
+    raw: bool,
     operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [pid[/thread]]...");
+    eprintln!("Usage: pstack [-r] [pid[/thread]]...");
     eprintln!("Print stack traces of running processes.");
     eprintln!();
     eprintln!("Options:");
+    eprintln!("  -r, --raw        Show raw function symbol names; do not demangle");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
@@ -64,6 +76,7 @@ fn parse_args() -> Args {
     use lexopt::prelude::*;
 
     let mut args = Args {
+        raw: false,
         operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
@@ -80,6 +93,9 @@ fn parse_args() -> Args {
             Short('V') | Long("version") => {
                 println!("pstack {}", env!("CARGO_PKG_VERSION"));
                 exit(0);
+            }
+            Short('r') | Long("raw") => {
+                args.raw = true;
             }
             Value(val) => {
                 args.operands.push(val.to_string_lossy().into_owned());
@@ -120,7 +136,7 @@ fn main() {
         for w in handle.drain_warnings() {
             eprintln!("{w}");
         }
-        if let Err(e) = print_stack(&handle, tid) {
+        if let Err(e) = print_stack(&handle, tid, args.raw) {
             eprintln!("pstack: {}: {e}", handle.pid());
             error = true;
         }

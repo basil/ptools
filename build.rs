@@ -562,9 +562,13 @@ $ plgrp -a 0-2 101398
                           It attaches to the target using the ptrace(2) debugging interface. \
                           The first line of output displays the PID and binary name as reported by \
                           the kernel. For each thread, the thread ID and name is displayed followed \
-                          by its backtrace. Each frame shows an address and a symbol with offset.",
-            synopsis: "[pid[/tid]]...",
-            options: &[],
+                          by its backtrace. Each frame shows an address and a symbol with offset. \
+                          C++ symbol names are demangled by default.",
+            synopsis: "[-r] [pid[/tid]]...",
+            options: &[(
+                "-r, --raw",
+                "Show raw function symbol names. Do not attempt to demangle C++ names.",
+            )],
             operands: &[(
                     "pid[/tid]",
                     "Process ID, optionally followed by a slash and a thread ID \
@@ -587,6 +591,9 @@ $ plgrp -a 0-2 101398
         },
         out_dir,
     );
+
+    // Link libstdc++ for __cxa_demangle (C++ symbol demangling in pstack).
+    println!("cargo:rustc-link-lib=stdc++");
 
     println!("cargo:rerun-if-changed=build.rs");
 }

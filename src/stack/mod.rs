@@ -179,6 +179,7 @@ pub fn trace(pid: u32) -> Result<Process> {
     TraceOptions::new()
         .thread_names(true)
         .symbols(true)
+        .demangle(true)
         .trace(pid)
 }
 
@@ -188,6 +189,7 @@ pub struct TraceOptions {
     snapshot: bool,
     thread_names: bool,
     symbols: bool,
+    demangle: bool,
     ptrace_attach: bool,
 }
 
@@ -197,6 +199,7 @@ impl Default for TraceOptions {
             snapshot: false,
             thread_names: false,
             symbols: false,
+            demangle: false,
             ptrace_attach: true,
         }
     }
@@ -232,6 +235,14 @@ impl TraceOptions {
     /// Defaults to `false`.
     pub fn symbols(&mut self, symbols: bool) -> &mut TraceOptions {
         self.symbols = symbols;
+        self
+    }
+
+    /// If set, C++ symbol names will be demangled.
+    ///
+    /// Only effective when `symbols` is also enabled. Defaults to `false`.
+    pub fn demangle(&mut self, demangle: bool) -> &mut TraceOptions {
+        self.demangle = demangle;
         self
     }
 
