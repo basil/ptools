@@ -7,6 +7,23 @@ We welcome contributions! To contribute:
 3. Add tests for your code.
 4. Open a pull request.
 
+## Prerequisites
+
+Building from source requires the `libdw` and `libsystemd` development
+libraries.
+
+**Ubuntu/Debian:**
+
+```shell
+sudo apt-get install libdw-dev libsystemd-dev
+```
+
+**Fedora:**
+
+```shell
+sudo dnf install elfutils-devel systemd-devel
+```
+
 ## Building and Testing
 
 Build all binaries and example applications:

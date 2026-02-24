@@ -23,6 +23,22 @@ make this same consistent debugging experience available on Linux.
 For more information, see Dave Pacheco’s article [“illumos tools for observing
 processes”](https://www.davepacheco.net/blog/2012/illumos-tools-for-observing-processes/).
 
+## Prerequisites
+
+`ptools` requires `libdw` (from elfutils) and `libsystemd` at run time.
+
+**Ubuntu/Debian:**
+
+```shell
+sudo apt-get install libdw1 libsystemd0
+```
+
+**Fedora:**
+
+```shell
+sudo dnf install elfutils-libs systemd-libs
+```
+
 ## Getting Started
 
 Install from [crates.io](https://crates.io/crates/ptools):

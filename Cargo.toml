@@ -38,6 +38,7 @@ strip = "symbols" # Strips symbol table to reduce size, while still leaving enou
 maintainer = "Basil Crow"
 section = "debug"
 copyright = "2026 Basil Crow"
+depends = "$auto"
 
 extended-description = """\
 A collection of utilities for inspecting the state of processes, modeled \
@@ -75,6 +76,7 @@ assets = [
 [package.metadata.generate-rpm]
 vendor = "Basil Crow"
 packager = "Basil Crow"
+requires = { elfutils-libs = "*", systemd-libs = "*" }
 assets = [
   { source = "target/release/pargs", dest = "/usr/bin/pargs", mode = "755" },
   { source = "target/release/pauxv", dest = "/usr/bin/pauxv", mode = "755" },
