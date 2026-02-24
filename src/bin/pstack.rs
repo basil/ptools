@@ -121,7 +121,7 @@ fn print_usage() {
     eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -q, --quiet      Suppress demangling, module, and source info");
+    eprintln!("  -q, --quiet      Suppress demangling, module, source, and argument info");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
