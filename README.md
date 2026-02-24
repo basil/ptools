@@ -194,7 +194,7 @@ project. Tools provided by [procps-ng](https://gitlab.com/procps-ng/procps),
 are not reimplemented here, as these packages are widely available on Linux
 distributions and already provide equivalent functionality. There are a number
 of commands available on Solaris/illumos which have not
-been implemented here yet, perhaps most notably `pstack(1)`.
+been implemented here yet.
 
 | Command                                                       | Description                                           | Status                       |
 | ------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------- |
@@ -218,7 +218,7 @@ been implemented here yet, perhaps most notably `pstack(1)`.
 | [`prun(1)`](https://illumos.org/man/1/prun)                   | Set stopped processes running with `SIGCONT`          | ✅ Implemented               |
 | [`psecflags(1)`](https://illumos.org/man/1/psecflags)         | Print or modify process security flags                | 🔲 Not yet implemented       |
 | [`psig(1)`](https://illumos.org/man/1/psig)                   | Print process signal actions                          | ✅ Implemented               |
-| [`pstack(1)`](https://illumos.org/man/1/pstack)               | Print process call stack                              | 🔲 Not yet implemented       |
+| [`pstack(1)`](https://illumos.org/man/1/pstack)               | Print process call stack                              | ✅ Implemented               |
 | [`pstop(1)`](https://illumos.org/man/1/pstop)                 | Stop processes with `SIGSTOP`                         | ✅ Implemented               |
 | [`ptime(1)`](https://illumos.org/man/1/ptime)                 | Time a process using microstate accounting            | 🔲 Not yet implemented       |
 | [`ptree(1)`](https://illumos.org/man/1/ptree)                 | Print process trees                                   | ✅ Implemented               |

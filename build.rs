@@ -554,5 +554,39 @@ $ plgrp -a 0-2 101398
         out_dir,
     );
 
+    render_man_page(
+        &ManPage {
+            name: "pstack",
+            about: "print stack traces of a running process",
+            description: "Print the stack backtraces of all threads in each running process. \
+                          It attaches to the target using the ptrace(2) debugging interface. \
+                          The first line of output displays the PID and binary name as reported by \
+                          the kernel. For each thread, the thread ID and name is displayed followed \
+                          by its backtrace. Each frame shows an address and a symbol with offset.",
+            synopsis: "[pid[/tid]]...",
+            options: &[],
+            operands: &[(
+                    "pid[/tid]",
+                    "Process ID, optionally followed by a slash and a thread ID \
+                     to display a single thread.",
+            )],
+            examples: &[],
+            exit_status: DEFAULT_EXIT_STATUS,
+            files: DEFAULT_FILES,
+            notes: "pstack(1) only works on processes executing ELF binaries. \
+                    A process cannot be traced if another debugger is already attached to it. \
+                    The ptrace(2) interface used to obtain live process information may cause \
+                    some syscalls in the target to return EINTR on detach.",
+            see_also: "ptrace(2), proc(5)",
+            warnings: "pstack stops the entire target process while inspecting it, even if \
+                       invoked against an individual thread. The process can do nothing while \
+                       stopped. Stopping a heavily loaded process in a production environment, \
+                       even briefly, can cause severe bottlenecks or hangs, making the process \
+                       unavailable to users. Some applications, such as database servers, may \
+                       terminate abnormally. Use caution when tracing production processes.",
+        },
+        out_dir,
+    );
+
     println!("cargo:rerun-if-changed=build.rs");
 }

@@ -31,6 +31,10 @@
   - changed-files:
       - any-glob-to-any-file: src/bin/psig.rs
 
+"Component: pstack":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/pstack.rs
+
 "Component: pstop":
   - changed-files:
       - any-glob-to-any-file: src/bin/pstop.rs
