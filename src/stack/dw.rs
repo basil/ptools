@@ -571,6 +571,10 @@ fn process_frame(
     read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
     frames: &mut Vec<Frame>,
 ) {
+    if options.max_frames > 0 && frames.len() >= options.max_frames {
+        return;
+    }
+
     // Try inline expansion first
     if options.inlines {
         if let Some(m) = module {

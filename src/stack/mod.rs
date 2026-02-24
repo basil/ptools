@@ -275,6 +275,7 @@ pub struct TraceOptions {
     args: bool,
     ptrace_attach: bool,
     tid: Option<u32>,
+    max_frames: usize,
 }
 
 impl Default for TraceOptions {
@@ -290,6 +291,7 @@ impl Default for TraceOptions {
             args: false,
             ptrace_attach: true,
             tid: None,
+            max_frames: 0,
         }
     }
 }
@@ -387,6 +389,18 @@ impl TraceOptions {
     /// Defaults to `None` (trace all threads).
     pub fn tid(&mut self, tid: u32) -> &mut TraceOptions {
         self.tid = Some(tid);
+        self
+    }
+
+    /// Sets the maximum number of frames to collect per thread.
+    ///
+    /// When set to a non-zero value, the backend stops symbolizing frames once
+    /// the limit is reached, avoiding expensive DWARF lookups for frames that
+    /// would be discarded.
+    ///
+    /// Defaults to `0` (unlimited).
+    pub fn max_frames(&mut self, max_frames: usize) -> &mut TraceOptions {
+        self.max_frames = max_frames;
         self
     }
 

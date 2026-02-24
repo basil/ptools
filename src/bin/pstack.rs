@@ -53,11 +53,7 @@ fn print_thread(
     if show_header {
         println!("{}:\t{}", thread.id(), thread.name().unwrap_or("<unknown>"));
     }
-    for (i, frame) in thread.frames().iter().enumerate() {
-        if max_frames > 0 && i >= max_frames {
-            eprintln!("maximum number of frames exceeded (use -n 0 for unlimited)");
-            break;
-        }
+    for frame in thread.frames() {
         print!("{:#018x}", frame.ip());
 
         if let Some(symbol) = frame.symbol() {
@@ -96,6 +92,9 @@ fn print_thread(
         }
         println!();
     }
+    if max_frames > 0 && thread.frames().len() >= max_frames {
+        eprintln!("maximum number of frames exceeded (use -n 0 for unlimited)");
+    }
     std::io::stdout().flush().ok();
 }
 
@@ -113,7 +112,8 @@ fn print_stack(
         .module(args.module)
         .source(args.verbose)
         .inlines(args.verbose)
-        .args(args.args);
+        .args(args.args)
+        .max_frames(args.max_frames);
 
     let first_thread = Cell::new(true);
     if is_core {
