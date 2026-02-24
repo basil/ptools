@@ -26,7 +26,7 @@ use std::collections::BTreeSet;
 use std::error;
 use std::fmt;
 use std::fs::{self, File};
-use std::io::{self, Read};
+use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::ptr;
 use std::result;
@@ -426,7 +426,25 @@ impl TraceOptions {
         H: FnOnce(u32),
         F: FnMut(Thread),
     {
-        let fd = File::open(path).map_err(|e| Error(ErrorInner::Io(e)))?;
+        let mut fd = File::open(path).map_err(|e| Error(ErrorInner::Io(e)))?;
+        let mut magic = [0u8; 4];
+        let is_zst = fd.read_exact(&mut magic).is_ok() && magic == [0x28, 0xB5, 0x2F, 0xFD];
+        fd.seek(SeekFrom::Start(0))
+            .map_err(|e| Error(ErrorInner::Io(e)))?;
+        let fd = if is_zst {
+            let mut decoder = zstd::Decoder::new(fd).map_err(|e| Error(ErrorInner::Io(e)))?;
+            let name = c"pstack-core";
+            let memfd = nix::sys::memfd::memfd_create(name, nix::sys::memfd::MFdFlags::empty())
+                .map_err(|e| Error(ErrorInner::Io(io::Error::from(e))))?;
+            let mut memfile = File::from(memfd);
+            io::copy(&mut decoder, &mut memfile).map_err(|e| Error(ErrorInner::Io(e)))?;
+            memfile
+                .seek(SeekFrom::Start(0))
+                .map_err(|e| Error(ErrorInner::Io(e)))?;
+            memfile
+        } else {
+            fd
+        };
         let mut state = imp::State::new_core(fd).map_err(|e| Error(ErrorInner::Unwind(e)))?;
         let pid = state.pid();
         header(pid);
