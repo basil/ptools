@@ -109,14 +109,16 @@ $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
   target/debug/pargs --object target/debug/pauxv --object target/debug/pcred \
   --object target/debug/penv --object target/debug/pfiles \
   --object target/debug/plgrp --object target/debug/prun \
-  --object target/debug/psig --object target/debug/pstop \
+  --object target/debug/psig --object target/debug/pstack \
+  --object target/debug/pstop \
   --object target/debug/ptree --object target/debug/pwait
 $ llvm-cov export --format=lcov \
   --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/pauxv --object target/debug/pcred \
   --object target/debug/penv --object target/debug/pfiles \
   --object target/debug/plgrp --object target/debug/prun \
-  --object target/debug/psig --object target/debug/pstop \
+  --object target/debug/psig --object target/debug/pstack \
+  --object target/debug/pstop \
   --object target/debug/ptree --object target/debug/pwait > target/coverage/lcov.info
 ```
 
