@@ -59,6 +59,10 @@ pub struct FindElf(
 impl FindElf {
     /// A standard callback used with `Register::linux_proc`.
     pub const LINUX_PROC: FindElf = FindElf(crate::dw_sys::dwfl_linux_proc_find_elf);
+
+    /// A callback that caches Elf lookups via a `ProcessTracker`.
+    pub const TRACKER_LINUX_PROC: FindElf =
+        FindElf(crate::dw_sys::dwflst_tracker_linux_proc_find_elf);
 }
 
 /// The callback responsible for locating the debuginfo of a process.

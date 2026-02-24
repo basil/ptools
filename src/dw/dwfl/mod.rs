@@ -24,6 +24,7 @@ pub use self::frame::*;
 pub use self::handle::*;
 pub use self::module::*;
 pub use self::thread::*;
+pub use self::tracker::*;
 
 mod callbacks;
 mod error;
@@ -31,6 +32,7 @@ mod frame;
 mod handle;
 mod module;
 mod thread;
+mod tracker;
 
 fn cvt(r: c_int) -> Result<(), Error> {
     if r == 0 {

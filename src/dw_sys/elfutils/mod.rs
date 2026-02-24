@@ -17,8 +17,10 @@
 pub use self::gelf::*;
 pub use self::libdw::*;
 pub use self::libdwfl::*;
+pub use self::libdwfl_stacktrace::*;
 
 mod gelf;
 mod libdw;
 mod libdwelf;
 mod libdwfl;
+mod libdwfl_stacktrace;
