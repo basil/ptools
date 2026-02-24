@@ -34,7 +34,13 @@ fn format_source(src: &SourceLocation) -> String {
     }
 }
 
-fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize, first: &Cell<bool>) {
+fn print_thread(
+    thread: &Thread,
+    tid_filter: Option<u64>,
+    max_frames: usize,
+    show_header: bool,
+    first: &Cell<bool>,
+) {
     if let Some(tid) = tid_filter {
         if thread.id() as u64 != tid {
             return;
@@ -44,7 +50,9 @@ fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize, fir
         println!();
     }
     first.set(false);
-    println!("{}:\t{}", thread.id(), thread.name().unwrap_or("<unknown>"));
+    if show_header {
+        println!("{}:\t{}", thread.id(), thread.name().unwrap_or("<unknown>"));
+    }
     for (i, frame) in thread.frames().iter().enumerate() {
         if max_frames > 0 && i >= max_frames {
             eprintln!("maximum number of frames exceeded (use -n 0 for unlimited)");
@@ -117,13 +125,22 @@ fn print_stack(
                 println!();
                 first_thread.set(true);
             },
-            |thread| print_thread(&thread, tid_filter, args.max_frames, &first_thread),
+            |thread| print_thread(&thread, tid_filter, args.max_frames, true, &first_thread),
         )?;
     } else {
+        let multithread = tid_filter.is_none() && handle.thread_count().is_ok_and(|n| n > 1);
         ptools::print_proc_summary_from(handle);
-        println!();
+        if multithread {
+            println!();
+        }
         opts.trace_each(handle, |thread| {
-            print_thread(&thread, tid_filter, args.max_frames, &first_thread);
+            print_thread(
+                &thread,
+                tid_filter,
+                args.max_frames,
+                multithread,
+                &first_thread,
+            );
         })?;
     }
 
