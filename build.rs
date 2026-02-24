@@ -581,10 +581,11 @@ $ plgrp -a 0-2 101398
                           disk, since pstack(1) reads symbols from the on-disk ELF image. \
                           This commonly occurs when a binary or library is reinstalled while \
                           a process still uses the older version.",
-            synopsis: "[-r] [pid[/tid] | core]...",
+            synopsis: "[-q] [pid[/tid] | core]...",
             options: &[(
-                "-r, --raw",
-                "Show raw function symbol names. Do not attempt to demangle C++ names.",
+                "-q, --quiet",
+                "Suppress demangling, module path, source location, and inline frame \
+                 information. Only addresses and raw symbol names with offsets are shown.",
             )],
             operands: &[
                 (

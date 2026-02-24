@@ -16,6 +16,7 @@
 
 #![allow(bad_style)]
 
+pub use self::dwarf::*;
 pub use self::elfutils::*;
 pub use self::libelf::*;
 
