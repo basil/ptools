@@ -108,10 +108,11 @@ fn print_stack(
             path,
             handle,
             |pid| {
+                print!("{pid}:\t");
                 if let Some(h) = handle {
-                    ptools::print_proc_summary_from(h);
+                    ptools::print_cmd_summary_from(h);
                 } else {
-                    print!("{pid}:");
+                    println!();
                 }
                 println!();
             },
@@ -247,18 +248,8 @@ fn main() {
                 }
             }
             Err(e) => {
-                // If it looks like a file path, try as a bare core dump
-                // (no systemd-coredump metadata available).
-                let path = Path::new(operand.as_str());
-                if !operand.bytes().all(|b| b.is_ascii_digit()) && path.exists() {
-                    if let Err(e) = print_stack(None, None, Some(path), &args) {
-                        eprintln!("pstack: {}: {e}", path.display());
-                        error = true;
-                    }
-                } else {
-                    eprintln!("pstack: {e}");
-                    error = true;
-                }
+                eprintln!("pstack: {e}");
+                error = true;
             }
         }
     }

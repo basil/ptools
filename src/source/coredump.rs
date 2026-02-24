@@ -185,15 +185,10 @@ impl CoredumpSource {
             fields.entry(key).or_insert(value);
         }
 
-        let pid = extract_pid(&fields).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "{}: could not determine PID from xattrs or journal",
-                    path.display()
-                ),
-            )
-        })?;
+        // No PID metadata from xattrs or journal is OK: the stack-tracing
+        // layer extracts the real PID from ELF core notes; other tools will
+        // see individual field errors.
+        let pid = extract_pid(&fields).unwrap_or_default();
         Ok(CoredumpSource {
             pid,
             fields,
