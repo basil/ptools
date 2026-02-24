@@ -17,6 +17,7 @@
 use foreign_types::{foreign_type, ForeignType, ForeignTypeRef};
 use libc::{c_int, c_void, pid_t};
 use std::any::Any;
+use std::borrow::Cow;
 use std::ffi::CStr;
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
@@ -48,10 +49,10 @@ impl<'a> Dwfl<'a> {
 
 impl<'a> DwflRef<'a> {
     /// Returns a string describing the version of libdw used.
-    pub fn version(&self) -> &str {
+    pub fn version(&self) -> Cow<'_, str> {
         unsafe {
             let p = crate::dw_sys::dwfl_version(self.as_ptr());
-            CStr::from_ptr(p).to_str().unwrap()
+            CStr::from_ptr(p).to_string_lossy()
         }
     }
 

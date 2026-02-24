@@ -15,6 +15,7 @@
 //
 
 use libc::c_int;
+use std::borrow::Cow;
 use std::error;
 use std::ffi::CStr;
 use std::fmt;
@@ -33,7 +34,7 @@ impl fmt::Debug for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self.as_str(), fmt)
+        fmt::Display::fmt(&self.as_str(), fmt)
     }
 }
 
@@ -44,13 +45,13 @@ impl Error {
         unsafe { Error(crate::dw_sys::dwfl_errno()) }
     }
 
-    fn as_str(&self) -> &str {
+    fn as_str(&self) -> Cow<'_, str> {
         unsafe {
             let s = crate::dw_sys::dwfl_errmsg(self.0);
             if s.is_null() {
-                "unknown error"
+                "unknown error".into()
             } else {
-                CStr::from_ptr(s).to_str().unwrap()
+                CStr::from_ptr(s).to_string_lossy()
             }
         }
     }
