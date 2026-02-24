@@ -112,6 +112,36 @@ impl Thread {
     }
 }
 
+/// A function argument with its name and formatted value.
+#[derive(Debug, Clone)]
+pub struct Argument {
+    name: String,
+    value: String,
+}
+
+impl Argument {
+    /// Returns the argument name.
+    #[inline]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the formatted argument value.
+    #[inline]
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
+/// Argument information for a stack frame.
+#[derive(Debug, Clone)]
+pub enum FrameArgs {
+    /// No DWARF debug info available for this frame.
+    NoDebugInfo,
+    /// Debug info available; contains resolved arguments (may be empty).
+    Args(Vec<Argument>),
+}
+
 /// Information about a stack frame of a remote process.
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -121,6 +151,7 @@ pub struct Frame {
     symbol: Option<Symbol>,
     module: Option<String>,
     source: Option<SourceLocation>,
+    args: Option<FrameArgs>,
 }
 
 impl Frame {
@@ -158,6 +189,12 @@ impl Frame {
     #[inline]
     pub fn source(&self) -> Option<&SourceLocation> {
         self.source.as_ref()
+    }
+
+    /// Returns argument information for this frame, if args collection was enabled.
+    #[inline]
+    pub fn args(&self) -> Option<&FrameArgs> {
+        self.args.as_ref()
     }
 }
 
@@ -236,6 +273,7 @@ pub struct TraceOptions {
     module: bool,
     source: bool,
     inlines: bool,
+    args: bool,
     ptrace_attach: bool,
 }
 
@@ -249,6 +287,7 @@ impl Default for TraceOptions {
             module: false,
             source: false,
             inlines: false,
+            args: false,
             ptrace_attach: true,
         }
     }
@@ -317,6 +356,14 @@ impl TraceOptions {
     /// for each level of inlining. Requires debug information. Defaults to `false`.
     pub fn inlines(&mut self, inlines: bool) -> &mut TraceOptions {
         self.inlines = inlines;
+        self
+    }
+
+    /// If set, function argument names and values will be collected from DWARF debug info.
+    ///
+    /// Requires debug information. Defaults to `false`.
+    pub fn args(&mut self, args: bool) -> &mut TraceOptions {
+        self.args = args;
         self
     }
 

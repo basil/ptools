@@ -584,8 +584,9 @@ $ plgrp -a 0-2 101398
             synopsis: "[-q] [pid[/tid] | core]...",
             options: &[(
                 "-q, --quiet",
-                "Suppress demangling, module path, source location, and inline frame \
-                 information. Only addresses and raw symbol names with offsets are shown.",
+                "Suppress demangling, module path, source location, inline frame, \
+                 and argument information. Only addresses and raw symbol names with \
+                 offsets are shown.",
             )],
             operands: &[
                 (
