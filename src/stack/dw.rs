@@ -986,11 +986,12 @@ impl State {
         (pid, elf_ptr)
     }
 
-    pub fn trace_threads(
+    pub fn trace_threads_each(
         &mut self,
         options: &TraceOptions,
         thread_name: &dyn Fn(u32) -> Option<String>,
-    ) -> Vec<super::Thread> {
+        each: &mut dyn FnMut(super::Thread),
+    ) {
         let (pid, elf_ptr) = self.mem_reader_params();
         let read_mem = move |addr: u64, buf: &mut [u8]| -> bool {
             if let Some(elf) = elf_ptr {
@@ -999,7 +1000,6 @@ impl State {
                 read_process_memory(pid, addr, buf)
             }
         };
-        let mut threads = Vec::new();
         let result = self.dwfl.threads(|thread_ref| {
             let tid = thread_ref.tid();
             let mut frames = Vec::new();
@@ -1033,7 +1033,7 @@ impl State {
             } else {
                 None
             };
-            threads.push(super::Thread {
+            each(super::Thread {
                 id: tid,
                 name,
                 frames,
@@ -1043,7 +1043,6 @@ impl State {
         if let Err(e) = result {
             eprintln!("error enumerating threads: {}", e);
         }
-        threads
     }
 }
 

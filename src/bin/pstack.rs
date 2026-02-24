@@ -14,10 +14,11 @@
 //   limitations under the License.
 //
 
+use std::io::Write;
 use std::path::Path;
 use std::process::exit;
 
-use ptools::stack::{FrameArgs, SourceLocation};
+use ptools::stack::{FrameArgs, SourceLocation, Thread};
 use ptools::ProcHandle;
 
 fn format_source(src: &SourceLocation) -> String {
@@ -30,6 +31,56 @@ fn format_source(src: &SourceLocation) -> String {
     } else {
         basename.into_owned()
     }
+}
+
+fn print_thread(thread: &Thread, tid_filter: Option<u64>) {
+    if let Some(tid) = tid_filter {
+        if thread.id() as u64 != tid {
+            return;
+        }
+    }
+    println!("{}: {}", thread.id(), thread.name().unwrap_or("<unknown>"));
+    for frame in thread.frames() {
+        print!("{:#018x}", frame.ip());
+
+        if let Some(symbol) = frame.symbol() {
+            print!(" in {}", symbol.name());
+
+            // Print arguments inside parentheses
+            match frame.args() {
+                Some(FrameArgs::Args(args)) => {
+                    print!("(");
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 {
+                            print!(", ");
+                        }
+                        print!("{}={}", arg.name(), arg.value());
+                    }
+                    print!(")");
+                }
+                Some(FrameArgs::NoDebugInfo) => print!("()"),
+                None => {}
+            }
+
+            if frame.is_inline() {
+                print!(" [inlined]");
+            } else {
+                print!("+{:#x}", symbol.offset());
+            }
+        } else {
+            print!(" - ???");
+        }
+
+        if let Some(module) = frame.module() {
+            print!(" in {module}");
+        }
+        if let Some(src) = frame.source() {
+            print!(" at {}", format_source(src));
+        }
+        println!();
+    }
+    println!();
+    std::io::stdout().flush().ok();
 }
 
 fn print_stack(
@@ -47,65 +98,28 @@ fn print_stack(
         .source(!quiet)
         .inlines(!quiet)
         .args(!quiet);
-    let process = if let Some(path) = core_path {
-        opts.trace_core(path, handle)?
-    } else {
-        opts.trace(handle.unwrap().pid() as u32)?
-    };
 
-    if let Some(h) = handle {
-        ptools::print_proc_summary_from(h);
-    } else {
-        print!("{}:", process.id());
-    }
-    println!();
-    for thread in process.threads() {
-        if let Some(tid) = tid_filter {
-            if thread.id() as u64 != tid {
-                continue;
-            }
-        }
-        println!("{}: {}", thread.id(), thread.name().unwrap_or("<unknown>"));
-        for frame in thread.frames() {
-            print!("{:#018x}", frame.ip());
-
-            if let Some(symbol) = frame.symbol() {
-                print!(" in {}", symbol.name());
-
-                // Print arguments inside parentheses
-                match frame.args() {
-                    Some(FrameArgs::Args(args)) => {
-                        print!("(");
-                        for (i, arg) in args.iter().enumerate() {
-                            if i > 0 {
-                                print!(", ");
-                            }
-                            print!("{}={}", arg.name(), arg.value());
-                        }
-                        print!(")");
-                    }
-                    Some(FrameArgs::NoDebugInfo) => print!("()"),
-                    None => {}
-                }
-
-                if frame.is_inline() {
-                    print!(" [inlined]");
+    if let Some(path) = core_path {
+        opts.trace_core_each(
+            path,
+            handle,
+            |pid| {
+                if let Some(h) = handle {
+                    ptools::print_proc_summary_from(h);
                 } else {
-                    print!("+{:#x}", symbol.offset());
+                    print!("{pid}:");
                 }
-            } else {
-                print!(" - ???");
-            }
-
-            if let Some(module) = frame.module() {
-                print!(" in {module}");
-            }
-            if let Some(src) = frame.source() {
-                print!(" at {}", format_source(src));
-            }
-            println!();
-        }
+                println!();
+            },
+            |thread| print_thread(&thread, tid_filter),
+        )?;
+    } else {
+        let h = handle.unwrap();
+        ptools::print_proc_summary_from(h);
         println!();
+        opts.trace_each(h.pid() as u32, |thread| {
+            print_thread(&thread, tid_filter);
+        })?;
     }
 
     Ok(())

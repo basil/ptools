@@ -380,15 +380,25 @@ impl TraceOptions {
 
     /// Traces the threads of the specified process.
     pub fn trace(&self, pid: u32) -> Result<Process> {
+        let mut threads = Vec::new();
+        self.trace_each(pid, |thread| threads.push(thread))?;
+        Ok(Process { id: pid, threads })
+    }
+
+    /// Traces the threads of the specified process, calling `each` per thread.
+    pub fn trace_each<F>(&self, pid: u32, mut each: F) -> Result<()>
+    where
+        F: FnMut(Thread),
+    {
         let mut state = imp::State::new(pid).map_err(|e| Error(ErrorInner::Unwind(e)))?;
 
-        let threads = if self.snapshot {
-            self.trace_snapshot(pid, &mut state)?
+        if self.snapshot {
+            self.trace_snapshot_each(pid, &mut state, &mut each)?;
         } else {
-            self.trace_rolling(pid, &mut state)?
-        };
+            self.trace_rolling_each(pid, &mut state, &mut each)?;
+        }
 
-        Ok(Process { id: pid, threads })
+        Ok(())
     }
 
     /// Traces the threads captured in a core dump file.
@@ -396,32 +406,59 @@ impl TraceOptions {
     /// If a `ProcHandle` is available, it is used to resolve the main
     /// thread's name via systemd-coredump metadata (`COREDUMP_COMM`).
     pub fn trace_core(&self, path: &Path, handle: Option<&crate::ProcHandle>) -> Result<Process> {
-        let fd = File::open(path).map_err(|e| Error(ErrorInner::Io(e)))?;
-        let mut state = imp::State::new_core(fd).map_err(|e| Error(ErrorInner::Unwind(e)))?;
-        let pid = state.pid();
-        let comm = handle.and_then(|h| h.comm().ok());
-        let threads = state.trace_threads(self, &|tid| {
-            if tid == pid {
-                comm.clone()
-            } else {
-                None
-            }
-        });
+        let mut pid = 0;
+        let mut threads = Vec::new();
+        self.trace_core_each(path, handle, |p| pid = p, |thread| threads.push(thread))?;
         Ok(Process { id: pid, threads })
     }
 
-    fn trace_snapshot(&self, pid: u32, state: &mut imp::State) -> Result<Vec<Thread>> {
-        let threads = snapshot_threads(pid, self.ptrace_attach)?
-            .iter()
-            .map(|t| t.info(pid, state, self))
-            .collect();
-
-        Ok(threads)
+    /// Traces the threads captured in a core dump file, calling `each` per thread.
+    ///
+    /// `header` is called with the core pid before any threads are streamed.
+    pub fn trace_core_each<H, F>(
+        &self,
+        path: &Path,
+        handle: Option<&crate::ProcHandle>,
+        header: H,
+        mut each: F,
+    ) -> Result<()>
+    where
+        H: FnOnce(u32),
+        F: FnMut(Thread),
+    {
+        let fd = File::open(path).map_err(|e| Error(ErrorInner::Io(e)))?;
+        let mut state = imp::State::new_core(fd).map_err(|e| Error(ErrorInner::Unwind(e)))?;
+        let pid = state.pid();
+        header(pid);
+        let comm = handle.and_then(|h| h.comm().ok());
+        state.trace_threads_each(
+            self,
+            &|tid| {
+                if tid == pid {
+                    comm.clone()
+                } else {
+                    None
+                }
+            },
+            &mut each,
+        );
+        Ok(())
     }
 
-    fn trace_rolling(&self, pid: u32, state: &mut imp::State) -> Result<Vec<Thread>> {
-        let mut threads = vec![];
+    fn trace_snapshot_each<F>(&self, pid: u32, state: &mut imp::State, each: &mut F) -> Result<()>
+    where
+        F: FnMut(Thread),
+    {
+        for t in snapshot_threads(pid, self.ptrace_attach)?.iter() {
+            each(t.info(pid, state, self));
+        }
+        Ok(())
+    }
 
+    fn trace_rolling_each<F>(&self, pid: u32, state: &mut imp::State, each: &mut F) -> Result<()>
+    where
+        F: FnMut(Thread),
+    {
         each_thread(pid, |tid| {
             let thread = if self.ptrace_attach {
                 TracedThread::attach(tid)
@@ -437,12 +474,9 @@ impl TraceOptions {
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
 
-            let trace = thread.info(pid, state, self);
-            threads.push(trace);
+            each(thread.info(pid, state, self));
             Ok(())
-        })?;
-
-        Ok(threads)
+        })
     }
 }
 
