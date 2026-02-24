@@ -261,6 +261,41 @@ SIG32     default
 SIG33     default
 ```
 
+## `ptrace(2)` Permissions
+
+`pstack(1)` attaches to target processes using the `ptrace(2)` system call.
+Some distributions, notably Ubuntu, ship with the Yama Linux Security Module
+enabled and `kernel.yama.ptrace_scope` set to `1` by default. This restricts
+`ptrace(2)` to parent-child relationships only, meaning `pstack` cannot attach
+to arbitrary same-user processes unless it is run as root.
+
+You can check the current setting with:
+
+```shell
+cat /proc/sys/kernel/yama/ptrace_scope
+```
+
+The values are:
+
+| Value | Meaning                                                                    |
+| ----- | -------------------------------------------------------------------------- |
+| 0     | Classic `ptrace(2)` permissions (any process can trace same-uid processes) |
+| 1     | Restricted to parent-child relationships only                              |
+| 2     | Admin-only (`CAP_SYS_PTRACE` required)                                     |
+| 3     | No `ptrace(2)` allowed at all                                              |
+
+To allow `pstack(1)` to trace same-user processes without root, set the classic
+behavior:
+
+```shell
+sudo sysctl kernel.yama.ptrace_scope=0
+```
+
+Alternatively, simply run `pstack(1)` with `sudo(1)`.
+
+Fedora ships with `ptrace_scope` set to `0` by default, so `pstack(1)` works
+against same-user processes without any additional configuration.
+
 ## Core Dump Support
 
 Core dump support is available for `pargs(1)`, `pauxv(1)`, `pcred(1)`,

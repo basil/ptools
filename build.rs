@@ -614,7 +614,14 @@ $ plgrp -a 0-2 101398
             notes: "pstack(1) only works on processes executing ELF binaries. \
                     A process cannot be traced if another debugger is already attached to it. \
                     The ptrace(2) interface used to obtain live process information may cause \
-                    some syscalls in the target to return EINTR on detach.",
+                    some syscalls in the target to return EINTR on detach.\n\n\
+                    On systems where the Yama Linux Security Module is enabled with \
+                    kernel.yama.ptrace_scope set to 1 or higher, ptrace(2) is restricted and \
+                    pstack(1) cannot attach to arbitrary same-user processes. In this case, \
+                    pstack(1) must be run as root or with the CAP_SYS_PTRACE capability. \
+                    Alternatively, the restriction can be relaxed by setting \
+                    kernel.yama.ptrace_scope to 0 (classic ptrace permissions). See the \
+                    Yama documentation in the kernel source for details.",
             see_also: "ptrace(2), proc(5)",
             warnings: "pstack(1) stops the entire target process while inspecting it, even if \
                        invoked against an individual thread. The process can do nothing while \
