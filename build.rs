@@ -581,12 +581,20 @@ $ plgrp -a 0-2 101398
                           disk, since pstack(1) reads symbols from the on-disk ELF image. \
                           This commonly occurs when a binary or library is reinstalled while \
                           a process still uses the older version.",
-            synopsis: "[-d] [pid[/tid] | core]...",
-            options: &[(
-                "-d, --debug",
-                "Show source locations, inline frames, and function arguments. \
-                 By default, only demangled symbol names with module paths are shown.",
-            )],
+            synopsis: "[-mv] [-n count] [pid[/tid] | core]...",
+            options: &[
+                ("-m, --module", "Show module file paths."),
+                (
+                    "-n count",
+                    "For each thread, print at most count frames in the backtrace. \
+                     The default is 64. Use 0 for unlimited.",
+                ),
+                (
+                    "-v, --verbose",
+                    "Show source locations, inline frames, and function arguments. \
+                     By default, only demangled symbol names are shown.",
+                ),
+            ],
             operands: &[
                 (
                     "pid[/tid]",
@@ -608,7 +616,12 @@ $ plgrp -a 0-2 101398
                        stopped. Stopping a heavily loaded process in a production environment, \
                        even briefly, can cause severe bottlenecks or hangs, making the process \
                        unavailable to users. Some applications, such as database servers, may \
-                       terminate abnormally. Use caution when tracing production processes.",
+                       terminate abnormally. Use caution when tracing production processes.\n\n\
+                       When the -v (verbose) option is used, DWARF debug information is used \
+                       to find source code information (file and line number), values of \
+                       arguments passed to functions, and inlined function frames. If DWARF \
+                       debug information is not installed, this information may not be available. \
+                       This option may slow down stack tracing.",
         },
         out_dir,
     );

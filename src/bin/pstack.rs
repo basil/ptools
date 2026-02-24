@@ -33,14 +33,18 @@ fn format_source(src: &SourceLocation) -> String {
     }
 }
 
-fn print_thread(thread: &Thread, tid_filter: Option<u64>) {
+fn print_thread(thread: &Thread, tid_filter: Option<u64>, max_frames: usize) {
     if let Some(tid) = tid_filter {
         if thread.id() as u64 != tid {
             return;
         }
     }
     println!("{}:\t{}", thread.id(), thread.name().unwrap_or("<unknown>"));
-    for frame in thread.frames() {
+    for (i, frame) in thread.frames().iter().enumerate() {
+        if max_frames > 0 && i >= max_frames {
+            eprintln!("maximum number of frames exceeded (use -n 0 for unlimited)");
+            break;
+        }
         print!("{:#018x}", frame.ip());
 
         if let Some(symbol) = frame.symbol() {
@@ -111,35 +115,39 @@ fn print_stack(
                 }
                 println!();
             },
-            |thread| print_thread(&thread, tid_filter),
+            |thread| print_thread(&thread, tid_filter, args.max_frames),
         )?;
     } else {
         let h = handle.unwrap();
         ptools::print_proc_summary_from(h);
         println!();
         opts.trace_each(h.pid() as u32, |thread| {
-            print_thread(&thread, tid_filter);
+            print_thread(&thread, tid_filter, args.max_frames);
         })?;
     }
 
     Ok(())
 }
 
+const DEFAULT_MAX_FRAMES: usize = 64;
+
 struct Args {
     verbose: bool,
     module: bool,
+    max_frames: usize,
     operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [-mv] [pid[/thread] | core]...");
+    eprintln!("Usage: pstack [-mv] [-n count] [pid[/thread] | core]...");
     eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -m, --module     Show module file paths");
-    eprintln!("  -v, --verbose    Show source locations, inline frames, and arguments");
-    eprintln!("  -h, --help       Print help");
-    eprintln!("  -V, --version    Print version");
+    eprintln!("  -m, --module         Show module file paths");
+    eprintln!("  -n N                 Print at most N frames per thread (0 for unlimited)");
+    eprintln!("  -v, --verbose        Show source locations, inline frames, and arguments");
+    eprintln!("  -h, --help           Print help");
+    eprintln!("  -V, --version        Print version");
 }
 
 fn parse_args() -> Args {
@@ -148,6 +156,7 @@ fn parse_args() -> Args {
     let mut args = Args {
         module: false,
         verbose: false,
+        max_frames: DEFAULT_MAX_FRAMES,
         operands: Vec::new(),
     };
     let mut parser = lexopt::Parser::from_env();
@@ -159,6 +168,20 @@ fn parse_args() -> Args {
         match arg {
             Short('m') | Long("module") => {
                 args.module = true;
+            }
+            Short('n') => {
+                let val: String = parser
+                    .value()
+                    .unwrap_or_else(|e| {
+                        eprintln!("pstack: {e}");
+                        exit(2);
+                    })
+                    .to_string_lossy()
+                    .into_owned();
+                args.max_frames = val.parse().unwrap_or_else(|e| {
+                    eprintln!("pstack: -n: {e}");
+                    exit(2);
+                });
             }
             Short('v') | Long("verbose") => {
                 args.verbose = true;
