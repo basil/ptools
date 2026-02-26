@@ -304,9 +304,12 @@ fn run_command(command: String, argv: Vec<CString>) {
         let ss = handle.schedstat().ok();
 
         // Reap with wait4 to get status + rusage atomically.
-        // WNOHANG so we can loop back if the child was merely stopped.
+        // Use WNOHANG so we can loop back if this SIGCHLD was for a
+        // non-terminal state change rather than process exit.
         match wait4(child_pid, libc::WNOHANG) {
-            Ok((WaitStatus::StillAlive, _)) => continue,
+            Ok((WaitStatus::StillAlive, _))
+            | Ok((WaitStatus::Stopped(..), _))
+            | Ok((WaitStatus::Continued(..), _)) => continue,
             Ok((s, ru)) => break (s, ss, ru, end),
             Err(e) => {
                 eprintln!("ptime: wait4: {e}");

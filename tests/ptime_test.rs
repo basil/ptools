@@ -156,6 +156,29 @@ fn ptime_run_nonexistent_command() {
 }
 
 #[test]
+fn ptime_run_ignores_stop_continue_events() {
+    let output = Command::new(find_exec("ptime"))
+        .args([
+            "sh",
+            "-c",
+            "pid=$$; (sleep 0.05; kill -CONT \"$pid\") & kill -STOP \"$pid\"; wait; exit 7",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run ptime");
+
+    assert_eq!(
+        output.status.code(),
+        Some(7),
+        "ptime should return the command exit code after stop/continue events, got {:?}",
+        output.status
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_timing_lines(&stderr);
+}
+
+#[test]
 fn ptime_snapshot_reports_timing() {
     let output = common::run_ptool(
         "ptime",
