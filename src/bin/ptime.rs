@@ -288,11 +288,6 @@ fn run_command(command: String, argv: Vec<CString>) {
         process::exit(1);
     });
 
-    let start = clock_gettime(ClockId::CLOCK_MONOTONIC).unwrap_or_else(|e| {
-        eprintln!("ptime: clock_gettime: {e}");
-        process::exit(1);
-    });
-
     // Ignore SIGINT/SIGQUIT/SIGTERM before fork so there is no window
     // where a signal could kill the parent between fork and the ignore
     // calls.  The child resets to defaults before exec.
@@ -301,6 +296,13 @@ fn run_command(command: String, argv: Vec<CString>) {
         signal::signal(Signal::SIGQUIT, SigHandler::SigIgn).ok();
         signal::signal(Signal::SIGTERM, SigHandler::SigIgn).ok();
     }
+
+    // Capture wall-clock time immediately before fork so that
+    // real reflects the child's lifetime, not our setup.
+    let start = clock_gettime(ClockId::CLOCK_MONOTONIC).unwrap_or_else(|e| {
+        eprintln!("ptime: clock_gettime: {e}");
+        process::exit(1);
+    });
 
     // SAFETY: We are single-threaded at this point and exec immediately in
     // the child, so fork is safe.
