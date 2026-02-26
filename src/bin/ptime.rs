@@ -132,18 +132,19 @@ fn parse_args() -> Args {
 /// - `< 1h`:   `M:SS.fff`
 /// - `>= 1h`:  `H:MM:SS.fff`
 fn fmt_ns(ns: u128, precision: u32) -> String {
-    let total_secs = ns / 1_000_000_000;
-    let frac = ns % 1_000_000_000;
-    // Truncate fractional part to the requested number of digits.
     let divisor = 10u128.pow(9 - precision);
-    let truncated = frac / divisor;
+    // Round to the requested precision instead of truncating.
+    let rounded_ns = ns.saturating_add(divisor / 2) / divisor * divisor;
+    let total_secs = rounded_ns / 1_000_000_000;
+    let frac = rounded_ns % 1_000_000_000;
+    let scaled = frac / divisor;
 
     if total_secs < 60 {
-        format!("{}.{:0>w$}", total_secs, truncated, w = precision as usize)
+        format!("{}.{:0>w$}", total_secs, scaled, w = precision as usize)
     } else if total_secs < 3600 {
         let m = total_secs / 60;
         let s = total_secs % 60;
-        format!("{}:{:02}.{:0>w$}", m, s, truncated, w = precision as usize)
+        format!("{}:{:02}.{:0>w$}", m, s, scaled, w = precision as usize)
     } else {
         let h = total_secs / 3600;
         let m = (total_secs % 3600) / 60;
@@ -153,7 +154,7 @@ fn fmt_ns(ns: u128, precision: u32) -> String {
             h,
             m,
             s,
-            truncated,
+            scaled,
             w = precision as usize
         )
     }
@@ -163,16 +164,45 @@ fn fmt_ns(ns: u128, precision: u32) -> String {
 ///
 /// Given `clk_tck` (e.g. 100 for a 10ms tick), returns the number of
 /// meaningful fractional digits when the tick count is converted to seconds.
-/// For CLK_TCK=100 → 2, CLK_TCK=250 → 3, CLK_TCK=1000 → 3.
+///
+/// For tick rates with terminating decimal fractions (factors only 2 and 5),
+/// return the exact terminating precision, capped at nanoseconds.
+/// For non-terminating fractions (e.g. HZ=300), return a bounded precision
+/// based on the order of magnitude of one tick so we do not imply nanosecond
+/// precision from tick counters.
 fn tick_precision(clk_tck: u128) -> u32 {
-    let tick_ns = 1_000_000_000 / clk_tck;
-    let mut trailing = 0u32;
-    let mut v = tick_ns;
-    while v > 0 && v.is_multiple_of(10) {
-        trailing += 1;
-        v /= 10;
+    if clk_tck == 0 {
+        return 0;
     }
-    9 - trailing
+
+    let mut d = clk_tck;
+    let mut twos = 0u32;
+    let mut fives = 0u32;
+
+    while d.is_multiple_of(2) {
+        twos += 1;
+        d /= 2;
+    }
+    while d.is_multiple_of(5) {
+        fives += 1;
+        d /= 5;
+    }
+
+    // 1/clk_tck is a terminating decimal only if the denominator has no
+    // prime factors other than 2 and 5.
+    if d == 1 {
+        return twos.max(fives).min(9);
+    }
+
+    // Non-terminating decimal tick size: choose a practical precision based
+    // on tick order of magnitude, capped to nanoseconds.
+    let mut digits = 0u32;
+    let mut p10 = 1u128;
+    while p10 < clk_tck && digits < 9 {
+        digits += 1;
+        p10 *= 10;
+    }
+    digits
 }
 
 fn pct(part: u128, total: u128) -> f64 {
