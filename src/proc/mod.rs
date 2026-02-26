@@ -332,6 +332,59 @@ impl ProcHandle {
             .map_err(|e| Error::in_file("stat", &format!("invalid stime: {}", e)))
     }
 
+    /// Process group ID (field 5 of /proc/[pid]/stat).
+    pub fn pgrp(&self) -> Result<u64, Error> {
+        let data = self.source.read_stat()?;
+        let close_paren = data
+            .rfind(')')
+            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+        let after_comm = &data[close_paren + 2..];
+        // Fields after comm: state(0) ppid(1) pgrp(2) ...
+        let field = after_comm
+            .split_whitespace()
+            .nth(2)
+            .ok_or_else(|| Error::in_file("stat", "missing pgrp field"))?;
+        field
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("stat", &format!("invalid pgrp: {}", e)))
+    }
+
+    /// Session ID (field 6 of /proc/[pid]/stat).
+    pub fn sid(&self) -> Result<u64, Error> {
+        let data = self.source.read_stat()?;
+        let close_paren = data
+            .rfind(')')
+            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+        let after_comm = &data[close_paren + 2..];
+        // Fields after comm: state(0) ppid(1) pgrp(2) session(3) ...
+        let field = after_comm
+            .split_whitespace()
+            .nth(3)
+            .ok_or_else(|| Error::in_file("stat", "missing session field"))?;
+        field
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("stat", &format!("invalid session: {}", e)))
+    }
+
+    /// Nice value (field 19 of /proc/[pid]/stat).
+    pub fn nice(&self) -> Result<i32, Error> {
+        let data = self.source.read_stat()?;
+        let close_paren = data
+            .rfind(')')
+            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+        let after_comm = &data[close_paren + 2..];
+        // Fields after comm: state(0) ppid(1) pgrp(2) session(3) tty_nr(4)
+        //   tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10)
+        //   utime(11) stime(12) cutime(13) cstime(14) priority(15) nice(16) ...
+        let field = after_comm
+            .split_whitespace()
+            .nth(16)
+            .ok_or_else(|| Error::in_file("stat", "missing nice field"))?;
+        field
+            .parse::<i32>()
+            .map_err(|e| Error::in_file("stat", &format!("invalid nice: {}", e)))
+    }
+
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
     pub fn starttime(&self) -> Result<u64, Error> {
         let data = self.source.read_stat()?;
