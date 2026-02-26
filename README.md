@@ -329,7 +329,7 @@ been implemented here yet.
 | [`pkill(1)`](https://illumos.org/man/1/pkill)                 | Signal processes by name                              | ➡️ See `procps-ng`           |
 | [`pldd(1)`](https://illumos.org/man/1/pldd)                   | Print process dynamic libraries                       | ➡️ See `glibc`               |
 | [`plgrp(1)`](https://illumos.org/man/1/plgrp)                 | Print current NUMA node and thread CPU affinities     | ✅ Implemented               |
-| [`plimit(1)`](https://illumos.org/man/1/plimit)               | Get or set process resource limits                    | ✅ Implemented (read-only)   |
+| [`plimit(1)`](https://illumos.org/man/1/plimit)               | Get or set process resource limits                    | ✅ Implemented               |
 | [`plockstat(1)`](https://illumos.org/man/8/plockstat)         | Print lock statistics                                 | 🔲 Not yet implemented       |
 | [`pmadvise(1)`](https://illumos.org/man/1/pmadvise)           | Apply advice about memory to a process                | 🔲 Not yet implemented       |
 | [`pmap(1)`](https://illumos.org/man/1/pmap)                   | Print process address maps                            | ➡️ See `procps-ng`           |
