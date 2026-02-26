@@ -353,8 +353,16 @@ impl TcpInfo {
         TcpInfo {
             snd_cwnd: raw.tcpi_snd_cwnd,
             snd_ssthresh: raw.tcpi_snd_ssthresh,
-            snd_wscale: raw.tcpi_snd_rcv_wscale & 0x0f,
-            rcv_wscale: (raw.tcpi_snd_rcv_wscale >> 4) & 0x0f,
+            snd_wscale: if cfg!(target_endian = "little") {
+                raw.tcpi_snd_rcv_wscale & 0x0f
+            } else {
+                (raw.tcpi_snd_rcv_wscale >> 4) & 0x0f
+            },
+            rcv_wscale: if cfg!(target_endian = "little") {
+                (raw.tcpi_snd_rcv_wscale >> 4) & 0x0f
+            } else {
+                raw.tcpi_snd_rcv_wscale & 0x0f
+            },
             rtt: raw.tcpi_rtt,
             rttvar: raw.tcpi_rttvar,
             snd_mss: raw.tcpi_snd_mss,
