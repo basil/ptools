@@ -29,7 +29,7 @@ fn demangle(name: &str) -> Option<String> {
     if name.starts_with("_Z") {
         if let Ok(sym) = cpp_demangle::Symbol::new(name) {
             let opts = cpp_demangle::DemangleOptions::new().no_params();
-            if let Ok(s) = sym.demangle(&opts) {
+            if let Ok(s) = sym.demangle_with_options(&opts) {
                 return Some(s);
             }
         }
