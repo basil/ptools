@@ -198,12 +198,27 @@ fn print_timings(col: usize, lines: &[TimingLine]) {
         .map(|l| l.time_str.find('.').unwrap_or(l.time_str.len()))
         .max()
         .unwrap_or(0);
+    let max_time_w = lines
+        .iter()
+        .map(|l| {
+            let dot = l.time_str.find('.').unwrap_or(l.time_str.len());
+            (max_int_w - dot) + l.time_str.len()
+        })
+        .max()
+        .unwrap_or(0);
     for line in lines {
         let dot = line.time_str.find('.').unwrap_or(line.time_str.len());
         let time = format!("{:>w$}{}", "", line.time_str, w = max_int_w - dot);
         let prefix = format!("{:indent$}{}", "", line.label, indent = line.indent);
         if let Some(p) = line.pct {
-            eprintln!("{:<col$} {}  {:>5.1}%", prefix, time, p, col = col);
+            eprintln!(
+                "{:<col$} {:<time_col$}  {:>5.1}%",
+                prefix,
+                time,
+                p,
+                col = col,
+                time_col = max_time_w
+            );
         } else {
             eprintln!("{:<col$} {}", prefix, time, col = col);
         }
