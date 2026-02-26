@@ -74,7 +74,8 @@ jobs:
             --instr-profile=target/coverage/ptools.profdata \
             target/debug/pargs --object target/debug/pauxv --object target/debug/pcred \
             --object target/debug/penv \
-            --object target/debug/pfiles --object target/debug/plgrp --object target/debug/prun \
+            --object target/debug/pfiles --object target/debug/plgrp --object target/debug/plimit \
+            --object target/debug/prun \
             --object target/debug/psig --object target/debug/pstack --object target/debug/pstop \
             --object target/debug/ptime --object target/debug/ptree \
             --object target/debug/pwait
@@ -143,7 +144,8 @@ jobs:
             --instr-profile=target/coverage/ptools.profdata \
             "${target_dir}/pargs" --object "${target_dir}/pauxv" --object "${target_dir}/pcred" \
             --object "${target_dir}/penv" \
-            --object "${target_dir}/pfiles" --object "${target_dir}/plgrp" --object "${target_dir}/prun" \
+            --object "${target_dir}/pfiles" --object "${target_dir}/plgrp" --object "${target_dir}/plimit" \
+            --object "${target_dir}/prun" \
             --object "${target_dir}/psig" --object "${target_dir}/pstack" --object "${target_dir}/pstop" \
             --object "${target_dir}/ptime" --object "${target_dir}/ptree" \
             --object "${target_dir}/pwait"

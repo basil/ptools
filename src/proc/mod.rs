@@ -66,6 +66,19 @@ pub struct Rlimit {
     pub hard: RlimitVal,
 }
 
+/// A named resource limit parsed from `/proc/[pid]/limits`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceLimit {
+    /// Kernel-assigned name (e.g. "Max open files").
+    pub name: String,
+    /// Soft (current) limit value.
+    pub soft: RlimitVal,
+    /// Hard (maximum) limit value.
+    pub hard: RlimitVal,
+    /// Unit string from the kernel (e.g. "bytes", "files", "seconds").
+    pub unit: String,
+}
+
 /// Parsed fdinfo with structured fields from `/proc/[pid]/fdinfo/<fd>`.
 struct FdInfo {
     offset: u64,
@@ -102,6 +115,54 @@ fn parse_rlimit_line(limits: &str, prefix: &str) -> Result<Option<Rlimit>, Error
         }
     }
     Ok(None)
+}
+
+/// Parse all resource limits from the raw `/proc/[pid]/limits` text.
+///
+/// The kernel formats limits with fixed-width columns:
+/// `%-25s %-20s %-20s %-10s\n`
+/// The header line is skipped.
+fn parse_resource_limits(text: &str) -> Result<Vec<ResourceLimit>, Error> {
+    let mut limits = Vec::new();
+    for line in text.lines().skip(1) {
+        if line.is_empty() {
+            continue;
+        }
+        // The kernel format is: %-25s %-20s %-20s %-10s
+        // Name occupies columns 0..25, soft 25..45, hard 45..65, unit 65..
+        if line.len() < 45 {
+            return Err(Error::parse("limits", "line too short"));
+        }
+        let name = line[..25].trim_end().to_string();
+        let soft_str = if line.len() >= 45 {
+            line[25..45].trim()
+        } else {
+            line[25..].trim()
+        };
+        let hard_str = if line.len() >= 65 {
+            line[45..65].trim()
+        } else if line.len() > 45 {
+            line[45..].trim()
+        } else {
+            ""
+        };
+        let unit = if line.len() > 65 {
+            line[65..].trim().to_string()
+        } else {
+            String::new()
+        };
+
+        let soft = parse_rlimit_val(soft_str)?;
+        let hard = parse_rlimit_val(hard_str)?;
+
+        limits.push(ResourceLimit {
+            name,
+            soft,
+            hard,
+            unit,
+        });
+    }
+    Ok(limits)
 }
 
 /// Scheduler statistics from `/proc/[pid]/schedstat`.
@@ -555,6 +616,12 @@ impl ProcHandle {
         let limits = self.source.read_limits()?;
         parse_rlimit_line(&limits, "Max open files")?
             .ok_or_else(|| Error::parse("/proc/[pid]/limits", "Max open files line not found"))
+    }
+
+    /// Parse all resource limits from `/proc/[pid]/limits`.
+    pub fn resource_limits(&self) -> Result<Vec<ResourceLimit>, Error> {
+        let limits = self.source.read_limits()?;
+        parse_resource_limits(&limits)
     }
 
     /// Gather fully-populated [`fd::FileDescriptor`] structs for every open

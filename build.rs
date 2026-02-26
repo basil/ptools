@@ -690,5 +690,36 @@ $ plgrp -a 0-2 101398
         out_dir,
     );
 
+    render_man_page(
+        &ManPage {
+            name: "plimit",
+            about: "get process resource limits",
+            description: "Print the resource limits of each process or process core file. \
+                          For each resource, print the current (soft) limit and the \
+                          maximum (hard) limit.",
+            synopsis: "[-km] [pid | core]...",
+            options: &[
+                (
+                    "-k",
+                    "Display file and memory sizes in kilobytes rather than in \
+                     bytes.",
+                ),
+                (
+                    "-m",
+                    "Display file and memory sizes in megabytes rather than in \
+                     bytes.",
+                ),
+            ],
+            operands: CORE_OPERANDS,
+            examples: &[],
+            exit_status: DEFAULT_EXIT_STATUS,
+            files: DEFAULT_FILES,
+            notes: CORE_NOTES,
+            see_also: "ulimit(1), getrlimit(2), coredumpctl(1), proc(5)",
+            warnings: "",
+        },
+        out_dir,
+    );
+
     println!("cargo:rerun-if-changed=build.rs");
 }

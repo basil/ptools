@@ -23,6 +23,10 @@
   - changed-files:
       - any-glob-to-any-file: src/bin/plgrp.rs
 
+"Component: plimit":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/plimit.rs
+
 "Component: prun":
   - changed-files:
       - any-glob-to-any-file: src/bin/prun.rs

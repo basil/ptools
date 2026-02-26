@@ -37,8 +37,8 @@ pub use proc::numa::{cpu_to_node, numa_online_nodes, CpuSet, NodeAffinity};
 pub use proc::pidfd::PidFd;
 pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{
-    resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcessState, Rlimit, RlimitVal,
-    SchedStat, SignalMasks,
+    resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcessState, ResourceLimit,
+    Rlimit, RlimitVal, SchedStat, SignalMasks,
 };
 
 use nix::libc;
