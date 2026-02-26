@@ -395,7 +395,132 @@ pub(crate) fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str
     }
 }
 
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(target_arch = "s390x")]
+pub(crate) fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
+    // AT_HWCAP on s390x: bits from arch/s390/include/asm/elf.h
+    const HWCAP_NAMES: &[(u32, &str)] = &[
+        (0, "ESAN3"),
+        (1, "ZARCH"),
+        (2, "STFLE"),
+        (3, "MSA"),
+        (4, "LDISP"),
+        (5, "EIMM"),
+        (6, "DFP"),
+        (7, "HPAGE"),
+        (8, "ETF3EH"),
+        (9, "HIGH_GPRS"),
+        (10, "TE"),
+        (11, "VXRS"),
+        (12, "VXRS_BCD"),
+        (13, "VXRS_EXT"),
+        (14, "GS"),
+        (15, "VXRS_EXT2"),
+        (16, "VXRS_PDE"),
+        (17, "SORT"),
+        (18, "DFLT"),
+        (19, "VXRS_PDE2"),
+        (20, "NNPA"),
+        (21, "PCI_MIO"),
+        (22, "SIE"),
+    ];
+
+    // s390x does not currently define AT_HWCAP2 bits
+    let table = match key {
+        AuxvType::Hwcap => HWCAP_NAMES,
+        _ => return None,
+    };
+
+    let names: Vec<&str> = table
+        .iter()
+        .filter(|(bit, _)| value & (1u64 << bit) != 0)
+        .map(|(_, name)| *name)
+        .collect();
+
+    if names.is_empty() {
+        None
+    } else {
+        Some(names)
+    }
+}
+
+#[cfg(target_arch = "powerpc64")]
+pub(crate) fn decode_hwcap(key: AuxvType, value: u64) -> Option<Vec<&'static str>> {
+    // AT_HWCAP on powerpc64: PPC_FEATURE_* from arch/powerpc/include/uapi/asm/cputable.h
+    const HWCAP_NAMES: &[(u32, &str)] = &[
+        (0, "PPC_LE"),
+        (1, "TRUE_LE"),
+        (6, "PSERIES_PERFMON_COMPAT"),
+        (7, "VSX"),
+        (8, "ARCH_2_06"),
+        (9, "POWER6_EXT"),
+        (10, "DFP"),
+        (11, "PA6T"),
+        (12, "ARCH_2_05"),
+        (13, "ICACHE_SNOOP"),
+        (14, "SMT"),
+        (15, "BOOKE"),
+        (16, "CELL"),
+        (17, "POWER5+"),
+        (18, "POWER5"),
+        (19, "POWER4"),
+        (20, "NO_TB"),
+        (21, "EFP_DOUBLE"),
+        (22, "EFP_SINGLE"),
+        (23, "SPE"),
+        (24, "UNIFIED_CACHE"),
+        (25, "4xxMAC"),
+        (26, "MMU"),
+        (27, "FPU"),
+        (28, "ALTIVEC"),
+        (29, "601_INSTR"),
+        (30, "64"),
+        (31, "32"),
+    ];
+
+    // AT_HWCAP2 on powerpc64: PPC_FEATURE2_* from arch/powerpc/include/uapi/asm/cputable.h
+    const HWCAP2_NAMES: &[(u32, &str)] = &[
+        (17, "MMA"),
+        (18, "ARCH_3_1"),
+        (19, "HTM_NO_SUSPEND"),
+        (20, "SCV"),
+        (21, "DARN"),
+        (22, "IEEE128"),
+        (23, "ARCH_3_00"),
+        (24, "HTM_NOSC"),
+        (25, "VEC_CRYPTO"),
+        (26, "TAR"),
+        (27, "ISEL"),
+        (28, "EBB"),
+        (29, "DSCR"),
+        (30, "HTM"),
+        (31, "ARCH_2_07"),
+    ];
+
+    let table = match key {
+        AuxvType::Hwcap => HWCAP_NAMES,
+        AuxvType::Hwcap2 => HWCAP2_NAMES,
+        _ => return None,
+    };
+
+    let names: Vec<&str> = table
+        .iter()
+        .filter(|(bit, _)| value & (1u64 << bit) != 0)
+        .map(|(_, name)| *name)
+        .collect();
+
+    if names.is_empty() {
+        None
+    } else {
+        Some(names)
+    }
+}
+
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "s390x",
+    target_arch = "powerpc64"
+)))]
 pub fn decode_hwcap(_key: AuxvType, _value: u64) -> Option<Vec<&'static str>> {
     None
 }
