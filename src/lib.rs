@@ -38,7 +38,7 @@ pub use proc::pidfd::PidFd;
 pub use proc::signal::{signal_name, SignalSet};
 pub use proc::{
     resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcessState, Rlimit, RlimitVal,
-    SignalMasks,
+    SchedStat, SignalMasks,
 };
 
 use nix::libc;

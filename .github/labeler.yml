@@ -39,6 +39,10 @@
   - changed-files:
       - any-glob-to-any-file: src/bin/pstop.rs
 
+"Component: ptime":
+  - changed-files:
+      - any-glob-to-any-file: src/bin/ptime.rs
+
 "Component: ptree":
   - changed-files:
       - any-glob-to-any-file: src/bin/ptree.rs

@@ -56,6 +56,7 @@ pub(crate) trait ProcSource {
     fn read_auxv(&self) -> io::Result<Vec<u8>>;
     fn read_exe(&self) -> io::Result<PathBuf>;
     fn read_limits(&self) -> io::Result<String>;
+    fn read_schedstat(&self) -> io::Result<String>;
 
     // Per-thread
     fn list_tids(&self) -> io::Result<Vec<u64>>;

@@ -128,7 +128,7 @@ $ llvm-cov report --ignore-filename-regex='/(\.cargo/registry|rustc)/' \
   --object target/debug/plgrp --object target/debug/prun \
   --object target/debug/psig --object target/debug/pstack \
   --object target/debug/pstop \
-  --object target/debug/ptree --object target/debug/pwait
+  --object target/debug/ptime --object target/debug/ptree --object target/debug/pwait
 $ llvm-cov export --format=lcov \
   --instr-profile=target/coverage/ptools.profdata \
   target/debug/pargs --object target/debug/pauxv --object target/debug/pcred \
@@ -136,7 +136,7 @@ $ llvm-cov export --format=lcov \
   --object target/debug/plgrp --object target/debug/prun \
   --object target/debug/psig --object target/debug/pstack \
   --object target/debug/pstop \
-  --object target/debug/ptree --object target/debug/pwait > target/coverage/lcov.info
+  --object target/debug/ptime --object target/debug/ptree --object target/debug/pwait > target/coverage/lcov.info
 ```
 
 The integration tests in `tests/` execute ptools binaries via

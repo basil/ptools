@@ -15,7 +15,7 @@ cpp_demangle = "0.4.5"
 foreign-types = "0.5.0"
 lexopt = "0.3.1"
 libc = "0.2.178"
-nix = { version = "0.30.1", features = ["event", "fs", "process", "sched", "signal", "socket"] }
+nix = { version = "0.30.1", features = ["event", "feature", "fs", "process", "resource", "sched", "signal", "socket", "time"] }
 rustc-demangle = "0.1.24"
 zstd = "0.13.3"
 
@@ -57,6 +57,7 @@ assets = [
   ["target/release/psig", "usr/bin/", "755"],
   ["target/release/pstack", "usr/bin/", "755"],
   ["target/release/pstop", "usr/bin/", "755"],
+  ["target/release/ptime", "usr/bin/", "755"],
   ["target/release/ptree", "usr/bin/", "755"],
   ["target/release/pwait", "usr/bin/", "755"],
   ["target/man/pargs.1", "usr/share/man/man1/pargs.1", "644"],
@@ -69,6 +70,7 @@ assets = [
   ["target/man/psig.1", "usr/share/man/man1/psig.1", "644"],
   ["target/man/pstack.1", "usr/share/man/man1/pstack.1", "644"],
   ["target/man/pstop.1", "usr/share/man/man1/pstop.1", "644"],
+  ["target/man/ptime.1", "usr/share/man/man1/ptime.1", "644"],
   ["target/man/ptree.1", "usr/share/man/man1/ptree.1", "644"],
   ["target/man/pwait.1", "usr/share/man/man1/pwait.1", "644"],
 ]
@@ -88,6 +90,7 @@ assets = [
   { source = "target/release/psig", dest = "/usr/bin/psig", mode = "755" },
   { source = "target/release/pstack", dest = "/usr/bin/pstack", mode = "755" },
   { source = "target/release/pstop", dest = "/usr/bin/pstop", mode = "755" },
+  { source = "target/release/ptime", dest = "/usr/bin/ptime", mode = "755" },
   { source = "target/release/ptree", dest = "/usr/bin/ptree", mode = "755" },
   { source = "target/release/pwait", dest = "/usr/bin/pwait", mode = "755" },
   { source = "target/man/pargs.1", dest = "/usr/share/man/man1/pargs.1", mode = "644" },
@@ -100,6 +103,7 @@ assets = [
   { source = "target/man/psig.1", dest = "/usr/share/man/man1/psig.1", mode = "644" },
   { source = "target/man/pstack.1", dest = "/usr/share/man/man1/pstack.1", mode = "644" },
   { source = "target/man/pstop.1", dest = "/usr/share/man/man1/pstop.1", mode = "644" },
+  { source = "target/man/ptime.1", dest = "/usr/share/man/man1/ptime.1", mode = "644" },
   { source = "target/man/ptree.1", dest = "/usr/share/man/man1/ptree.1", mode = "644" },
   { source = "target/man/pwait.1", dest = "/usr/share/man/man1/pwait.1", mode = "644" },
 ]

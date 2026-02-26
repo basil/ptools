@@ -104,6 +104,13 @@ fn parse_rlimit_line(limits: &str, prefix: &str) -> Result<Option<Rlimit>, Error
     Ok(None)
 }
 
+/// Scheduler statistics from `/proc/[pid]/schedstat`.
+pub struct SchedStat {
+    pub run_time_ns: u64,
+    pub wait_time_ns: u64,
+    pub timeslices: u64,
+}
+
 /// Opaque process handle
 ///
 /// Callers obtain a handle via [`resolve_operand`] and interact with it
@@ -225,6 +232,42 @@ impl ProcHandle {
             .next()
             .map(ProcessState::from_char)
             .ok_or_else(|| Error::in_file("stat", "empty state field"))
+    }
+
+    /// User CPU time in clock ticks (field 14 of /proc/[pid]/stat).
+    pub fn utime(&self) -> Result<u64, Error> {
+        let data = self.source.read_stat()?;
+        let close_paren = data
+            .rfind(')')
+            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+        let after_comm = &data[close_paren + 2..];
+        // Fields after comm: state(0) ppid(1) pgrp(2) session(3) tty_nr(4)
+        //   tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10)
+        //   utime(11) stime(12) ...
+        let field = after_comm
+            .split_whitespace()
+            .nth(11)
+            .ok_or_else(|| Error::in_file("stat", "missing utime field"))?;
+        field
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("stat", &format!("invalid utime: {}", e)))
+    }
+
+    /// System CPU time in clock ticks (field 15 of /proc/[pid]/stat).
+    pub fn stime(&self) -> Result<u64, Error> {
+        let data = self.source.read_stat()?;
+        let close_paren = data
+            .rfind(')')
+            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+        let after_comm = &data[close_paren + 2..];
+        // Fields after comm: state(0) ... utime(11) stime(12) ...
+        let field = after_comm
+            .split_whitespace()
+            .nth(12)
+            .ok_or_else(|| Error::in_file("stat", "missing stime field"))?;
+        field
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("stat", &format!("invalid stime: {}", e)))
     }
 
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
@@ -478,6 +521,32 @@ impl ProcHandle {
             }
         }
         Ok(vars)
+    }
+
+    /// Parse scheduler statistics from `/proc/[pid]/schedstat`.
+    pub fn schedstat(&self) -> Result<SchedStat, Error> {
+        let data = self.source.read_schedstat()?;
+        let mut fields = data.split_whitespace();
+        let run_time_ns = fields
+            .next()
+            .ok_or_else(|| Error::in_file("schedstat", "missing run_time field"))?
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("schedstat", &format!("invalid run_time: {}", e)))?;
+        let wait_time_ns = fields
+            .next()
+            .ok_or_else(|| Error::in_file("schedstat", "missing wait_time field"))?
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("schedstat", &format!("invalid wait_time: {}", e)))?;
+        let timeslices = fields
+            .next()
+            .ok_or_else(|| Error::in_file("schedstat", "missing timeslices field"))?
+            .parse::<u64>()
+            .map_err(|e| Error::in_file("schedstat", &format!("invalid timeslices: {}", e)))?;
+        Ok(SchedStat {
+            run_time_ns,
+            wait_time_ns,
+            timeslices,
+        })
     }
 
     /// Query the open-files resource limit from `/proc/[pid]/limits`.

@@ -1,0 +1,567 @@
+//
+//   Copyright (c) 2026 Basil Crow
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+
+use std::ffi::CString;
+use std::process;
+
+use nix::errno::Errno;
+use nix::sys::signal::{self, sigprocmask, SigHandler, SigSet, SigmaskHow, Signal};
+use nix::sys::wait::WaitStatus;
+use nix::time::{clock_gettime, ClockId};
+use nix::unistd::{execvp, fork, sysconf, ForkResult, Pid, SysconfVar};
+use ptools::ProcHandle;
+
+enum Args {
+    Run { command: String, argv: Vec<CString> },
+    Snapshot { pids: Vec<u64> },
+}
+
+fn print_usage() {
+    eprintln!("Usage: ptime command [arg]...");
+    eprintln!("       ptime -p pidlist");
+    eprintln!("Time a command, or display timing statistics for existing processes.");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("  -p pidlist       Display timing statistics for the specified PIDs");
+    eprintln!("  -h, --help       Print help");
+    eprintln!("  -V, --version    Print version");
+}
+
+fn parse_args() -> Args {
+    use lexopt::prelude::*;
+
+    let mut command = None;
+    let mut argv_os = Vec::new();
+    let mut parser = lexopt::Parser::from_env();
+    let mut snapshot_mode = false;
+    let mut pids = Vec::new();
+
+    while let Some(arg) = parser.next().unwrap_or_else(|e| {
+        eprintln!("ptime: {e}");
+        process::exit(1);
+    }) {
+        match arg {
+            Short('h') | Long("help") if command.is_none() && !snapshot_mode => {
+                print_usage();
+                process::exit(0);
+            }
+            Short('V') | Long("version") if command.is_none() && !snapshot_mode => {
+                println!("ptime {}", env!("CARGO_PKG_VERSION"));
+                process::exit(0);
+            }
+            Short('p') if command.is_none() && !snapshot_mode => {
+                snapshot_mode = true;
+            }
+            Value(val) if snapshot_mode => {
+                let s = val.to_string_lossy();
+                for part in s.split([',', ' ', '\t']) {
+                    if part.is_empty() {
+                        continue;
+                    }
+                    match part.parse::<u64>() {
+                        Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => pids.push(pid),
+                        _ => {
+                            eprintln!("ptime: invalid PID '{part}'");
+                            process::exit(1);
+                        }
+                    }
+                }
+            }
+            Value(val) => {
+                command = Some(val.to_string_lossy().into_owned());
+                argv_os.push(val);
+                // Collect remaining args verbatim -- they belong to the child.
+                if let Ok(raw) = parser.raw_args() {
+                    argv_os.extend(raw);
+                }
+            }
+            _ => {
+                eprintln!("ptime: unexpected argument: {arg:?}");
+                process::exit(1);
+            }
+        }
+    }
+
+    if snapshot_mode {
+        if pids.is_empty() {
+            eprintln!("ptime: at least one PID required with -p");
+            process::exit(1);
+        }
+        return Args::Snapshot { pids };
+    }
+
+    let command = match command {
+        Some(c) => c,
+        None => {
+            eprintln!("ptime: command required");
+            process::exit(1);
+        }
+    };
+
+    let argv: Vec<CString> = argv_os
+        .into_iter()
+        .map(|os| {
+            CString::new(os.into_encoded_bytes()).unwrap_or_else(|_| {
+                eprintln!("ptime: argument contains interior NUL byte");
+                process::exit(1);
+            })
+        })
+        .collect();
+
+    Args::Run { command, argv }
+}
+
+/// Format nanoseconds as a human-readable time string.
+///
+/// `precision` controls the number of fractional digits (1–9).
+///
+/// - `< 60s`:  `S.fff`
+/// - `< 1h`:   `M:SS.fff`
+/// - `>= 1h`:  `H:MM:SS.fff`
+fn fmt_ns(ns: u128, precision: u32) -> String {
+    let total_secs = ns / 1_000_000_000;
+    let frac = ns % 1_000_000_000;
+    // Truncate fractional part to the requested number of digits.
+    let divisor = 10u128.pow(9 - precision);
+    let truncated = frac / divisor;
+
+    if total_secs < 60 {
+        format!("{}.{:0>w$}", total_secs, truncated, w = precision as usize)
+    } else if total_secs < 3600 {
+        let m = total_secs / 60;
+        let s = total_secs % 60;
+        format!("{}:{:02}.{:0>w$}", m, s, truncated, w = precision as usize)
+    } else {
+        let h = total_secs / 3600;
+        let m = (total_secs % 3600) / 60;
+        let s = total_secs % 60;
+        format!(
+            "{}:{:02}:{:02}.{:0>w$}",
+            h,
+            m,
+            s,
+            truncated,
+            w = precision as usize
+        )
+    }
+}
+
+/// Determine the display precision for clock-tick-based values.
+///
+/// Given `clk_tck` (e.g. 100 for a 10ms tick), returns the number of
+/// meaningful fractional digits when the tick count is converted to seconds.
+/// For CLK_TCK=100 → 2, CLK_TCK=250 → 3, CLK_TCK=1000 → 3.
+fn tick_precision(clk_tck: u128) -> u32 {
+    let tick_ns = 1_000_000_000 / clk_tck;
+    let mut trailing = 0u32;
+    let mut v = tick_ns;
+    while v > 0 && v.is_multiple_of(10) {
+        trailing += 1;
+        v /= 10;
+    }
+    9 - trailing
+}
+
+fn pct(part: u128, total: u128) -> f64 {
+    if total == 0 {
+        0.0
+    } else {
+        part as f64 / total as f64 * 100.0
+    }
+}
+
+struct TimingLine {
+    indent: usize,
+    label: &'static str,
+    time_str: String,
+    pct: Option<f64>,
+}
+
+fn print_timings(col: usize, lines: &[TimingLine]) {
+    // Align on the decimal point so fractional digits of different
+    // precisions don't shift the dot column.
+    let max_int_w = lines
+        .iter()
+        .map(|l| l.time_str.find('.').unwrap_or(l.time_str.len()))
+        .max()
+        .unwrap_or(0);
+    for line in lines {
+        let dot = line.time_str.find('.').unwrap_or(line.time_str.len());
+        let time = format!("{:>w$}{}", "", line.time_str, w = max_int_w - dot);
+        let prefix = format!("{:indent$}{}", "", line.label, indent = line.indent);
+        if let Some(p) = line.pct {
+            eprintln!("{:<col$} {}  {:>5.1}%", prefix, time, p, col = col);
+        } else {
+            eprintln!("{:<col$} {}", prefix, time, col = col);
+        }
+    }
+}
+
+/// Thin wrapper around `libc::wait4` returning nix types.
+///
+/// Combines `waitpid` and `getrusage(RUSAGE_CHILDREN)` into a single
+/// syscall so the resource usage is atomically associated with the
+/// reaped child.
+fn wait4(pid: Pid, options: libc::c_int) -> Result<(WaitStatus, libc::rusage), Errno> {
+    let mut status: libc::c_int = 0;
+    let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
+    let res = unsafe { libc::wait4(pid.as_raw(), &mut status, options, &mut rusage) };
+    match res {
+        -1 => Err(Errno::last()),
+        0 => Ok((WaitStatus::StillAlive, rusage)),
+        pid => {
+            let ws = WaitStatus::from_raw(Pid::from_raw(pid), status).map_err(|_| Errno::EINVAL)?;
+            Ok((ws, rusage))
+        }
+    }
+}
+
+fn run_command(command: String, argv: Vec<CString>) {
+    // Block SIGCHLD before fork so the child becomes a zombie (preserving
+    // /proc/<pid>) until we explicitly reap it.
+    let mut sigchld_set = SigSet::empty();
+    sigchld_set.add(Signal::SIGCHLD);
+    sigprocmask(SigmaskHow::SIG_BLOCK, Some(&sigchld_set), None).unwrap_or_else(|e| {
+        eprintln!("ptime: sigprocmask: {e}");
+        process::exit(1);
+    });
+
+    let start = clock_gettime(ClockId::CLOCK_MONOTONIC).unwrap_or_else(|e| {
+        eprintln!("ptime: clock_gettime: {e}");
+        process::exit(1);
+    });
+
+    // Ignore SIGINT/SIGQUIT/SIGTERM before fork so there is no window
+    // where a signal could kill the parent between fork and the ignore
+    // calls.  The child resets to defaults before exec.
+    unsafe {
+        signal::signal(Signal::SIGINT, SigHandler::SigIgn).ok();
+        signal::signal(Signal::SIGQUIT, SigHandler::SigIgn).ok();
+        signal::signal(Signal::SIGTERM, SigHandler::SigIgn).ok();
+    }
+
+    // SAFETY: We are single-threaded at this point and exec immediately in
+    // the child, so fork is safe.
+    let child_pid = match unsafe { fork() } {
+        Ok(ForkResult::Child) => {
+            // Restore default signal dispositions so the child behaves
+            // normally, then unblock SIGCHLD (exec preserves the mask).
+            unsafe {
+                signal::signal(Signal::SIGINT, SigHandler::SigDfl).ok();
+                signal::signal(Signal::SIGQUIT, SigHandler::SigDfl).ok();
+                signal::signal(Signal::SIGTERM, SigHandler::SigDfl).ok();
+            }
+            if let Err(e) = sigprocmask(SigmaskHow::SIG_UNBLOCK, Some(&sigchld_set), None) {
+                eprintln!("ptime: sigprocmask: {e}");
+                unsafe { libc::_exit(1) };
+            }
+            let _ = execvp(&argv[0], &argv);
+            let err = Errno::last();
+            eprintln!("ptime: cannot execute {}: {err}", command);
+            unsafe { libc::_exit(if err == Errno::ENOENT { 127 } else { 126 }) };
+        }
+        Ok(ForkResult::Parent { child }) => child,
+        Err(e) => {
+            eprintln!("ptime: fork: {e}");
+            process::exit(1);
+        }
+    };
+
+    // Wait for SIGCHLD, read schedstat from the zombie, then reap.
+    // Loop in case the child is merely stopped (SIGCHLD is also sent
+    // for stop/continue events).
+    let (status, schedstat, rusage, end) = loop {
+        if let Err(e) = sigchld_set.wait() {
+            if e == Errno::EINTR {
+                continue;
+            }
+            eprintln!("ptime: sigwait: {e}");
+            process::exit(1);
+        }
+
+        // Capture wall-clock time immediately after SIGCHLD so that
+        // real reflects the child's lifetime, not our bookkeeping.
+        let end = clock_gettime(ClockId::CLOCK_MONOTONIC).unwrap_or_else(|e| {
+            eprintln!("ptime: clock_gettime: {e}");
+            process::exit(1);
+        });
+
+        // Read schedstat while the zombie still has a /proc entry.
+        let handle = ProcHandle::from_pid(child_pid.as_raw() as u64);
+        let ss = handle.schedstat().ok();
+
+        // Reap with wait4 to get status + rusage atomically.
+        // WNOHANG so we can loop back if the child was merely stopped.
+        match wait4(child_pid, libc::WNOHANG) {
+            Ok((WaitStatus::StillAlive, _)) => continue,
+            Ok((s, ru)) => break (s, ss, ru, end),
+            Err(e) => {
+                eprintln!("ptime: wait4: {e}");
+                process::exit(1);
+            }
+        }
+    };
+
+    let (exit_code, death_sig) = match status {
+        WaitStatus::Exited(_, code) => (code, None),
+        WaitStatus::Signaled(_, sig, _) => (128 + sig as i32, Some(sig)),
+        _ => (1, None),
+    };
+
+    // Skip timing output if the command could not be executed.
+    if exit_code == 126 || exit_code == 127 {
+        process::exit(exit_code);
+    }
+
+    let real_ns = ((end.tv_sec() - start.tv_sec()) as i128 * 1_000_000_000
+        + (end.tv_nsec() - start.tv_nsec()) as i128) as u128;
+
+    let user_ns =
+        rusage.ru_utime.tv_sec as u128 * 1_000_000_000 + rusage.ru_utime.tv_usec as u128 * 1_000;
+    let sys_ns =
+        rusage.ru_stime.tv_sec as u128 * 1_000_000_000 + rusage.ru_stime.tv_usec as u128 * 1_000;
+
+    if let Some(ref ss) = schedstat {
+        let cpu_ns = ss.run_time_ns as u128;
+        let lat_ns = ss.wait_time_ns as u128;
+        let slp_ns = real_ns.saturating_sub(cpu_ns).saturating_sub(lat_ns);
+        print_timings(
+            8,
+            &[
+                TimingLine {
+                    indent: 0,
+                    label: "real",
+                    time_str: fmt_ns(real_ns, 9),
+                    pct: Some(pct(real_ns, real_ns)),
+                },
+                TimingLine {
+                    indent: 2,
+                    label: "cpu",
+                    time_str: fmt_ns(cpu_ns, 9),
+                    pct: Some(pct(cpu_ns, real_ns)),
+                },
+                TimingLine {
+                    indent: 4,
+                    label: "user",
+                    time_str: format!("{}*", fmt_ns(user_ns, 6)),
+                    pct: None,
+                },
+                TimingLine {
+                    indent: 4,
+                    label: "sys",
+                    time_str: format!("{}*", fmt_ns(sys_ns, 6)),
+                    pct: None,
+                },
+                TimingLine {
+                    indent: 2,
+                    label: "lat",
+                    time_str: fmt_ns(lat_ns, 9),
+                    pct: Some(pct(lat_ns, real_ns)),
+                },
+                TimingLine {
+                    indent: 2,
+                    label: "slp",
+                    time_str: fmt_ns(slp_ns, 9),
+                    pct: Some(pct(slp_ns, real_ns)),
+                },
+            ],
+        );
+    } else {
+        print_timings(
+            6,
+            &[
+                TimingLine {
+                    indent: 0,
+                    label: "real",
+                    time_str: fmt_ns(real_ns, 9),
+                    pct: None,
+                },
+                TimingLine {
+                    indent: 2,
+                    label: "user",
+                    time_str: format!("{}*", fmt_ns(user_ns, 6)),
+                    pct: None,
+                },
+                TimingLine {
+                    indent: 2,
+                    label: "sys",
+                    time_str: format!("{}*", fmt_ns(sys_ns, 6)),
+                    pct: None,
+                },
+            ],
+        );
+    }
+
+    // Re-raise the death signal so the shell sees a proper signal death.
+    if let Some(sig) = death_sig {
+        unsafe {
+            signal::signal(sig, SigHandler::SigDfl).ok();
+        }
+        signal::raise(sig).ok();
+    }
+
+    process::exit(exit_code);
+}
+
+fn snapshot(pids: Vec<u64>) {
+    let clk_tck = match sysconf(SysconfVar::CLK_TCK) {
+        Ok(Some(val)) => val as u128,
+        _ => {
+            eprintln!("ptime: failed to get CLK_TCK");
+            process::exit(1);
+        }
+    };
+
+    let boottime = match clock_gettime(ClockId::CLOCK_BOOTTIME) {
+        Ok(ts) => ts.tv_sec() as u128 * 1_000_000_000 + ts.tv_nsec() as u128,
+        Err(e) => {
+            eprintln!("ptime: clock_gettime: {e}");
+            process::exit(1);
+        }
+    };
+
+    let mut failed = false;
+
+    for (i, pid) in pids.iter().enumerate() {
+        if i > 0 {
+            eprintln!();
+        }
+
+        let handle = ProcHandle::from_pid(*pid);
+
+        let utime = match handle.utime() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("ptime: cannot examine {pid}: {e}");
+                failed = true;
+                continue;
+            }
+        };
+
+        let stime = match handle.stime() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("ptime: cannot examine {pid}: {e}");
+                failed = true;
+                continue;
+            }
+        };
+
+        let starttime = match handle.starttime() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("ptime: cannot examine {pid}: {e}");
+                failed = true;
+                continue;
+            }
+        };
+
+        let schedstat = handle.schedstat().ok();
+
+        ptools::print_proc_summary_from(&handle);
+
+        let real_ns = boottime - (starttime as u128 * 1_000_000_000 / clk_tck);
+        let user_ns = utime as u128 * 1_000_000_000 / clk_tck;
+        let sys_ns = stime as u128 * 1_000_000_000 / clk_tck;
+
+        let prec = tick_precision(clk_tck);
+
+        if let Some(ref ss) = schedstat {
+            let cpu_ns = ss.run_time_ns as u128;
+            let lat_ns = ss.wait_time_ns as u128;
+            let slp_ns = real_ns.saturating_sub(cpu_ns).saturating_sub(lat_ns);
+            print_timings(
+                8,
+                &[
+                    TimingLine {
+                        indent: 0,
+                        label: "real",
+                        time_str: format!("{}*", fmt_ns(real_ns, prec)),
+                        pct: Some(pct(real_ns, real_ns)),
+                    },
+                    TimingLine {
+                        indent: 2,
+                        label: "cpu",
+                        time_str: fmt_ns(cpu_ns, 9),
+                        pct: Some(pct(cpu_ns, real_ns)),
+                    },
+                    TimingLine {
+                        indent: 4,
+                        label: "user",
+                        time_str: format!("{}*", fmt_ns(user_ns, prec)),
+                        pct: None,
+                    },
+                    TimingLine {
+                        indent: 4,
+                        label: "sys",
+                        time_str: format!("{}*", fmt_ns(sys_ns, prec)),
+                        pct: None,
+                    },
+                    TimingLine {
+                        indent: 2,
+                        label: "lat",
+                        time_str: fmt_ns(lat_ns, 9),
+                        pct: Some(pct(lat_ns, real_ns)),
+                    },
+                    TimingLine {
+                        indent: 2,
+                        label: "slp",
+                        time_str: format!("{}*", fmt_ns(slp_ns, prec)),
+                        pct: Some(pct(slp_ns, real_ns)),
+                    },
+                ],
+            );
+        } else {
+            print_timings(
+                6,
+                &[
+                    TimingLine {
+                        indent: 0,
+                        label: "real",
+                        time_str: format!("{}*", fmt_ns(real_ns, prec)),
+                        pct: None,
+                    },
+                    TimingLine {
+                        indent: 2,
+                        label: "user",
+                        time_str: format!("{}*", fmt_ns(user_ns, prec)),
+                        pct: None,
+                    },
+                    TimingLine {
+                        indent: 2,
+                        label: "sys",
+                        time_str: format!("{}*", fmt_ns(sys_ns, prec)),
+                        pct: None,
+                    },
+                ],
+            );
+        }
+    }
+
+    if failed {
+        process::exit(1);
+    }
+}
+
+fn main() {
+    ptools::reset_sigpipe();
+    let args = parse_args();
+
+    match args {
+        Args::Run { command, argv } => run_command(command, argv),
+        Args::Snapshot { pids } => snapshot(pids),
+    }
+}

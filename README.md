@@ -341,7 +341,7 @@ been implemented here yet.
 | [`psig(1)`](https://illumos.org/man/1/psig)                   | Print process signal actions                          | ✅ Implemented               |
 | [`pstack(1)`](https://illumos.org/man/1/pstack)               | Print process call stack                              | ✅ Implemented               |
 | [`pstop(1)`](https://illumos.org/man/1/pstop)                 | Stop processes with `SIGSTOP`                         | ✅ Implemented               |
-| [`ptime(1)`](https://illumos.org/man/1/ptime)                 | Time a process using microstate accounting            | 🔲 Not yet implemented       |
+| [`ptime(1)`](https://illumos.org/man/1/ptime)                 | Time a process using microstate accounting            | ✅ Implemented               |
 | [`ptree(1)`](https://illumos.org/man/1/ptree)                 | Print process trees                                   | ✅ Implemented               |
 | [`pwait(1)`](https://illumos.org/man/1/pwait)                 | Wait for processes to terminate                       | ✅ Implemented               |
 | [`pwdx(1)`](https://illumos.org/man/1/pwdx)                   | Print the current working directory of the process    | ➡️ See `procps-ng`           |

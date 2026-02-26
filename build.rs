@@ -113,7 +113,12 @@ fn render_man_page(page: &ManPage, out_dir: &Path) {
     roff.control("SH", ["NAME"]);
     roff.text([roman(format!("{} - {}", page.name, page.about))]);
     roff.control("SH", ["SYNOPSIS"]);
-    roff.text([bold(page.name), roman(format!(" {}", page.synopsis))]);
+    let synopses: Vec<&str> = page.synopsis.split('\n').collect();
+    roff.text([bold(page.name), roman(format!(" {}", synopses[0]))]);
+    for syn in &synopses[1..] {
+        roff.control("br", [] as [&str; 0]);
+        roff.text([bold(page.name), roman(format!(" {}", syn))]);
+    }
     roff.control("SH", ["DESCRIPTION"]);
     roff.text([roman(page.description)]);
     if !page.options.is_empty() {
@@ -635,6 +640,58 @@ $ plgrp -a 0-2 101398
                        ptrace access to process registers and memory. If DWARF debug information \
                        is not installed, this information may not be available. These options may \
                        slow down stack tracing.",
+        },
+        out_dir,
+    );
+
+    render_man_page(
+        &ManPage {
+            name: "ptime",
+            about: "time a command",
+            description: "Without the -p option, invoke the given command with the given \
+                          arguments, and when the command completes, write timing \
+                          statistics to standard error.\n\n\
+                          With the -p option, display a snapshot of accumulated timing \
+                          statistics for the specified processes.\n\n\
+                          When /proc/[pid]/schedstat is available, the output includes \
+                          nanosecond-precision scheduling statistics: cpu (on-CPU run \
+                          time), lat (run-queue wait time), and slp (all other sleep time, \
+                          computed as real minus cpu minus lat), along with each component's \
+                          percentage of real time. A trailing * indicates the value's \
+                          source has less precision than the digits shown. With -p, real \
+                          and slp carry a trailing * because the process start time from \
+                          /proc is recorded in clock ticks (typically 10ms granularity). \
+                          The user and sys values always carry a trailing * because they \
+                          are derived from clock-tick counters when reading from /proc, or \
+                          microsecond-precision rusage when timing a command directly. \
+                          These values may not sum exactly to cpu.",
+            synopsis: "command [arg]...\n-p pidlist",
+            options: &[(
+                "-p pidlist",
+                "Display a snapshot of timing statistics for the specified processes. \
+                 The pidlist is a list of process IDs separated by commas, whitespace, \
+                 or any combination of the two (e.g., \"1,2\", \"1, 2\", \"1 2\").",
+            )],
+            operands: &[
+                ("command", "The command to execute."),
+                ("arg", "Arguments to the command."),
+                (
+                    "pidlist",
+                    "A list of process IDs separated by commas, whitespace, \
+                     or any combination of the two.",
+                ),
+            ],
+            examples: &[],
+            exit_status: "If the command is invoked successfully, ptime(1) returns the exit \
+                          status of the command. If the command is terminated by a signal, \
+                          ptime(1) returns 128 plus the signal number. If the command is not \
+                          found, ptime(1) returns 127. If the command is found but cannot be \
+                          invoked, ptime(1) returns 126. If an error occurs in ptime(1) itself, \
+                          ptime(1) returns 1.",
+            files: DEFAULT_FILES,
+            notes: "",
+            see_also: "time(1), proc(5)",
+            warnings: "",
         },
         out_dir,
     );

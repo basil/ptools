@@ -76,7 +76,7 @@ jobs:
             --object target/debug/penv \
             --object target/debug/pfiles --object target/debug/plgrp --object target/debug/prun \
             --object target/debug/psig --object target/debug/pstack --object target/debug/pstop \
-            --object target/debug/ptree \
+            --object target/debug/ptime --object target/debug/ptree \
             --object target/debug/pwait
 
   build-i686:
@@ -145,5 +145,5 @@ jobs:
             --object "${target_dir}/penv" \
             --object "${target_dir}/pfiles" --object "${target_dir}/plgrp" --object "${target_dir}/prun" \
             --object "${target_dir}/psig" --object "${target_dir}/pstack" --object "${target_dir}/pstop" \
-            --object "${target_dir}/ptree" \
+            --object "${target_dir}/ptime" --object "${target_dir}/ptree" \
             --object "${target_dir}/pwait"

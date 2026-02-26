@@ -70,6 +70,10 @@ impl ProcSource for LiveProcess {
         std::fs::read_to_string(format!("/proc/{}/limits", self.pid))
     }
 
+    fn read_schedstat(&self) -> io::Result<String> {
+        std::fs::read_to_string(format!("/proc/{}/schedstat", self.pid))
+    }
+
     fn list_tids(&self) -> io::Result<Vec<u64>> {
         let mut tids: Vec<u64> = std::fs::read_dir(format!("/proc/{}/task", self.pid))?
             .filter_map(|e| e.ok())

@@ -284,6 +284,10 @@ impl ProcSource for CoredumpSource {
             .map(str::to_string)
     }
 
+    fn read_schedstat(&self) -> io::Result<String> {
+        Err(unsupported("schedstat"))
+    }
+
     fn list_tids(&self) -> io::Result<Vec<u64>> {
         Ok(vec![self.pid])
     }
