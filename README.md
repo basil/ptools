@@ -299,12 +299,14 @@ against same-user processes without any additional configuration.
 ## Core Dump Support
 
 Core dump support is available for `pargs(1)`, `pauxv(1)`, `pcred(1)`,
-`penv(1)`, `pfiles(1)`, `plgrp(1)`, `plimit(1)`, and `psig(1)` via
-`systemd-coredump(8)` extended attributes and journal metadata. Even when a core
-file has been removed by `systemd-tmpfiles(8)` or by storage limits, process
-metadata can often still be retrieved from the `systemd-coredump(8)` journal
-entry; use `coredumpctl list <name> -F COREDUMP_FILENAME` to find the path and
-pass it to any of these tools.
+`penv(1)`, `pfiles(1)`, `plgrp(1)`, `plimit(1)`, `psig(1)`, and `pstack(1)`.
+Process metadata is retrieved from `systemd-coredump(8)` extended attributes and
+journal metadata; `pstack(1)` additionally reads the ELF core image to recover
+thread backtraces. Even when a core file has been removed by
+`systemd-tmpfiles(8)` or by storage limits, process metadata can often still be
+retrieved from the `systemd-coredump(8)` journal entry; use
+`coredumpctl list <name> -F COREDUMP_FILENAME` to find the path and pass it to
+any of these tools.
 
 ## Current State
 
