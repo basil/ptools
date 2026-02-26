@@ -26,11 +26,11 @@ use nix::unistd::Pid;
 fn verify_stopped(pid: u64) -> bool {
     use ptools::ProcessState;
 
-    let handle = ptools::ProcHandle::from_pid(pid);
     let mut backoff = Duration::from_millis(10);
     let cap = Duration::from_millis(100);
     let mut warned_d = false;
     loop {
+        let handle = ptools::ProcHandle::from_pid(pid);
         match handle.state() {
             Ok(ProcessState::Stopped) => return true,
             Ok(ProcessState::TracingStop) => {
