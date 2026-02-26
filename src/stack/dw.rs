@@ -370,6 +370,14 @@ static CALLBACKS: LazyLock<Callbacks> =
 static CORE_CALLBACKS: LazyLock<Callbacks> =
     LazyLock::new(|| Callbacks::new(FindElf::BUILD_ID, FindDebuginfo::STANDARD));
 
+fn frame_lookup_pc(ip: u64, is_signal: bool) -> Option<u64> {
+    if is_signal {
+        Some(ip)
+    } else {
+        ip.checked_sub(1)
+    }
+}
+
 pub struct State {
     dwfl: Dwfl<'static>,
 }
@@ -411,8 +419,9 @@ impl State {
                 let ip = frame.pc(Some(&mut is_signal))?;
 
                 let signal_adjust = if is_signal { 0 } else { 1 };
-                let pc_adjusted = ip - signal_adjust;
-                let module = frame.thread().dwfl().addr_module(pc_adjusted).ok();
+                let lookup_pc = frame_lookup_pc(ip, is_signal);
+                let pc_adjusted = lookup_pc.unwrap_or(ip);
+                let module = lookup_pc.and_then(|pc| frame.thread().dwfl().addr_module(pc).ok());
 
                 process_frame(
                     module,
@@ -459,8 +468,9 @@ impl TracedThread {
             let ip = frame.pc(Some(&mut is_signal))?;
 
             let signal_adjust = if is_signal { 0 } else { 1 };
-            let pc_adjusted = ip - signal_adjust;
-            let module = frame.thread().dwfl().addr_module(pc_adjusted).ok();
+            let lookup_pc = frame_lookup_pc(ip, is_signal);
+            let pc_adjusted = lookup_pc.unwrap_or(ip);
+            let module = lookup_pc.and_then(|pc| frame.thread().dwfl().addr_module(pc).ok());
 
             process_frame(
                 module,
