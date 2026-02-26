@@ -433,7 +433,7 @@ fn run_command(command: String, argv: Vec<CString>) {
         );
         if has_low_precision {
             eprintln!();
-            eprintln!("* Lower-precision source; percentages still relative to real.");
+            eprintln!("* Lower-precision source");
         }
     } else {
         let has_low_precision = print_timings(
@@ -461,7 +461,7 @@ fn run_command(command: String, argv: Vec<CString>) {
         );
         if has_low_precision {
             eprintln!();
-            eprintln!("* Lower-precision source; percentages still relative to real.");
+            eprintln!("* Lower-precision source");
         }
     }
 
@@ -614,7 +614,7 @@ fn snapshot(pids: Vec<u64>) {
 
     if show_star_legend {
         eprintln!();
-        eprintln!("* Lower-precision source; percentages still relative to real.");
+        eprintln!("* Lower-precision source");
     }
 
     if failed {
