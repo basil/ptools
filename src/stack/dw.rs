@@ -367,7 +367,11 @@ unsafe fn format_value(
 fn u64_from_bytes(bytes: &[u8]) -> u64 {
     let mut buf = [0u8; 8];
     let len = bytes.len().min(8);
-    buf[..len].copy_from_slice(&bytes[..len]);
+    if cfg!(target_endian = "big") {
+        buf[8 - len..].copy_from_slice(&bytes[..len]);
+    } else {
+        buf[..len].copy_from_slice(&bytes[..len]);
+    }
     u64::from_ne_bytes(buf)
 }
 
@@ -540,7 +544,12 @@ unsafe fn collect_one_arg(
     if loc.is_value {
         // The value is directly in loc.value
         let bytes = loc.value.to_ne_bytes();
-        let used = &bytes[..size.min(8)];
+        let n = size.min(8);
+        let used = if cfg!(target_endian = "big") {
+            &bytes[8 - n..]
+        } else {
+            &bytes[..n]
+        };
         let value = format_value(used, &mut peeled, read_mem);
         Some(Argument { name, value })
     } else {
