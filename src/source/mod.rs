@@ -72,6 +72,7 @@ pub(crate) trait ProcSource {
     fn read_net_file(&self, name: &str) -> io::Result<String>;
 
     // Memory
+    #[allow(dead_code)]
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool;
 
     /// Return a raw ELF pointer for the core dump, if available.

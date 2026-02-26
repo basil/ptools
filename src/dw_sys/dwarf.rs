@@ -229,38 +229,3 @@ pub const DW_AT_GNU_all_source_call_sites: c_uint = 0x2118;
 pub const DW_AT_GNU_macros: c_uint = 0x2119;
 pub const DW_AT_GNU_deleted: c_uint = 0x211a;
 pub const DW_AT_hi_user: c_uint = 0x3fff;
-
-// DWARF expression operations
-pub const DW_OP_addr: u8 = 0x03;
-pub const DW_OP_deref: u8 = 0x06;
-pub const DW_OP_const1u: u8 = 0x08;
-pub const DW_OP_const1s: u8 = 0x09;
-pub const DW_OP_const2u: u8 = 0x0a;
-pub const DW_OP_const2s: u8 = 0x0b;
-pub const DW_OP_const4u: u8 = 0x0c;
-pub const DW_OP_const4s: u8 = 0x0d;
-pub const DW_OP_const8u: u8 = 0x0e;
-pub const DW_OP_const8s: u8 = 0x0f;
-pub const DW_OP_constu: u8 = 0x10;
-pub const DW_OP_consts: u8 = 0x11;
-pub const DW_OP_plus_uconst: u8 = 0x23;
-pub const DW_OP_reg0: u8 = 0x50;
-pub const DW_OP_reg31: u8 = 0x6f;
-pub const DW_OP_breg0: u8 = 0x70;
-pub const DW_OP_breg31: u8 = 0x8f;
-pub const DW_OP_regx: u8 = 0x90;
-pub const DW_OP_fbreg: u8 = 0x91;
-pub const DW_OP_bregx: u8 = 0x92;
-pub const DW_OP_piece: u8 = 0x93;
-pub const DW_OP_call_frame_cfa: u8 = 0x9c;
-pub const DW_OP_stack_value: u8 = 0x9f;
-
-// DWARF base type encodings
-pub const DW_ATE_address: c_uint = 0x01;
-pub const DW_ATE_boolean: c_uint = 0x02;
-pub const DW_ATE_float: c_uint = 0x04;
-pub const DW_ATE_signed: c_uint = 0x05;
-pub const DW_ATE_signed_char: c_uint = 0x06;
-pub const DW_ATE_unsigned: c_uint = 0x07;
-pub const DW_ATE_unsigned_char: c_uint = 0x08;
-pub const DW_ATE_UTF: c_uint = 0x10;

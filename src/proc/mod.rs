@@ -145,6 +145,7 @@ impl ProcHandle {
 
     /// Read memory from the process — core dump PT_LOAD segments or live
     /// `process_vm_readv(2)`.
+    #[allow(dead_code)]
     pub(crate) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
         self.source.read_memory(addr, buf)
     }

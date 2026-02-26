@@ -111,36 +111,6 @@ impl Thread {
     }
 }
 
-/// A function argument with its name and formatted value.
-#[derive(Debug, Clone)]
-pub struct Argument {
-    name: String,
-    value: String,
-}
-
-impl Argument {
-    /// Returns the argument name.
-    #[inline]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Returns the formatted argument value.
-    #[inline]
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-}
-
-/// Argument information for a stack frame.
-#[derive(Debug, Clone)]
-pub enum FrameArgs {
-    /// No DWARF debug info available for this frame.
-    NoDebugInfo,
-    /// Debug info available; contains resolved arguments (may be empty).
-    Args(Vec<Argument>),
-}
-
 /// Information about a stack frame of a remote process.
 #[derive(Debug, Clone)]
 pub struct Frame {
@@ -150,7 +120,6 @@ pub struct Frame {
     symbol: Option<Symbol>,
     module: Option<String>,
     source: Option<SourceLocation>,
-    args: Option<FrameArgs>,
 }
 
 impl Frame {
@@ -188,12 +157,6 @@ impl Frame {
     #[inline]
     pub fn source(&self) -> Option<&SourceLocation> {
         self.source.as_ref()
-    }
-
-    /// Returns argument information for this frame, if args collection was enabled.
-    #[inline]
-    pub fn args(&self) -> Option<&FrameArgs> {
-        self.args.as_ref()
     }
 }
 
@@ -272,7 +235,6 @@ pub struct TraceOptions {
     module: bool,
     source: bool,
     inlines: bool,
-    args: bool,
     ptrace_attach: bool,
     tid: Option<u32>,
     max_frames: usize,
@@ -288,7 +250,6 @@ impl Default for TraceOptions {
             module: false,
             source: false,
             inlines: false,
-            args: false,
             ptrace_attach: true,
             tid: None,
             max_frames: 0,
@@ -359,14 +320,6 @@ impl TraceOptions {
     /// for each level of inlining. Requires debug information. Defaults to `false`.
     pub fn inlines(&mut self, inlines: bool) -> &mut TraceOptions {
         self.inlines = inlines;
-        self
-    }
-
-    /// If set, function argument names and values will be collected from DWARF debug info.
-    ///
-    /// Requires debug information. Defaults to `false`.
-    pub fn args(&mut self, args: bool) -> &mut TraceOptions {
-        self.args = args;
         self
     }
 
@@ -467,7 +420,6 @@ impl TraceOptions {
         let pid = state.pid();
         header(pid);
         let comm = handle.comm().ok();
-        let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
         state.trace_threads_each(
             self,
             &|tid| {
@@ -477,7 +429,6 @@ impl TraceOptions {
                     None
                 }
             },
-            &read_mem,
             &mut each,
             handle,
         );
@@ -494,8 +445,6 @@ impl TraceOptions {
     where
         F: FnMut(Thread),
     {
-        let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
-
         if let Some(tid) = self.tid {
             let thread = if self.ptrace_attach {
                 TracedThread::attach(tid)
@@ -510,12 +459,12 @@ impl TraceOptions {
                 }
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
-            each(thread.info(pid, state, self, &read_mem, handle));
+            each(thread.info(pid, state, self, handle));
             return Ok(());
         }
 
         for t in snapshot_threads(pid, self.ptrace_attach, handle)?.iter() {
-            each(t.info(pid, state, self, &read_mem, handle));
+            each(t.info(pid, state, self, handle));
         }
         Ok(())
     }
@@ -530,8 +479,6 @@ impl TraceOptions {
     where
         F: FnMut(Thread),
     {
-        let read_mem = |addr: u64, buf: &mut [u8]| -> bool { handle.read_memory(addr, buf) };
-
         if let Some(tid) = self.tid {
             let thread = if self.ptrace_attach {
                 TracedThread::attach(tid)
@@ -546,7 +493,7 @@ impl TraceOptions {
                 }
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
-            each(thread.info(pid, state, self, &read_mem, handle));
+            each(thread.info(pid, state, self, handle));
             return Ok(());
         }
 
@@ -565,7 +512,7 @@ impl TraceOptions {
                 Err(e) => return Err(Error(ErrorInner::Io(e))),
             };
 
-            each(thread.info(pid, state, self, &read_mem, handle));
+            each(thread.info(pid, state, self, handle));
             Ok(())
         })
     }
@@ -812,7 +759,6 @@ impl TracedThread {
         pid: u32,
         state: &mut imp::State,
         options: &TraceOptions,
-        read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
         handle: &crate::ProcHandle,
     ) -> Thread {
         let name = if options.thread_names {
@@ -821,7 +767,7 @@ impl TracedThread {
             None
         };
 
-        let frames = self.dump(state, options, read_mem, handle);
+        let frames = self.dump(state, options, handle);
 
         Thread {
             id: self.id,
@@ -834,12 +780,11 @@ impl TracedThread {
         &self,
         state: &mut imp::State,
         options: &TraceOptions,
-        read_mem: &dyn Fn(u64, &mut [u8]) -> bool,
         handle: &crate::ProcHandle,
     ) -> Vec<Frame> {
         let mut frames = vec![];
 
-        if let Err(e) = self.dump_inner(state, options, read_mem, &mut frames) {
+        if let Err(e) = self.dump_inner(state, options, &mut frames) {
             handle.push_warning(format!("error tracing thread {}: {}", self.id, e));
         }
 

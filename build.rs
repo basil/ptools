@@ -586,13 +586,8 @@ $ plgrp -a 0-2 101398
                           disk, since pstack(1) reads symbols from the on-disk ELF image. \
                           This commonly occurs when a binary or library is reinstalled while \
                           a process still uses the older version.",
-            synopsis: "[-amv] [-n count] [pid[/tid] | core]...",
+            synopsis: "[-mv] [-n count] [pid[/tid] | core]...",
             options: &[
-                (
-                    "-a, --args",
-                    "Show values of arguments passed to functions. \
-                     Requires DWARF debug information.",
-                ),
                 ("-m, --module", "Show module file paths."),
                 (
                     "-n count",
@@ -635,11 +630,9 @@ $ plgrp -a 0-2 101398
                        unavailable to users. Some applications, such as database servers, may \
                        terminate abnormally. Use caution when tracing production processes.\n\n\
                        The -v (verbose) option uses DWARF debug information to show source code \
-                       locations (file and line number) and inlined function frames. The -a \
-                       (args) option additionally reads function argument values, which requires \
-                       ptrace access to process registers and memory. If DWARF debug information \
-                       is not installed, this information may not be available. These options may \
-                       slow down stack tracing.",
+                       locations (file and line number) and inlined function frames. If DWARF \
+                       debug information is not installed, this information may not be available. \
+                       This option may slow down stack tracing.",
         },
         out_dir,
     );

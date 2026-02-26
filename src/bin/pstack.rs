@@ -19,7 +19,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::exit;
 
-use ptools::stack::{FrameArgs, SourceLocation, Thread};
+use ptools::stack::{SourceLocation, Thread};
 use ptools::ProcHandle;
 
 fn format_source(src: &SourceLocation) -> String {
@@ -59,22 +59,6 @@ fn print_thread(
         if let Some(symbol) = frame.symbol() {
             print!(" {}", symbol.name());
 
-            // Print arguments inside parentheses
-            match frame.args() {
-                Some(FrameArgs::Args(args)) => {
-                    print!("(");
-                    for (i, arg) in args.iter().enumerate() {
-                        if i > 0 {
-                            print!(", ");
-                        }
-                        print!("{}={}", arg.name(), arg.value());
-                    }
-                    print!(")");
-                }
-                Some(FrameArgs::NoDebugInfo) => print!("()"),
-                None => {}
-            }
-
             if frame.is_inline() {
                 print!(" [inlined]");
             } else {
@@ -112,7 +96,6 @@ fn print_stack(
         .module(args.module)
         .source(args.verbose)
         .inlines(args.verbose)
-        .args(args.args)
         .max_frames(args.max_frames);
 
     let first_thread = Cell::new(true);
@@ -154,18 +137,16 @@ const DEFAULT_MAX_FRAMES: usize = 64;
 
 struct Args {
     verbose: bool,
-    args: bool,
     module: bool,
     max_frames: usize,
     operands: Vec<String>,
 }
 
 fn print_usage() {
-    eprintln!("Usage: pstack [-amv] [-n count] [pid[/thread] | core]...");
+    eprintln!("Usage: pstack [-mv] [-n count] [pid[/thread] | core]...");
     eprintln!("Print stack traces of running processes or core dumps.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -a, --args           Show values of arguments passed to functions");
     eprintln!("  -m, --module         Show module file paths");
     eprintln!("  -n N                 Print at most N frames per thread (0 for unlimited)");
     eprintln!("  -v, --verbose        Show source locations and inline frames");
@@ -179,7 +160,6 @@ fn parse_args() -> Args {
     let mut args = Args {
         module: false,
         verbose: false,
-        args: false,
         max_frames: DEFAULT_MAX_FRAMES,
         operands: Vec::new(),
     };
@@ -206,9 +186,6 @@ fn parse_args() -> Args {
                     eprintln!("pstack: -n: {e}");
                     exit(2);
                 });
-            }
-            Short('a') | Long("args") => {
-                args.args = true;
             }
             Short('v') | Long("verbose") => {
                 args.verbose = true;
