@@ -220,7 +220,9 @@ struct TimingLine {
     pct: Option<f64>,
 }
 
-fn print_timings(col: usize, lines: &[TimingLine]) {
+fn print_timings(col: usize, lines: &[TimingLine]) -> bool {
+    let has_low_precision = lines.iter().any(|l| l.time_str.ends_with('*'));
+
     // Align on the decimal point so fractional digits of different
     // precisions don't shift the dot column.
     let max_int_w = lines
@@ -253,6 +255,8 @@ fn print_timings(col: usize, lines: &[TimingLine]) {
             eprintln!("{:<col$} {}", prefix, time, col = col);
         }
     }
+
+    has_low_precision
 }
 
 /// Thin wrapper around `libc::wait4` returning nix types.
@@ -386,7 +390,7 @@ fn run_command(command: String, argv: Vec<CString>) {
         let cpu_ns = ss.run_time_ns as u128;
         let lat_ns = ss.wait_time_ns as u128;
         let slp_ns = real_ns.saturating_sub(cpu_ns).saturating_sub(lat_ns);
-        print_timings(
+        let has_low_precision = print_timings(
             8,
             &[
                 TimingLine {
@@ -427,8 +431,12 @@ fn run_command(command: String, argv: Vec<CString>) {
                 },
             ],
         );
+        if has_low_precision {
+            eprintln!();
+            eprintln!("* Lower-precision source; percentages still relative to real.");
+        }
     } else {
-        print_timings(
+        let has_low_precision = print_timings(
             6,
             &[
                 TimingLine {
@@ -451,6 +459,10 @@ fn run_command(command: String, argv: Vec<CString>) {
                 },
             ],
         );
+        if has_low_precision {
+            eprintln!();
+            eprintln!("* Lower-precision source; percentages still relative to real.");
+        }
     }
 
     // Re-raise the death signal so the shell sees a proper signal death.
@@ -482,6 +494,7 @@ fn snapshot(pids: Vec<u64>) {
     };
 
     let mut failed = false;
+    let mut show_star_legend = false;
 
     for (i, pid) in pids.iter().enumerate() {
         if i > 0 {
@@ -531,7 +544,7 @@ fn snapshot(pids: Vec<u64>) {
             let cpu_ns = ss.run_time_ns as u128;
             let lat_ns = ss.wait_time_ns as u128;
             let slp_ns = real_ns.saturating_sub(cpu_ns).saturating_sub(lat_ns);
-            print_timings(
+            show_star_legend |= print_timings(
                 8,
                 &[
                     TimingLine {
@@ -573,7 +586,7 @@ fn snapshot(pids: Vec<u64>) {
                 ],
             );
         } else {
-            print_timings(
+            show_star_legend |= print_timings(
                 6,
                 &[
                     TimingLine {
@@ -597,6 +610,11 @@ fn snapshot(pids: Vec<u64>) {
                 ],
             );
         }
+    }
+
+    if show_star_legend {
+        eprintln!();
+        eprintln!("* Lower-precision source; percentages still relative to real.");
     }
 
     if failed {

@@ -657,8 +657,9 @@ $ plgrp -a 0-2 101398
                           nanosecond-precision scheduling statistics: cpu (on-CPU run \
                           time), lat (run-queue wait time), and slp (all other sleep time, \
                           computed as real minus cpu minus lat), along with each component's \
-                          percentage of real time. A trailing * indicates the value's \
-                          source has less precision than the digits shown. With -p, real \
+                          percentage of real time. A trailing * indicates the value is \
+                          from a lower-precision source; percentages remain relative to real. \
+                          With -p, real \
                           and slp carry a trailing * because the process start time from \
                           /proc is recorded in clock ticks (typically 10ms granularity). \
                           The user and sys values always carry a trailing * because they \
