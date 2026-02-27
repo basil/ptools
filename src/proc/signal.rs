@@ -14,7 +14,7 @@
 //   limitations under the License.
 //
 
-use nix::libc;
+use nix::sys::signal::Signal;
 
 /// A set of signal numbers, parsed from a kernel hex mask.
 ///
@@ -120,38 +120,38 @@ pub fn signal_name(sig: usize, rtmin: usize, rtmax: usize) -> String {
         return format!("RTMIN+{}", sig - rtmin);
     }
 
-    match sig as i32 {
-        libc::SIGHUP => "HUP".to_string(),
-        libc::SIGINT => "INT".to_string(),
-        libc::SIGQUIT => "QUIT".to_string(),
-        libc::SIGILL => "ILL".to_string(),
-        libc::SIGTRAP => "TRAP".to_string(),
-        libc::SIGABRT => "ABRT".to_string(),
-        libc::SIGBUS => "BUS".to_string(),
-        libc::SIGFPE => "FPE".to_string(),
-        libc::SIGKILL => "KILL".to_string(),
-        libc::SIGUSR1 => "USR1".to_string(),
-        libc::SIGSEGV => "SEGV".to_string(),
-        libc::SIGUSR2 => "USR2".to_string(),
-        libc::SIGPIPE => "PIPE".to_string(),
-        libc::SIGALRM => "ALRM".to_string(),
-        libc::SIGTERM => "TERM".to_string(),
-        libc::SIGSTKFLT => "STKFLT".to_string(),
-        libc::SIGCHLD => "CLD".to_string(),
-        libc::SIGCONT => "CONT".to_string(),
-        libc::SIGSTOP => "STOP".to_string(),
-        libc::SIGTSTP => "TSTP".to_string(),
-        libc::SIGTTIN => "TTIN".to_string(),
-        libc::SIGTTOU => "TTOU".to_string(),
-        libc::SIGURG => "URG".to_string(),
-        libc::SIGXCPU => "XCPU".to_string(),
-        libc::SIGXFSZ => "XFSZ".to_string(),
-        libc::SIGVTALRM => "VTALRM".to_string(),
-        libc::SIGPROF => "PROF".to_string(),
-        libc::SIGWINCH => "WINCH".to_string(),
-        libc::SIGIO => "POLL".to_string(),
-        libc::SIGPWR => "PWR".to_string(),
-        libc::SIGSYS => "SYS".to_string(),
+    match Signal::try_from(sig as i32) {
+        Ok(Signal::SIGHUP) => "HUP".to_string(),
+        Ok(Signal::SIGINT) => "INT".to_string(),
+        Ok(Signal::SIGQUIT) => "QUIT".to_string(),
+        Ok(Signal::SIGILL) => "ILL".to_string(),
+        Ok(Signal::SIGTRAP) => "TRAP".to_string(),
+        Ok(Signal::SIGABRT) => "ABRT".to_string(),
+        Ok(Signal::SIGBUS) => "BUS".to_string(),
+        Ok(Signal::SIGFPE) => "FPE".to_string(),
+        Ok(Signal::SIGKILL) => "KILL".to_string(),
+        Ok(Signal::SIGUSR1) => "USR1".to_string(),
+        Ok(Signal::SIGSEGV) => "SEGV".to_string(),
+        Ok(Signal::SIGUSR2) => "USR2".to_string(),
+        Ok(Signal::SIGPIPE) => "PIPE".to_string(),
+        Ok(Signal::SIGALRM) => "ALRM".to_string(),
+        Ok(Signal::SIGTERM) => "TERM".to_string(),
+        Ok(Signal::SIGSTKFLT) => "STKFLT".to_string(),
+        Ok(Signal::SIGCHLD) => "CLD".to_string(),
+        Ok(Signal::SIGCONT) => "CONT".to_string(),
+        Ok(Signal::SIGSTOP) => "STOP".to_string(),
+        Ok(Signal::SIGTSTP) => "TSTP".to_string(),
+        Ok(Signal::SIGTTIN) => "TTIN".to_string(),
+        Ok(Signal::SIGTTOU) => "TTOU".to_string(),
+        Ok(Signal::SIGURG) => "URG".to_string(),
+        Ok(Signal::SIGXCPU) => "XCPU".to_string(),
+        Ok(Signal::SIGXFSZ) => "XFSZ".to_string(),
+        Ok(Signal::SIGVTALRM) => "VTALRM".to_string(),
+        Ok(Signal::SIGPROF) => "PROF".to_string(),
+        Ok(Signal::SIGWINCH) => "WINCH".to_string(),
+        Ok(Signal::SIGIO) => "POLL".to_string(),
+        Ok(Signal::SIGPWR) => "PWR".to_string(),
+        Ok(Signal::SIGSYS) => "SYS".to_string(),
         _ => format!("SIG{}", sig),
     }
 }

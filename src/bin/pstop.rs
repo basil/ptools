@@ -20,12 +20,11 @@ use std::time::Duration;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use ptools::ProcessState;
 
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
 fn verify_stopped(pid: u64) -> bool {
-    use ptools::ProcessState;
-
     let mut backoff = Duration::from_millis(10);
     let cap = Duration::from_millis(100);
     let mut warned_d = false;

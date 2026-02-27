@@ -16,7 +16,8 @@
 
 use std::process::exit;
 
-use ptools::{resolve_gid, resolve_uid, ProcHandle};
+use nix::unistd::{Gid, Group, Uid, User};
+use ptools::ProcHandle;
 
 struct Args {
     all: bool,
@@ -76,14 +77,22 @@ fn parse_args() -> Args {
 }
 
 fn fmt_uid(uid: u32) -> String {
-    match resolve_uid(uid) {
+    match User::from_uid(Uid::from_raw(uid))
+        .ok()
+        .flatten()
+        .map(|u| u.name)
+    {
         Some(name) => format!("{}({})", uid, name),
         None => uid.to_string(),
     }
 }
 
 fn fmt_gid(gid: u32) -> String {
-    match resolve_gid(gid) {
+    match Group::from_gid(Gid::from_raw(gid))
+        .ok()
+        .flatten()
+        .map(|g| g.name)
+    {
         Some(name) => format!("{}({})", gid, name),
         None => gid.to_string(),
     }

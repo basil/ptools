@@ -14,8 +14,10 @@
 //   limitations under the License.
 //
 
+use nix::errno::Errno;
 use nix::fcntl::OFlag;
-use nix::sys::stat::SFlag;
+use nix::sys::socket::AddressFamily;
+use nix::sys::stat::{major, minor, stat, SFlag};
 use std::path::PathBuf;
 
 use super::net::Socket;
@@ -189,19 +191,11 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -
 
 #[cfg(target_os = "linux")]
 fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) -> Option<String> {
-    match std::io::Error::last_os_error().raw_os_error() {
-        Some(nix::libc::ENODATA)
-        | Some(nix::libc::EOPNOTSUPP)
-        | Some(nix::libc::ENOENT)
-        | Some(nix::libc::EPERM)
-        | Some(nix::libc::EACCES) => None,
-        Some(errno) => Some(format!(
-            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}: errno {}",
+    match Errno::last() {
+        Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => None,
+        errno => Some(format!(
+            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}: {}",
             pid, fd, errno
-        )),
-        None => Some(format!(
-            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}",
-            pid, fd
         )),
     }
 }
@@ -210,7 +204,6 @@ fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) -> Option<String> {
 pub fn address_family_from_sockprotoname(
     sockprotoname: &str,
 ) -> Option<nix::sys::socket::AddressFamily> {
-    use nix::sys::socket::AddressFamily;
     let name = sockprotoname.strip_prefix("AF_").unwrap_or(sockprotoname);
     Some(match name {
         "UNIX" | "UNIX-STREAM" => AddressFamily::Unix,
@@ -229,8 +222,6 @@ pub fn address_family_from_sockprotoname(
 /// Call `stat(2)` on `/proc/[pid]/fd/[fd]` and wrap the result in an `FdStat`.
 #[allow(clippy::unnecessary_cast)]
 pub(crate) fn stat_fd(pid: u64, fd: u64) -> Result<FdStat, std::io::Error> {
-    use nix::sys::stat::{major, minor, stat};
-
     let path = format!("/proc/{}/fd/{}", pid, fd);
     let info = stat(path.as_str())?;
     Ok(FdStat {

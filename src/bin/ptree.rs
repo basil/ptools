@@ -14,11 +14,12 @@
 //   limitations under the License.
 //
 
-use nix::libc;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
 use std::process::exit;
+
+use nix::unistd::User;
 
 struct GraphChars {
     last: &'static str,
@@ -219,18 +220,8 @@ fn print_ptree_line(
     ptools::print_cmd_summary_from(&handle);
 }
 
-fn lookup_uid_by_username(username: &str) -> Result<Option<u32>, Box<dyn Error>> {
-    let c_username = std::ffi::CString::new(username)?;
-    // SAFETY: getpwnam returns a pointer to a static struct or null.
-    let pw = unsafe { libc::getpwnam(c_username.as_ptr()) };
-    if pw.is_null() {
-        return Ok(None);
-    }
-    Ok(Some(unsafe { (*pw).pw_uid }))
-}
-
 fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>, Box<dyn Error>> {
-    let uid = match lookup_uid_by_username(username)? {
+    let uid = match User::from_name(username)?.map(|u| u.uid.as_raw()) {
         Some(uid) => uid,
         None => {
             return Err(From::from(ptools::Error::parse(

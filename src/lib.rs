@@ -14,6 +14,8 @@
 //   limitations under the License.
 //
 
+use nix::sys::signal::{signal, SigHandler, Signal};
+
 mod display;
 #[allow(dead_code)]
 mod dw;
@@ -27,7 +29,7 @@ pub mod stack;
 pub use display::{
     print_auxv_from, print_cmd_summary_from, print_env_from, print_proc_summary_from,
 };
-pub use proc::cred::{resolve_gid, resolve_uid, ProcCred};
+pub use proc::cred::ProcCred;
 pub use proc::fd::{
     address_family_from_sockprotoname, AnonFileType, FdStat, FileDescriptor, FileType,
     PosixFileType,
@@ -40,8 +42,6 @@ pub use proc::{
     resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcessState, ResourceLimit,
     Rlimit, RlimitVal, SchedStat, SignalMasks,
 };
-
-use nix::libc;
 
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
 // TODO Test against 32-bit target processes
@@ -61,6 +61,6 @@ use nix::libc;
 pub fn reset_sigpipe() {
     // SAFETY: Restoring the default signal disposition is always safe.
     unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        signal(Signal::SIGPIPE, SigHandler::SigDfl).ok();
     }
 }

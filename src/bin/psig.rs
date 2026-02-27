@@ -14,6 +14,8 @@
 //   limitations under the License.
 //
 
+use std::process::exit;
+
 use nix::libc;
 use ptools::{ProcHandle, SignalSet};
 
@@ -80,8 +82,6 @@ fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::Error> {
     }
     Ok(())
 }
-
-use std::process::exit;
 
 struct Args {
     operands: Vec<String>,

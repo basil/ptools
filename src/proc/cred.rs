@@ -14,8 +14,6 @@
 //   limitations under the License.
 //
 
-use nix::libc;
-
 use super::Error;
 
 /// Process credentials parsed from /proc/[pid]/status
@@ -86,26 +84,4 @@ pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
         fsgid,
         groups,
     })
-}
-
-pub fn resolve_uid(uid: u32) -> Option<String> {
-    // SAFETY: getpwuid returns a pointer to a static struct or null.
-    let pw = unsafe { libc::getpwuid(uid) };
-    if pw.is_null() {
-        return None;
-    }
-    // SAFETY: pw_name is a valid C string if pw is non-null.
-    let name = unsafe { std::ffi::CStr::from_ptr((*pw).pw_name) };
-    name.to_str().ok().map(str::to_string)
-}
-
-pub fn resolve_gid(gid: u32) -> Option<String> {
-    // SAFETY: getgrgid returns a pointer to a static struct or null.
-    let gr = unsafe { libc::getgrgid(gid) };
-    if gr.is_null() {
-        return None;
-    }
-    // SAFETY: gr_name is a valid C string if gr is non-null.
-    let name = unsafe { std::ffi::CStr::from_ptr((*gr).gr_name) };
-    name.to_str().ok().map(str::to_string)
 }

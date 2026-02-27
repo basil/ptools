@@ -28,8 +28,9 @@
 
 use std::borrow::Cow;
 
+use nix::unistd::{Gid, Group, Uid, User};
+
 use crate::proc::auxv::{decode_hwcap, AuxvType};
-use crate::proc::cred::{resolve_gid, resolve_uid};
 use crate::proc::{Error, ProcHandle};
 
 fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
@@ -121,7 +122,11 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
             );
         } else if entry.key.is_uid() {
             let key = auxv_type_str(&entry.key);
-            if let Some(name) = resolve_uid(entry.value as u32) {
+            if let Some(name) = User::from_uid(Uid::from_raw(entry.value as u32))
+                .ok()
+                .flatten()
+                .map(|u| u.name)
+            {
                 println!(
                     "{:<15} 0x{:0width$x} {}({})",
                     key,
@@ -135,7 +140,11 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
             }
         } else if entry.key.is_gid() {
             let key = auxv_type_str(&entry.key);
-            if let Some(name) = resolve_gid(entry.value as u32) {
+            if let Some(name) = Group::from_gid(Gid::from_raw(entry.value as u32))
+                .ok()
+                .flatten()
+                .map(|g| g.name)
+            {
                 println!(
                     "{:<15} 0x{:0width$x} {}({})",
                     key,

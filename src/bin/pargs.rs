@@ -15,6 +15,7 @@
 //
 
 use std::ffi::OsString;
+use std::process::exit;
 
 use ptools::ProcHandle;
 
@@ -70,8 +71,6 @@ fn print_cmdline(handle: &ProcHandle) -> Result<(), ptools::Error> {
     println!("{}", quoted.join(" "));
     Ok(())
 }
-
-use std::process::exit;
 
 struct Args {
     line: bool,
