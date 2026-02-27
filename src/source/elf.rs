@@ -122,7 +122,6 @@ impl CoreElf {
     }
 
     /// Read memory from the core file's PT_LOAD segments.
-    #[allow(dead_code)]
     pub(super) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
         unsafe {
             let mut phnum: libc::size_t = 0;

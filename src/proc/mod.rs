@@ -213,9 +213,26 @@ impl ProcHandle {
 
     /// Read memory from the process — core dump PT_LOAD segments or live
     /// `process_vm_readv(2)`.
-    #[allow(dead_code)]
     pub(crate) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
         self.source.read_memory(addr, buf)
+    }
+
+    /// Read a NUL-terminated C string from the target process's memory.
+    ///
+    /// Best-effort: reads from `addr` to the end of its page. If no NUL
+    /// terminator is found within that range, returns the partial content.
+    pub(crate) fn read_cstring_at(&self, addr: u64, page_size: u64) -> Option<String> {
+        if addr == 0 {
+            return None;
+        }
+        let page_size = page_size.clamp(1, 64 * 1024);
+        let bytes_to_page_end = (page_size - (addr % page_size)) as usize;
+        let mut buf = vec![0u8; bytes_to_page_end];
+        if !self.read_memory(addr, &mut buf) {
+            return None;
+        }
+        let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+        Some(String::from_utf8_lossy(&buf[..len]).into_owned())
     }
 
     // -- Pure delegation ---------------------------------------------
