@@ -185,7 +185,9 @@ pub struct ProcHandle {
 impl ProcHandle {
     /// Drain and return all accumulated warnings.
     pub fn drain_warnings(&self) -> Vec<String> {
-        std::mem::take(&mut *self.warnings.borrow_mut())
+        let mut w = std::mem::take(&mut *self.warnings.borrow_mut());
+        w.extend(self.source.drain_warnings());
+        w
     }
 
     /// Append a warning to the handle's warning list.
@@ -199,9 +201,14 @@ impl ProcHandle {
         self.is_core
     }
 
-    /// Return a raw ELF pointer for the core dump, if available.
-    pub(crate) fn core_elf_ptr(&self) -> Option<*mut crate::dw_sys::Elf> {
-        self.source.core_elf_ptr()
+    /// Walk and symbolize frames for one thread.  Delegates to the
+    /// underlying data source which manages dwfl internally.
+    pub(crate) fn trace_thread(
+        &self,
+        tid: u32,
+        options: &crate::stack::TraceOptions,
+    ) -> Vec<crate::stack::Frame> {
+        self.source.trace_thread(tid, options)
     }
 
     /// Read memory from the process — core dump PT_LOAD segments or live
@@ -544,6 +551,7 @@ impl ProcHandle {
             }
         }
 
+        let tid_count = tids.len();
         let mut masks = Vec::new();
         for tid in tids {
             let Ok(status) = self.source.read_tid_status(tid) else {
@@ -557,6 +565,15 @@ impl ProcHandle {
                     break;
                 }
             }
+        }
+
+        if !masks.is_empty() && masks.len() < tid_count {
+            self.warnings.borrow_mut().push(format!(
+                "warning: read blocked mask for {} of {} threads; \
+                 blocked-signal intersection may be incomplete",
+                masks.len(),
+                tid_count
+            ));
         }
 
         if masks.is_empty() {

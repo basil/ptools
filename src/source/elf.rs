@@ -89,6 +89,27 @@ impl CoreElf {
             ));
         }
 
+        // Verify this is actually an ELF file (not an archive or raw data).
+        let kind = unsafe { crate::dw_sys::elf_kind(elf_ptr) };
+        if kind != crate::dw_sys::ELF_K_ELF {
+            unsafe { crate::dw_sys::elf_end(elf_ptr) };
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not an ELF file",
+            ));
+        }
+
+        // Verify this is a core dump (ET_CORE), not a regular executable or shared object.
+        let mut ehdr = unsafe { std::mem::zeroed::<crate::dw_sys::GElf_Ehdr>() };
+        let ret = unsafe { crate::dw_sys::gelf_getehdr(elf_ptr, &mut ehdr) };
+        if ret.is_null() || ehdr.e_type != libc::ET_CORE {
+            unsafe { crate::dw_sys::elf_end(elf_ptr) };
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "ELF type is not ET_CORE",
+            ));
+        }
+
         Ok(CoreElf {
             elf: OwnedElf(elf_ptr),
             _fd: fd,
@@ -113,8 +134,7 @@ impl CoreElf {
                 if crate::dw_sys::gelf_getphdr(self.elf.0, i, &mut phdr).is_null() {
                     continue;
                 }
-                // PT_LOAD = 1
-                if phdr.p_type != 1 {
+                if phdr.p_type != libc::PT_LOAD {
                     continue;
                 }
                 if addr >= phdr.p_vaddr && addr + buf.len() as u64 <= phdr.p_vaddr + phdr.p_filesz {

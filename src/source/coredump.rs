@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::io;
 use std::os::raw::{c_int, c_void};
@@ -22,6 +23,7 @@ use std::sync::Arc;
 
 use nix::libc;
 
+use super::dw::CoreDwfl;
 use super::elf::CoreElf;
 use super::ProcSource;
 
@@ -111,10 +113,12 @@ impl Drop for Journal {
 /// auxv, open fds, limits, proc status) are filled in from the systemd
 /// journal entry matching the coredump.
 pub(super) struct CoredumpSource {
-    pid: u64,
-    core_elf: Arc<CoreElf>,
+    core_dwfl: OnceCell<Option<CoreDwfl>>,
+    core_elf: Option<Arc<CoreElf>>,
+    pid: OnceCell<u64>,
+    tids: OnceCell<Vec<u64>>,
     fields: HashMap<String, Vec<u8>>,
-    warnings: Vec<String>,
+    warnings: RefCell<Vec<String>>,
 }
 
 /// A parsed entry from `COREDUMP_OPEN_FDS`.
@@ -144,7 +148,7 @@ impl CoredumpSource {
     /// (pid, comm, exe, uid, gid, signal, etc.). Then queries the systemd
     /// journal for the matching coredump entry to fill in rich fields like
     /// `COREDUMP_PROC_STATUS`, `COREDUMP_ENVIRON`, `COREDUMP_CMDLINE`, etc.
-    pub(super) fn from_corefile(path: &Path, core_elf: &Arc<CoreElf>) -> io::Result<Self> {
+    pub(super) fn from_corefile(path: &Path, core_elf: Option<&Arc<CoreElf>>) -> io::Result<Self> {
         let file_exists = path.exists();
 
         // Read what we can from extended attributes (only possible if
@@ -163,7 +167,7 @@ impl CoredumpSource {
         let journal_fields = lookup_journal_fields(path, &fields);
         let mut warnings = Vec::new();
         if journal_fields.is_empty() {
-            if !file_exists {
+            if core_elf.is_none() {
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!(
@@ -177,7 +181,7 @@ impl CoredumpSource {
                  output will be limited to core file metadata",
                 path.display()
             ));
-        } else if !file_exists {
+        } else if core_elf.is_none() {
             warnings.push(format!(
                 "warning: core file {} no longer exists; \
                  using journal entry only",
@@ -188,18 +192,37 @@ impl CoredumpSource {
             fields.entry(key).or_insert(value);
         }
 
-        let pid = extract_pid(&fields).unwrap_or(0);
         Ok(CoredumpSource {
-            pid,
-            core_elf: Arc::clone(core_elf),
+            core_dwfl: OnceCell::new(),
+            core_elf: core_elf.map(Arc::clone),
+            pid: OnceCell::new(),
+            tids: OnceCell::new(),
             fields,
-            warnings,
+            warnings: RefCell::new(warnings),
         })
     }
 
-    /// Return any warnings generated during construction.
-    pub(super) fn warnings(&self) -> &[String] {
-        &self.warnings
+    /// Lazily create and cache the dwfl session.
+    ///
+    /// Returns `None` if there is no core ELF or if creation fails.
+    fn ensure_core_dwfl(&self) -> Option<&CoreDwfl> {
+        self.core_dwfl
+            .get_or_init(|| {
+                let core_elf = match self.core_elf.as_ref() {
+                    Some(e) => e,
+                    None => return None,
+                };
+                match CoreDwfl::new(Arc::clone(core_elf)) {
+                    Ok(d) => Some(d),
+                    Err(e) => {
+                        self.warnings
+                            .borrow_mut()
+                            .push(format!("warning: failed to create dwfl session: {}", e));
+                        None
+                    }
+                }
+            })
+            .as_ref()
     }
 
     fn get_field(&self, key: &str) -> io::Result<&[u8]> {
@@ -246,7 +269,22 @@ fn unsupported(what: &str) -> io::Error {
 
 impl ProcSource for CoredumpSource {
     fn pid(&self) -> u64 {
-        self.pid
+        *self.pid.get_or_init(|| {
+            // Try dwfl first (authoritative pid from core ELF notes).
+            if let Some(core_dwfl) = self.ensure_core_dwfl() {
+                return core_dwfl.pid() as u64;
+            }
+            // Fall back to journal/xattr metadata.
+            match extract_pid(&self.fields) {
+                Ok(pid) => pid,
+                Err(_) => {
+                    self.warnings
+                        .borrow_mut()
+                        .push("warning: could not determine PID from core file".to_string());
+                    0
+                }
+            }
+        })
     }
 
     fn read_stat(&self) -> io::Result<String> {
@@ -289,11 +327,29 @@ impl ProcSource for CoredumpSource {
     }
 
     fn list_tids(&self) -> io::Result<Vec<u64>> {
-        Ok(vec![self.pid])
+        Ok(self
+            .tids
+            .get_or_init(|| {
+                // Try dwfl first (actual threads from core file).
+                if let Some(core_dwfl) = self.ensure_core_dwfl() {
+                    match core_dwfl.collect_tids() {
+                        Ok(tids) => return tids,
+                        Err(e) => {
+                            self.warnings.borrow_mut().push(format!(
+                                "warning: could not enumerate threads from core: {}",
+                                e
+                            ));
+                        }
+                    }
+                }
+                // Fall back to just the main thread.
+                vec![self.pid()]
+            })
+            .clone())
     }
 
     fn read_tid_stat(&self, tid: u64) -> io::Result<String> {
-        if tid == self.pid {
+        if tid == self.pid() {
             self.read_stat()
         } else {
             Err(io::Error::new(
@@ -304,7 +360,7 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_tid_status(&self, tid: u64) -> io::Result<String> {
-        if tid == self.pid {
+        if tid == self.pid() {
             self.read_status()
         } else {
             Err(io::Error::new(
@@ -334,11 +390,29 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
-        self.core_elf.read_memory(addr, buf)
+        match self.core_elf.as_ref() {
+            Some(elf) => elf.read_memory(addr, buf),
+            None => false,
+        }
     }
 
-    fn core_elf_ptr(&self) -> Option<*mut crate::dw_sys::Elf> {
-        Some(self.core_elf.as_elf_ptr())
+    fn trace_thread(
+        &self,
+        tid: u32,
+        options: &crate::stack::TraceOptions,
+    ) -> Vec<crate::stack::Frame> {
+        let core_dwfl = match self.ensure_core_dwfl() {
+            Some(d) => d,
+            None => return super::trace_warn(&self.warnings, tid, "no dwfl session"),
+        };
+        match core_dwfl.walk_thread_frames(tid, options) {
+            Ok(frames) => frames,
+            Err(e) => super::trace_warn(&self.warnings, tid, e),
+        }
+    }
+
+    fn drain_warnings(&self) -> Vec<String> {
+        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 }
 

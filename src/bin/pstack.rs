@@ -87,7 +87,7 @@ fn print_stack(
     tid_filter: Option<u64>,
     is_core: bool,
     args: &Args,
-) -> Result<(), ptools::stack::Error> {
+) -> Result<(), std::io::Error> {
     let mut opts = ptools::stack::TraceOptions::new();
     let opts = opts
         .thread_names(true)

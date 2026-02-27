@@ -21,6 +21,7 @@ use std::path::PathBuf;
 
 use nix::libc;
 
+use super::dw::{self, Dwfl};
 use super::ProcSource;
 
 /// Live-process backend: reads everything from `/proc/[pid]/...`.
@@ -29,6 +30,10 @@ use super::ProcSource;
 /// subsequent calls return a clone from the cache.
 pub(super) struct LiveProcess {
     pid: u64,
+
+    // Lazy dwfl session (only created when trace_thread is called).
+    dwfl: OnceCell<Option<RefCell<Dwfl<'static>>>>,
+    warnings: RefCell<Vec<String>>,
 
     // Per-process caches (no parameters).
     stat: OnceCell<String>,
@@ -55,6 +60,8 @@ impl LiveProcess {
     pub(super) fn new(pid: u64) -> Self {
         LiveProcess {
             pid,
+            dwfl: OnceCell::new(),
+            warnings: RefCell::new(Vec::new()),
             stat: OnceCell::new(),
             status: OnceCell::new(),
             comm: OnceCell::new(),
@@ -72,6 +79,21 @@ impl LiveProcess {
             fdinfo: RefCell::new(HashMap::new()),
             net_file: RefCell::new(HashMap::new()),
         }
+    }
+
+    /// Lazily create and cache the dwfl session for live stack walking.
+    fn ensure_dwfl(&self) -> Option<&RefCell<Dwfl<'static>>> {
+        self.dwfl
+            .get_or_init(|| match dw::create_dwfl_live(self.pid as u32) {
+                Ok(d) => Some(RefCell::new(d)),
+                Err(e) => {
+                    self.warnings
+                        .borrow_mut()
+                        .push(format!("warning: failed to create dwfl session: {}", e));
+                    None
+                }
+            })
+            .as_ref()
     }
 }
 
@@ -248,5 +270,25 @@ impl ProcSource for LiveProcess {
             libc::process_vm_readv(self.pid as libc::pid_t, &local, 1, &remote, 1, 0)
                 == buf.len() as isize
         }
+    }
+
+    fn trace_thread(
+        &self,
+        tid: u32,
+        options: &crate::stack::TraceOptions,
+    ) -> Vec<crate::stack::Frame> {
+        let dwfl_cell = match self.ensure_dwfl() {
+            Some(d) => d,
+            None => return super::trace_warn(&self.warnings, tid, "no dwfl session"),
+        };
+        let mut dwfl_ref = dwfl_cell.borrow_mut();
+        match dw::walk_thread_frames(&mut dwfl_ref, tid, options) {
+            Ok(frames) => frames,
+            Err(e) => super::trace_warn(&self.warnings, tid, e),
+        }
+    }
+
+    fn drain_warnings(&self) -> Vec<String> {
+        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 }

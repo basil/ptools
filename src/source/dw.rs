@@ -1,5 +1,6 @@
 //
 //   Copyright (c) 2017 Steven Fackler
+//   Copyright (c) 2026 Basil Crow
 //
 //   Licensed under the Apache License, Version 2.0 (the "License");
 //   you may not use this file except in compliance with the License.
@@ -14,13 +15,152 @@
 //   limitations under the License.
 //
 
-pub use crate::dw::dwfl::Error;
-use crate::dw::dwfl::{Callbacks, Dwfl, FindDebuginfo, FindElf, ModuleRef};
+//! Internal dwfl session management for stack frame walking.
+//!
+//! This module encapsulates all interactions with libdw/libdwfl within the
+//! source layer.  It is `pub(super)` -- visible only within the `source`
+//! module, so no dwfl types or ELF pointers leak to the rest of the crate.
+
+pub(super) use crate::dw::dwfl::Dwfl;
+use crate::dw::dwfl::{Callbacks, FindDebuginfo, FindElf, ModuleRef};
+use crate::stack::{Frame, SourceLocation, Symbol, TraceOptions};
+use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::c_int;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
-use super::{Frame, SourceLocation, Symbol, TraceOptions, TracedThread};
+use nix::libc;
+
+use super::elf::CoreElf;
+
+// ---------------------------------------------------------------------------
+// Dwfl session constructors
+// ---------------------------------------------------------------------------
+
+static CALLBACKS: LazyLock<Callbacks> =
+    LazyLock::new(|| Callbacks::new(FindElf::LINUX_PROC, FindDebuginfo::STANDARD));
+
+static CORE_CALLBACKS: LazyLock<Callbacks> =
+    LazyLock::new(|| Callbacks::new(FindElf::BUILD_ID, FindDebuginfo::STANDARD));
+
+/// Create a dwfl session for a core dump.
+///
+/// # Safety
+///
+/// The returned `Dwfl` borrows from `core_elf` internally (via the raw ELF
+/// pointer).  The caller must ensure that the `CoreElf` outlives the `Dwfl`.
+unsafe fn create_dwfl_core(core_elf: &CoreElf) -> Result<Dwfl<'static>, crate::dw::dwfl::Error> {
+    let elf_ptr = core_elf.as_elf_ptr();
+    let mut dwfl = Dwfl::begin(&CORE_CALLBACKS)?;
+    dwfl.report().core_file(elf_ptr)?;
+    dwfl.core_file_attach(elf_ptr)?;
+    Ok(dwfl)
+}
+
+/// Owns a dwfl session together with the `CoreElf` it borrows from.
+///
+/// # Drop ordering
+///
+/// `dwfl` is declared before `_core_elf` so Rust drops it first.
+/// This is critical because the dwfl session holds a raw pointer into
+/// the ELF data owned by `CoreElf`.
+pub(super) struct CoreDwfl {
+    dwfl: RefCell<Dwfl<'static>>,
+    _core_elf: Arc<CoreElf>,
+}
+
+impl CoreDwfl {
+    pub(super) fn new(core_elf: Arc<CoreElf>) -> Result<Self, crate::dw::dwfl::Error> {
+        // SAFETY: `core_elf` is moved into `_core_elf` below, and `dwfl` is
+        // declared before `_core_elf` so it is dropped first -- guaranteeing
+        // the `CoreElf` outlives the `Dwfl`.
+        let dwfl = unsafe { create_dwfl_core(&core_elf)? };
+        Ok(CoreDwfl {
+            dwfl: RefCell::new(dwfl),
+            _core_elf: core_elf,
+        })
+    }
+
+    pub(super) fn pid(&self) -> u32 {
+        self.dwfl.borrow().pid()
+    }
+
+    pub(super) fn collect_tids(&self) -> Result<Vec<u64>, crate::dw::dwfl::Error> {
+        collect_tids(&mut self.dwfl.borrow_mut())
+    }
+
+    pub(super) fn walk_thread_frames(
+        &self,
+        tid: u32,
+        options: &TraceOptions,
+    ) -> Result<Vec<Frame>, crate::dw::dwfl::Error> {
+        walk_thread_frames(&mut self.dwfl.borrow_mut(), tid, options)
+    }
+}
+
+/// Create a dwfl session for a live process.
+///
+/// The process's threads must already be ptrace-stopped before calling
+/// `walk_thread_frames`.
+pub(super) fn create_dwfl_live(pid: u32) -> Result<Dwfl<'static>, crate::dw::dwfl::Error> {
+    let mut dwfl = Dwfl::begin(&CALLBACKS)?;
+    dwfl.report().linux_proc(pid)?;
+    dwfl.linux_proc_attach(pid, true)?;
+    Ok(dwfl)
+}
+
+// ---------------------------------------------------------------------------
+// Thread enumeration (core dumps)
+// ---------------------------------------------------------------------------
+
+/// Collect all thread IDs from the dwfl session.
+pub(super) fn collect_tids(dwfl: &mut Dwfl<'static>) -> Result<Vec<u64>, crate::dw::dwfl::Error> {
+    let mut tids = Vec::new();
+    dwfl.threads(|thread_ref| {
+        tids.push(thread_ref.tid() as u64);
+        Ok(())
+    })?;
+    Ok(tids)
+}
+
+// ---------------------------------------------------------------------------
+// Frame walking
+// ---------------------------------------------------------------------------
+
+/// Walk and symbolize frames for one thread.
+pub(super) fn walk_thread_frames(
+    dwfl: &mut Dwfl<'static>,
+    tid: u32,
+    options: &TraceOptions,
+) -> Result<Vec<Frame>, crate::dw::dwfl::Error> {
+    let mut frames = Vec::new();
+    dwfl.thread_frames(tid, |frame| {
+        let mut is_signal = false;
+        let ip = frame.pc(Some(&mut is_signal))?;
+
+        let signal_adjust = if is_signal { 0 } else { 1 };
+        let lookup_pc = frame_lookup_pc(ip, is_signal);
+        let pc_adjusted = lookup_pc.unwrap_or(ip);
+        let module = lookup_pc.and_then(|pc| frame.thread().dwfl().addr_module(pc).ok());
+
+        process_frame(
+            module,
+            ip,
+            is_signal,
+            pc_adjusted,
+            signal_adjust,
+            options,
+            &mut frames,
+        );
+
+        Ok(())
+    })?;
+    Ok(frames)
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /// Demangle a C++ or Rust symbol name, returning `None` if the name is not
 /// mangled or demangling fails.
@@ -110,6 +250,14 @@ fn is_function_tag(tag: c_int) -> bool {
     tag == crate::dw_sys::DW_TAG_subprogram
         || tag == crate::dw_sys::DW_TAG_inlined_subroutine
         || tag == crate::dw_sys::DW_TAG_entry_point
+}
+
+fn frame_lookup_pc(ip: u64, is_signal: bool) -> Option<u64> {
+    if is_signal {
+        Some(ip)
+    } else {
+        ip.checked_sub(1)
+    }
 }
 
 /// Process a single physical frame into one or more logical frames (expanding inlines).
@@ -362,127 +510,4 @@ fn expand_inlines(
     }
 
     Some(result)
-}
-
-static CALLBACKS: LazyLock<Callbacks> =
-    LazyLock::new(|| Callbacks::new(FindElf::LINUX_PROC, FindDebuginfo::STANDARD));
-
-static CORE_CALLBACKS: LazyLock<Callbacks> =
-    LazyLock::new(|| Callbacks::new(FindElf::BUILD_ID, FindDebuginfo::STANDARD));
-
-fn frame_lookup_pc(ip: u64, is_signal: bool) -> Option<u64> {
-    if is_signal {
-        Some(ip)
-    } else {
-        ip.checked_sub(1)
-    }
-}
-
-pub struct State {
-    dwfl: Dwfl<'static>,
-}
-
-impl State {
-    pub fn new(pid: u32) -> Result<State, Error> {
-        let mut dwfl = Dwfl::begin(&CALLBACKS)?;
-        dwfl.report().linux_proc(pid)?;
-        dwfl.linux_proc_attach(pid, true)?;
-        Ok(State { dwfl })
-    }
-
-    /// # Safety
-    ///
-    /// `elf_ptr` must remain valid for the lifetime of the returned `State`.
-    pub unsafe fn new_core(elf_ptr: *mut crate::dw_sys::Elf) -> Result<State, Error> {
-        let mut dwfl = Dwfl::begin(&CORE_CALLBACKS)?;
-        dwfl.report().core_file(elf_ptr)?;
-        dwfl.core_file_attach(elf_ptr)?;
-        Ok(State { dwfl })
-    }
-
-    pub fn pid(&self) -> u32 {
-        self.dwfl.pid()
-    }
-
-    pub fn trace_threads_each(
-        &mut self,
-        options: &TraceOptions,
-        thread_name: &dyn Fn(u32) -> Option<String>,
-        each: &mut dyn FnMut(super::Thread),
-        handle: &crate::ProcHandle,
-    ) {
-        let result = self.dwfl.threads(|thread_ref| {
-            let tid = thread_ref.tid();
-            let mut frames = Vec::new();
-            let frame_result = thread_ref.frames(|frame| {
-                let mut is_signal = false;
-                let ip = frame.pc(Some(&mut is_signal))?;
-
-                let signal_adjust = if is_signal { 0 } else { 1 };
-                let lookup_pc = frame_lookup_pc(ip, is_signal);
-                let pc_adjusted = lookup_pc.unwrap_or(ip);
-                let module = lookup_pc.and_then(|pc| frame.thread().dwfl().addr_module(pc).ok());
-
-                process_frame(
-                    module,
-                    ip,
-                    is_signal,
-                    pc_adjusted,
-                    signal_adjust,
-                    options,
-                    &mut frames,
-                );
-
-                Ok(())
-            });
-            if let Err(e) = frame_result {
-                handle.push_warning(format!("error tracing thread {}: {}", tid, e));
-            }
-            let name = if options.thread_names {
-                thread_name(tid)
-            } else {
-                None
-            };
-            each(super::Thread {
-                id: tid,
-                name,
-                frames,
-            });
-            Ok(())
-        });
-        if let Err(e) = result {
-            handle.push_warning(format!("error enumerating threads: {}", e));
-        }
-    }
-}
-
-impl TracedThread {
-    pub fn dump_inner(
-        &self,
-        dwfl: &mut State,
-        options: &TraceOptions,
-        frames: &mut Vec<Frame>,
-    ) -> Result<(), Error> {
-        dwfl.dwfl.thread_frames(self.id, |frame| {
-            let mut is_signal = false;
-            let ip = frame.pc(Some(&mut is_signal))?;
-
-            let signal_adjust = if is_signal { 0 } else { 1 };
-            let lookup_pc = frame_lookup_pc(ip, is_signal);
-            let pc_adjusted = lookup_pc.unwrap_or(ip);
-            let module = lookup_pc.and_then(|pc| frame.thread().dwfl().addr_module(pc).ok());
-
-            process_frame(
-                module,
-                ip,
-                is_signal,
-                pc_adjusted,
-                signal_adjust,
-                options,
-                frames,
-            );
-
-            Ok(())
-        })
-    }
 }

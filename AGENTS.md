@@ -61,9 +61,9 @@ src/
     mod.rs            ProcSource trait
     live.rs           Live process backend (reads /proc)
     coredump.rs       Coredump backend (reads systemd journal + ELF notes)
+    dw.rs             DWARF-based unwinding via elfutils libdw/libdwfl
   stack/              Stack unwinding layer
     mod.rs            TraceOptions, Process, Thread, Frame types
-    dw.rs             DWARF-based unwinding via elfutils libdw/libdwfl
   display.rs          Shared formatting helpers
 examples/             Example programs used as test targets
 tests/                Integration tests
@@ -80,8 +80,10 @@ The codebase is organized into four layers with strict dependency rules:
 1. **Source layer** (`src/source/`): Abstracts where process data comes from.
    The `ProcSource` trait provides a uniform interface; `LiveProcess` reads
    `/proc/[pid]/...` while `CoredumpSource` reads from journal entries and ELF
-   notes. This layer must never write to stdout/stderr. Only the process handle
-   layer consumes it.
+   notes. Each source owns a lazily-initialized dwfl session and exposes
+   `trace_thread(tid, options)` for stack unwinding — no dwfl types or raw ELF
+   pointers leak outside this layer. This layer must never write to
+   stdout/stderr. Only the process handle layer consumes it.
 
 2. **Process handle layer** (`src/proc/`): Parses raw data from the source
    layer into typed Rust structures. The central type is `ProcHandle`, an
@@ -92,11 +94,13 @@ The codebase is organized into four layers with strict dependency rules:
    provides structured data only. All output formatting belongs in the
    presentation/display layer.
 
-3. **Stack layer** (`src/stack/`): Unwinds thread stacks for remote
-   processes and core dumps. Like the process handle layer, this layer must
-   never write to stdout/stderr or implement `Display` (except `Error`).
-   Non-fatal diagnostics (attachment failures, tracing errors) are pushed to
-   `ProcHandle::push_warning()` and drained by the presentation layer.
+3. **Stack layer** (`src/stack/`): Orchestrates thread enumeration, ptrace
+   attachment, and snapshot/rolling tracing strategies. Delegates actual frame
+   walking to the source layer via `ProcHandle::trace_thread()`. Like the
+   process handle layer, this layer must never write to stdout/stderr or
+   implement `Display` (except `Error`). Non-fatal diagnostics (attachment
+   failures, tracing errors) are pushed to `ProcHandle::push_warning()` and
+   drained by the presentation layer.
 
 4. **Presentation/display layer** (`src/display.rs` and `src/bin/*.rs`):
    Formats structured data from the proc-handle layer for terminal output.

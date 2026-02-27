@@ -33,6 +33,7 @@
 //!   the responsibility of the presentation layer.
 
 mod coredump;
+mod dw;
 mod elf;
 mod live;
 
@@ -75,10 +76,27 @@ pub(crate) trait ProcSource {
     #[allow(dead_code)]
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool;
 
-    /// Return a raw ELF pointer for the core dump, if available.
-    fn core_elf_ptr(&self) -> Option<*mut crate::dw_sys::Elf> {
-        None
-    }
+    /// Walk and symbolize frames for one thread.  Manages dwfl internally.
+    fn trace_thread(
+        &self,
+        tid: u32,
+        options: &crate::stack::TraceOptions,
+    ) -> Vec<crate::stack::Frame>;
+
+    /// Drain accumulated warnings.
+    fn drain_warnings(&self) -> Vec<String>;
+}
+
+/// Push a warning for a thread-tracing failure and return an empty frame list.
+fn trace_warn(
+    warnings: &std::cell::RefCell<Vec<String>>,
+    tid: u32,
+    msg: impl std::fmt::Display,
+) -> Vec<crate::stack::Frame> {
+    warnings
+        .borrow_mut()
+        .push(format!("error tracing thread {tid}: {msg}"));
+    Vec::new()
 }
 
 pub(crate) fn open_live(pid: u64) -> Box<dyn ProcSource> {
@@ -86,8 +104,17 @@ pub(crate) fn open_live(pid: u64) -> Box<dyn ProcSource> {
 }
 
 pub(crate) fn open_coredump(path: &Path) -> io::Result<(Box<dyn ProcSource>, Vec<String>)> {
-    let core_elf = Arc::new(elf::CoreElf::open(path)?);
-    let source = coredump::CoredumpSource::from_corefile(path, &core_elf)?;
-    let warnings = source.warnings().to_vec();
+    let core_elf = match elf::CoreElf::open(path) {
+        Ok(e) => Some(Arc::new(e)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Err(e) => {
+            return Err(io::Error::new(
+                e.kind(),
+                format!("{}: {}", path.display(), e),
+            ));
+        }
+    };
+    let source = coredump::CoredumpSource::from_corefile(path, core_elf.as_ref())?;
+    let warnings = source.drain_warnings();
     Ok((Box::new(source), warnings))
 }
