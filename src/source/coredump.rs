@@ -391,7 +391,7 @@ impl ProcSource for CoredumpSource {
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
         match self.core_elf.as_ref() {
-            Some(elf) => elf.read_memory(addr, buf),
+            Some(elf) => elf.read_memory(addr, buf, &self.warnings),
             None => false,
         }
     }
