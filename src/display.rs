@@ -28,7 +28,7 @@
 
 use std::borrow::Cow;
 
-use nix::unistd::{Gid, Group, Uid, User};
+use nix::unistd::{sysconf, Gid, Group, SysconfVar, Uid, User};
 
 use crate::proc::auxv::{decode_hwcap, AuxvType};
 use crate::proc::{Error, ProcHandle};
@@ -94,25 +94,35 @@ pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
 pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
     let auxv = handle.auxv()?;
     let hex_width = auxv.word_size * 2;
+    let page_size = auxv
+        .entries
+        .iter()
+        .find(|e| e.key == AuxvType::PageSz)
+        .map(|e| e.value)
+        .or_else(|| {
+            sysconf(SysconfVar::PAGE_SIZE)
+                .ok()
+                .flatten()
+                .map(|v| v as u64)
+        })
+        .unwrap_or(4096);
 
     print_proc_summary_from(handle);
     for entry in &auxv.entries {
-        if entry.key == AuxvType::ExecFn {
-            let s = handle
-                .exe()
-                .ok()
-                .and_then(|p| p.to_str().map(str::to_string))
-                .unwrap_or_default();
-            let key = auxv_type_str(&entry.key);
-            println!(
-                "{:<15} 0x{:0width$x} {}",
-                key,
-                entry.value,
-                s,
-                width = hex_width
-            );
+        let key = auxv_type_str(&entry.key);
+        if entry.key.is_string_pointer() {
+            if let Some(s) = handle.read_cstring_at(entry.value, page_size) {
+                println!(
+                    "{:<15} 0x{:0width$x} {}",
+                    key,
+                    entry.value,
+                    s,
+                    width = hex_width
+                );
+            } else {
+                println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
+            }
         } else if let Some(flags) = decode_hwcap(entry.key, entry.value) {
-            let key = auxv_type_str(&entry.key);
             println!(
                 "{:<15} 0x{:0width$x} {}",
                 key,
@@ -121,7 +131,6 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
                 width = hex_width
             );
         } else if entry.key.is_uid() {
-            let key = auxv_type_str(&entry.key);
             if let Some(name) = User::from_uid(Uid::from_raw(entry.value as u32))
                 .ok()
                 .flatten()
@@ -139,7 +148,6 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
                 println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
             }
         } else if entry.key.is_gid() {
-            let key = auxv_type_str(&entry.key);
             if let Some(name) = Group::from_gid(Gid::from_raw(entry.value as u32))
                 .ok()
                 .flatten()
@@ -157,7 +165,6 @@ pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
                 println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
             }
         } else {
-            let key = auxv_type_str(&entry.key);
             println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
         }
     }

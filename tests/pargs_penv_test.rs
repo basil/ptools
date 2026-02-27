@@ -229,6 +229,38 @@ fn pauxv_prints_auxv_entries() {
         pagesz,
         allowed_page_sizes
     );
+
+    // AT_EXECFN should show the dereferenced string (an absolute path) when
+    // process_vm_readv is permitted.  On Ubuntu (yama ptrace_scope=1) the tool
+    // process is a sibling, not a parent, of the target so the read is denied
+    // and only the hex address is printed.
+    let execfn_line = stdout
+        .lines()
+        .find(|line| line.starts_with("AT_EXECFN"))
+        .unwrap_or_else(|| panic!("Expected AT_EXECFN in pauxv output:\n\n{}\n\n", stdout));
+    let execfn_tokens: Vec<&str> = execfn_line.split_whitespace().collect();
+    if execfn_tokens.len() >= 3 {
+        assert!(
+            execfn_tokens[2].starts_with('/'),
+            "AT_EXECFN string should be an absolute path, got '{}' in '{}'",
+            execfn_tokens[2],
+            execfn_line
+        );
+    }
+
+    // AT_PLATFORM: same caveat — only validate the string when present.
+    let platform_line = stdout.lines().find(|line| line.starts_with("AT_PLATFORM "));
+    if let Some(platform_line) = platform_line {
+        let platform_tokens: Vec<&str> = platform_line.split_whitespace().collect();
+        if platform_tokens.len() >= 3 {
+            assert!(
+                !platform_tokens[2].starts_with("0x"),
+                "AT_PLATFORM string should not be a hex address, got '{}' in '{}'",
+                platform_tokens[2],
+                platform_line
+            );
+        }
+    }
 }
 
 #[test]
@@ -323,4 +355,36 @@ fn pargs_x_prints_auxv_entries() {
         pagesz,
         allowed_page_sizes
     );
+
+    // AT_EXECFN should show the dereferenced string (an absolute path) when
+    // process_vm_readv is permitted.  On Ubuntu (yama ptrace_scope=1) the tool
+    // process is a sibling, not a parent, of the target so the read is denied
+    // and only the hex address is printed.
+    let execfn_line = stdout
+        .lines()
+        .find(|line| line.starts_with("AT_EXECFN"))
+        .unwrap_or_else(|| panic!("Expected AT_EXECFN in pargs -x output:\n\n{}\n\n", stdout));
+    let execfn_tokens: Vec<&str> = execfn_line.split_whitespace().collect();
+    if execfn_tokens.len() >= 3 {
+        assert!(
+            execfn_tokens[2].starts_with('/'),
+            "AT_EXECFN string should be an absolute path, got '{}' in '{}'",
+            execfn_tokens[2],
+            execfn_line
+        );
+    }
+
+    // AT_PLATFORM: same caveat — only validate the string when present.
+    let platform_line = stdout.lines().find(|line| line.starts_with("AT_PLATFORM "));
+    if let Some(platform_line) = platform_line {
+        let platform_tokens: Vec<&str> = platform_line.split_whitespace().collect();
+        if platform_tokens.len() >= 3 {
+            assert!(
+                !platform_tokens[2].starts_with("0x"),
+                "AT_PLATFORM string should not be a hex address, got '{}' in '{}'",
+                platform_tokens[2],
+                platform_line
+            );
+        }
+    }
 }
