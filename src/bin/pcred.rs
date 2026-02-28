@@ -101,7 +101,7 @@ fn fmt_gid(gid: u32) -> String {
     }
 }
 
-fn print_cred(handle: &ProcHandle, all: bool) -> Result<(), std::io::Error> {
+fn print_cred(handle: &ProcHandle, all: bool) -> std::io::Result<()> {
     let pid = handle.pid();
     let cred = handle.cred().map_err(|e| {
         eprintln!("pcred: {}: {}", pid, e);

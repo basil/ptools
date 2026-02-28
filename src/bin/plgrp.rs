@@ -264,7 +264,7 @@ fn print_thread(
     handle: &ProcHandle,
     tid: u64,
     affinity_nodes: &Option<Vec<u32>>,
-) -> Result<(), std::io::Error> {
+) -> std::io::Result<()> {
     let pid = handle.pid();
     let node = if handle.is_core() {
         "?".to_string()

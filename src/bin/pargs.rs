@@ -19,7 +19,7 @@ use std::process::exit;
 
 use ptools::proc::ProcHandle;
 
-fn read_cmdline(handle: &ProcHandle) -> Result<Vec<OsString>, std::io::Error> {
+fn read_cmdline(handle: &ProcHandle) -> std::io::Result<Vec<OsString>> {
     handle.argv().map_err(|e| {
         eprintln!("Error opening /proc/{}/cmdline: {}", handle.pid(), e);
         e
@@ -41,7 +41,7 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
-fn print_args(handle: &ProcHandle) -> Result<(), std::io::Error> {
+fn print_args(handle: &ProcHandle) -> std::io::Result<()> {
     let args = read_cmdline(handle)?;
     ptools::display::print_proc_summary_from(handle);
     for (i, arg) in args.iter().enumerate() {
@@ -50,7 +50,7 @@ fn print_args(handle: &ProcHandle) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn print_cmdline(handle: &ProcHandle) -> Result<(), std::io::Error> {
+fn print_cmdline(handle: &ProcHandle) -> std::io::Result<()> {
     let args = read_cmdline(handle)?;
     // Use /proc/[pid]/exe to resolve the real executable path instead of
     // argv[0], which may be a relative path or a name set by the process.

@@ -199,7 +199,7 @@ pub fn address_family_from_sockprotoname(
 }
 
 /// Call `stat(2)` on `/proc/[pid]/fd/[fd]`.
-pub(crate) fn stat_fd(pid: u64, fd: u64) -> Result<FileStat, std::io::Error> {
+pub(crate) fn stat_fd(pid: u64, fd: u64) -> std::io::Result<FileStat> {
     let path = format!("/proc/{}/fd/{}", pid, fd);
     stat(path.as_str()).map_err(Into::into)
 }
