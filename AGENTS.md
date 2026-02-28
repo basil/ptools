@@ -81,7 +81,7 @@ The codebase is organized into four layers with strict dependency rules:
    The `ProcSource` trait provides a uniform interface; `LiveProcess` reads
    `/proc/[pid]/...` while `CoredumpSource` reads from journal entries and ELF
    notes. Each source owns a lazily-initialized dwfl session and exposes
-   `trace_thread(tid, options)` for stack unwinding — no dwfl types or raw ELF
+   `trace_thread(tid, options)` for stack unwinding -- no dwfl types or raw ELF
    pointers leak outside this layer. This layer must never write to
    stdout/stderr. Only the process handle layer consumes it.
 

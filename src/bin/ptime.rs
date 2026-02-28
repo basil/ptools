@@ -126,7 +126,7 @@ fn parse_args() -> Args {
 
 /// Format nanoseconds as a human-readable time string.
 ///
-/// `precision` controls the number of fractional digits (1–9).
+/// `precision` controls the number of fractional digits (1-9).
 ///
 /// - `< 60s`:  `S.fff`
 /// - `< 1h`:   `M:SS.fff`

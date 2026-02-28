@@ -248,7 +248,7 @@ fn pauxv_prints_auxv_entries() {
         );
     }
 
-    // AT_PLATFORM: same caveat — only validate the string when present.
+    // AT_PLATFORM: same caveat -- only validate the string when present.
     let platform_line = stdout.lines().find(|line| line.starts_with("AT_PLATFORM "));
     if let Some(platform_line) = platform_line {
         let platform_tokens: Vec<&str> = platform_line.split_whitespace().collect();
@@ -374,7 +374,7 @@ fn pargs_x_prints_auxv_entries() {
         );
     }
 
-    // AT_PLATFORM: same caveat — only validate the string when present.
+    // AT_PLATFORM: same caveat -- only validate the string when present.
     let platform_line = stdout.lines().find(|line| line.starts_with("AT_PLATFORM "));
     if let Some(platform_line) = platform_line {
         let platform_tokens: Vec<&str> = platform_line.split_whitespace().collect();
