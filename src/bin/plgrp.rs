@@ -119,7 +119,7 @@ struct NodeList {
 
 /// Parse a node list string that may contain IDs, ranges, and keywords.
 /// Warns on stderr for each non-online node (matching Solaris behavior).
-fn parse_node_list(s: &str) -> Result<NodeList, ptools::proc::Error> {
+fn parse_node_list(s: &str) -> std::io::Result<NodeList> {
     let online = numa_online_nodes()?;
     let mut result = Vec::new();
     let mut had_bad_nodes = false;
@@ -131,30 +131,29 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::proc::Error> {
                 result.extend(online.iter());
             }
             "root" => {
-                return Err(ptools::proc::Error::parse(
-                    "node 'root'",
-                    "Linux NUMA nodes have no hierarchy; use 'all' instead",
+                return Err(std::io::Error::other(
+                    "Error parsing node 'root': Linux NUMA nodes have no hierarchy; use 'all' instead",
                 ));
             }
             _ => {
                 if let Some((start, end)) = part.split_once('-') {
                     let start: u32 = start.trim().parse().map_err(|e| {
-                        ptools::proc::Error::parse(
-                            &format!("node '{}'", start.trim()),
-                            &format!("{}", e),
-                        )
+                        std::io::Error::other(format!(
+                            "Error parsing node '{}': {}",
+                            start.trim(),
+                            e,
+                        ))
                     })?;
                     let end: u32 = end.trim().parse().map_err(|e| {
-                        ptools::proc::Error::parse(
-                            &format!("node '{}'", end.trim()),
-                            &format!("{}", e),
+                        std::io::Error::other(
+                            format!("Error parsing node '{}': {}", end.trim(), e,),
                         )
                     })?;
                     if start > end {
-                        return Err(ptools::proc::Error::parse(
-                            &format!("range {}-{}", start, end),
-                            "start > end",
-                        ));
+                        return Err(std::io::Error::other(format!(
+                            "Error parsing range {}-{}: start > end",
+                            start, end,
+                        )));
                     }
                     for n in start..=end {
                         if online.contains(&n) {
@@ -166,7 +165,7 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::proc::Error> {
                     }
                 } else {
                     let n: u32 = part.parse().map_err(|e| {
-                        ptools::proc::Error::parse(&format!("node '{}'", part), &format!("{}", e))
+                        std::io::Error::other(format!("Error parsing node '{}': {}", part, e))
                     })?;
                     if online.contains(&n) {
                         result.push(n);
@@ -264,7 +263,7 @@ fn print_thread(
     handle: &ProcHandle,
     tid: u64,
     affinity_nodes: &Option<Vec<u32>>,
-) -> Result<(), ptools::proc::Error> {
+) -> Result<(), std::io::Error> {
     let pid = handle.pid();
     let node = if handle.is_core() {
         "?".to_string()

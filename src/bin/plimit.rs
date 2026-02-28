@@ -147,7 +147,7 @@ fn format_row(rl: &ResourceLimit, mode: UnitMode) -> (String, String, String) {
     (label, fmt_val(soft), fmt_val(hard))
 }
 
-fn print_limits(handle: &ProcHandle, mode: UnitMode) -> Result<(), ptools::proc::Error> {
+fn print_limits(handle: &ProcHandle, mode: UnitMode) -> Result<(), std::io::Error> {
     let limits = handle.resource_limits().map_err(|e| {
         eprintln!("plimit: {}: {}", handle.pid(), e);
         e

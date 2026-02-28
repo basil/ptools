@@ -14,7 +14,7 @@
 //   limitations under the License.
 //
 
-use super::Error;
+use std::io;
 
 /// Process credentials parsed from /proc/[pid]/status
 pub struct ProcCred {
@@ -30,7 +30,7 @@ pub struct ProcCred {
 }
 
 /// Parse credentials from the text of /proc/[pid]/status.
-pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
+pub(crate) fn parse_cred(status: &str) -> io::Result<ProcCred> {
     let mut uid_fields = None;
     let mut gid_fields = None;
     let mut groups = Vec::new();
@@ -69,9 +69,9 @@ pub(crate) fn parse_cred(status: &str) -> Result<ProcCred, Error> {
     }
 
     let (ruid, euid, suid, fsuid) =
-        uid_fields.ok_or_else(|| Error::in_file("status", "missing Uid"))?;
+        uid_fields.ok_or_else(|| super::file_parse_error("status", "missing Uid"))?;
     let (rgid, egid, sgid, fsgid) =
-        gid_fields.ok_or_else(|| Error::in_file("status", "missing Gid"))?;
+        gid_fields.ok_or_else(|| super::file_parse_error("status", "missing Gid"))?;
 
     Ok(ProcCred {
         euid,

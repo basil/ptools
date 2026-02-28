@@ -19,7 +19,7 @@ use nix::sys::socket::AddressFamily;
 use nix::sys::stat::{major, minor};
 use ptools::proc::fd::{AnonFileType, FileDescriptor, FileType, PosixFileType};
 use ptools::proc::net::{SockType, Socket, SocketOptions, TcpState};
-use ptools::proc::{Error, ProcHandle};
+use ptools::proc::ProcHandle;
 use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::process::exit;
@@ -444,7 +444,7 @@ fn print_epoll_fdinfo(extra_lines: &[String]) {
     }
 }
 
-fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
+fn print_files(handle: &ProcHandle, non_verbose: bool) -> std::io::Result<()> {
     let pid = handle.pid();
 
     ptools::display::print_proc_summary_from(handle);

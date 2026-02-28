@@ -15,15 +15,16 @@
 //
 
 use std::collections::BTreeSet;
+use std::io;
 
 use nix::sys::signal::Signal;
 
 /// Parse a hex signal mask (e.g. from `SigIgn`) into a `BTreeSet<usize>` of
 /// 1-indexed signal numbers.
-pub(crate) fn parse_signal_set(hex: &str) -> Result<BTreeSet<usize>, super::Error> {
+pub(crate) fn parse_signal_set(hex: &str) -> io::Result<BTreeSet<usize>> {
     let trimmed = hex.trim();
     if trimmed.is_empty() {
-        return Err(super::Error::parse("signal mask", "empty"));
+        return Err(super::parse_error("signal mask", "empty"));
     }
 
     let mut set = BTreeSet::new();
@@ -33,7 +34,7 @@ pub(crate) fn parse_signal_set(hex: &str) -> Result<BTreeSet<usize>, super::Erro
             b'a'..=b'f' => 10 + (ch - b'a'),
             b'A'..=b'F' => 10 + (ch - b'A'),
             _ => {
-                return Err(super::Error::parse(
+                return Err(super::parse_error(
                     "signal mask",
                     &format!("invalid hex digit '{}'", ch as char),
                 ));

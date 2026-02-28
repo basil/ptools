@@ -239,10 +239,10 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
     let uid = match User::from_name(username)?.map(|u| u.uid.as_raw()) {
         Some(uid) => uid,
         None => {
-            return Err(From::from(ptools::proc::Error::parse(
-                "username",
-                &format!("No such user '{}'", username),
-            )))
+            return Err(From::from(std::io::Error::other(format!(
+                "Error parsing username: No such user '{}'",
+                username,
+            ))))
         }
     };
 

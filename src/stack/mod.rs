@@ -385,10 +385,7 @@ impl TraceOptions {
         let pid = handle.pid() as u32;
         header(pid);
         let comm = handle.comm().ok();
-        let tids = handle.tids().map_err(|e| match e {
-            crate::proc::Error::Io(e) => e,
-            crate::proc::Error::Parse(msg) => io::Error::other(msg),
-        })?;
+        let tids = handle.tids()?;
         for tid in tids {
             let tid32 = tid as u32;
             if self.tid.is_some_and(|f| f != tid32) {

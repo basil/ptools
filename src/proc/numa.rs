@@ -15,6 +15,7 @@
 //
 
 use std::collections::BTreeSet;
+use std::io;
 
 /// Affinity relationship between a CPU set and a NUMA node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +56,7 @@ pub fn node_affinity(cpuset: &BTreeSet<u32>, node: u32) -> NodeAffinity {
 }
 
 /// Parse a kernel list-format string like "0-3,5,7-8" into a `BTreeSet<u32>`.
-pub(crate) fn parse_list_format(s: &str) -> Result<BTreeSet<u32>, super::Error> {
+pub(crate) fn parse_list_format(s: &str) -> io::Result<BTreeSet<u32>> {
     let s = s.trim();
     if s.is_empty() {
         return Ok(BTreeSet::new());
@@ -65,25 +66,25 @@ pub(crate) fn parse_list_format(s: &str) -> Result<BTreeSet<u32>, super::Error> 
         let part = part.trim();
         if let Some((start, end)) = part.split_once('-') {
             let start: u32 = start.trim().parse().map_err(|e| {
-                super::Error::parse(
+                super::parse_error(
                     &format!("range start '{}'", start.trim()),
                     &format!("{}", e),
                 )
             })?;
             let end: u32 = end.trim().parse().map_err(|e| {
-                super::Error::parse(&format!("range end '{}'", end.trim()), &format!("{}", e))
+                super::parse_error(&format!("range end '{}'", end.trim()), &format!("{}", e))
             })?;
             if start > end {
-                return Err(super::Error::parse(
+                return Err(super::parse_error(
                     &format!("range {}-{}", start, end),
                     "start > end",
                 ));
             }
             cpus.extend(start..=end);
         } else {
-            let val: u32 = part.parse().map_err(|e| {
-                super::Error::parse(&format!("value '{}'", part), &format!("{}", e))
-            })?;
+            let val: u32 = part
+                .parse()
+                .map_err(|e| super::parse_error(&format!("value '{}'", part), &format!("{}", e)))?;
             cpus.insert(val);
         }
     }
@@ -91,16 +92,16 @@ pub(crate) fn parse_list_format(s: &str) -> Result<BTreeSet<u32>, super::Error> 
 }
 
 /// Return the list of online NUMA nodes from `/sys/devices/system/node/online`.
-pub fn numa_online_nodes() -> Result<BTreeSet<u32>, super::Error> {
+pub fn numa_online_nodes() -> io::Result<BTreeSet<u32>> {
     let content = std::fs::read_to_string("/sys/devices/system/node/online")
-        .map_err(|e| super::Error::Parse(format!("failed to read NUMA online nodes: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("failed to read NUMA online nodes: {}", e)))?;
     parse_list_format(&content)
 }
 
 /// Return the set of online CPUs from `/sys/devices/system/cpu/online`.
-fn online_cpus() -> Result<BTreeSet<u32>, super::Error> {
+fn online_cpus() -> io::Result<BTreeSet<u32>> {
     let content = std::fs::read_to_string("/sys/devices/system/cpu/online")
-        .map_err(|e| super::Error::Parse(format!("failed to read online CPUs: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("failed to read online CPUs: {}", e)))?;
     parse_list_format(&content)
 }
 
@@ -109,10 +110,10 @@ fn online_cpus() -> Result<BTreeSet<u32>, super::Error> {
 /// This intersects the node's CPU list with the set of online CPUs so that
 /// offline CPUs do not skew affinity comparisons against `sched_getaffinity`,
 /// which only reports online CPUs.
-pub(crate) fn numa_node_cpus(node: u32) -> Result<BTreeSet<u32>, super::Error> {
+pub(crate) fn numa_node_cpus(node: u32) -> io::Result<BTreeSet<u32>> {
     let path = format!("/sys/devices/system/node/node{}/cpulist", node);
     let content = std::fs::read_to_string(&path)
-        .map_err(|e| super::Error::Parse(format!("failed to read {}: {}", path, e)))?;
+        .map_err(|e| io::Error::other(format!("failed to read {}: {}", path, e)))?;
     let node_cpus = parse_list_format(&content)?;
     let online = online_cpus()?;
     Ok(node_cpus.intersection(&online).copied().collect())

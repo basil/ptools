@@ -16,12 +16,12 @@
 
 use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use std::collections::HashMap;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use super::fd::parse_socket_inode;
-use super::Error;
 use crate::source::ProcSource;
 
 /// Socket type as reported in `/proc/[pid]/net/*`.
@@ -103,9 +103,9 @@ fn parse_tcp_state(state_hex: &str) -> Result<TcpState, ParseIntError> {
 }
 
 // Parse a socket address of the form "0100007F:1538" (i.e. 127.0.0.1:5432)
-fn parse_ipv4_sock_addr(s: &str) -> Result<SocketAddr, Error> {
+fn parse_ipv4_sock_addr(s: &str) -> io::Result<SocketAddr> {
     let mk_err = || {
-        Error::parse(
+        super::parse_error(
             "IPv4 address",
             &format!("expected address in form '0100007F:1538', got {}", s),
         )
@@ -129,9 +129,9 @@ fn parse_ipv4_sock_addr(s: &str) -> Result<SocketAddr, Error> {
 
 // Parse a socket address of the form "00000000000000000000000001000000:1538"
 // (i.e. ::1:5432)
-fn parse_ipv6_sock_addr(s: &str) -> Result<SocketAddr, Error> {
+fn parse_ipv6_sock_addr(s: &str) -> io::Result<SocketAddr> {
     let mk_err = || {
-        Error::parse(
+        super::parse_error(
             "IPv6 address",
             &format!(
                 "expected address in form '00000000000000000000000001000000:1538', got {}",
@@ -235,7 +235,7 @@ pub(crate) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, SocketI
 
     // procfs entries for tcp/udp/raw sockets (both IPv4 and IPv6) all use same format
     let mut parse_net_file =
-        |filename: &str, s_type, family, parse_addr: fn(&str) -> Result<SocketAddr, Error>| {
+        |filename: &str, s_type, family, parse_addr: fn(&str) -> io::Result<SocketAddr>| {
             if let Ok(content) = source.read_net_file(filename) {
                 let is_tcp = filename == "tcp" || filename == "tcp6";
                 let additional_sockets = content

@@ -30,8 +30,10 @@ use std::borrow::Cow;
 
 use nix::unistd::{sysconf, Gid, Group, SysconfVar, Uid, User};
 
+use std::io;
+
 use crate::proc::auxv::AuxvType;
-use crate::proc::{Error, ProcHandle};
+use crate::proc::ProcHandle;
 
 fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
     match key {
@@ -66,7 +68,7 @@ fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
     }
 }
 
-pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
+pub fn print_env_from(handle: &ProcHandle) -> io::Result<()> {
     // This contains the environ as it was when the proc was started. To get the current
     // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
     // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
@@ -91,7 +93,7 @@ pub fn print_env_from(handle: &ProcHandle) -> Result<(), Error> {
 }
 
 #[allow(clippy::unnecessary_cast)]
-pub fn print_auxv_from(handle: &ProcHandle) -> Result<(), Error> {
+pub fn print_auxv_from(handle: &ProcHandle) -> io::Result<()> {
     let auxv = handle.auxv()?;
     let hex_width = auxv.word_size * 2;
     let page_size = auxv
@@ -194,13 +196,13 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
                     println!();
                 }
                 Ok(_) => println!("<unknown>"),
-                Err(ref e) if e.is_not_found() => {
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
                     println!("<exited>");
                 }
                 Err(_) => println!("<unknown>"),
             }
         }
-        Err(ref e) if e.is_not_found() => {
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
             println!("<exited>");
         }
         Err(e) => {

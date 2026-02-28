@@ -16,7 +16,7 @@
 
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::mem::size_of;
 use std::path::Path;
 
@@ -124,11 +124,11 @@ pub struct AuxvData {
     pub word_size: usize,
 }
 
-fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
+fn parse_word(chunk: &[u8], word_size: usize) -> io::Result<u64> {
     match word_size {
         4 => {
             let raw: [u8; 4] = chunk.try_into().map_err(|_| {
-                super::Error::parse(
+                super::parse_error(
                     "auxv",
                     &format!("invalid 32-bit word length {}", chunk.len()),
                 )
@@ -137,26 +137,26 @@ fn parse_word(chunk: &[u8], word_size: usize) -> Result<u64, super::Error> {
         }
         8 => {
             let raw: [u8; 8] = chunk.try_into().map_err(|_| {
-                super::Error::parse(
+                super::parse_error(
                     "auxv",
                     &format!("invalid 64-bit word length {}", chunk.len()),
                 )
             })?;
             Ok(u64::from_ne_bytes(raw))
         }
-        n => Err(super::Error::parse(
+        n => Err(super::parse_error(
             "auxv",
             &format!("unsupported word size {}", n),
         )),
     }
 }
 
-fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, super::Error> {
+fn parse_auxv_records(bytes: &[u8], word_size: usize) -> io::Result<Vec<AuxvEntry>> {
     let record_size = word_size
         .checked_mul(2)
-        .ok_or_else(|| super::Error::parse("auxv", "record size overflow"))?;
+        .ok_or_else(|| super::parse_error("auxv", "record size overflow"))?;
     if record_size == 0 || !bytes.len().is_multiple_of(record_size) {
-        return Err(super::Error::parse(
+        return Err(super::parse_error(
             "auxv",
             &format!("unexpected size {}", bytes.len()),
         ));
@@ -178,7 +178,7 @@ fn parse_auxv_records(bytes: &[u8], word_size: usize) -> Result<Vec<AuxvEntry>, 
     }
 
     if !saw_terminator {
-        return Err(super::Error::parse("auxv", "missing AT_NULL terminator"));
+        return Err(super::parse_error("auxv", "missing AT_NULL terminator"));
     }
 
     Ok(result)
@@ -201,11 +201,11 @@ fn elf_word_size_from_path(exe_path: &Path) -> Option<usize> {
 }
 
 /// Read and parse the auxiliary vector from a process handle.
-pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<AuxvData, super::Error> {
+pub(crate) fn read_auxv(handle: &ProcHandle) -> io::Result<AuxvData> {
     let bytes = handle.auxv_bytes()?;
 
     if bytes.is_empty() {
-        return Err(super::Error::parse("auxv", "empty file"));
+        return Err(super::parse_error("auxv", "empty file"));
     }
 
     let native_word_size = size_of::<usize>();
@@ -230,7 +230,7 @@ pub(crate) fn read_auxv(handle: &ProcHandle) -> Result<AuxvData, super::Error> {
         }
     }
 
-    Err(super::Error::parse(
+    Err(super::parse_error(
         "auxv",
         &format!("unexpected format ({} bytes)", bytes.len()),
     ))

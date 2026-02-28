@@ -51,7 +51,7 @@ fn action_text(action: SignalAction) -> &'static str {
     }
 }
 
-fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::proc::Error> {
+fn print_signal_actions(handle: &ProcHandle) -> Result<(), std::io::Error> {
     ptools::display::print_proc_summary_from(handle);
 
     let masks = handle.signal_masks().map_err(|e| {

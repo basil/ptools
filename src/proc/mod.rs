@@ -30,8 +30,7 @@
 //! - This module must **never** write to stdout or stderr.  All warnings
 //!   and non-fatal diagnostics must be returned via the `warnings` vector
 //!   on [`ProcHandle`].
-//! - Types defined here should **not** implement `Display` except for
-//!   [`Error`], which needs `Display` for the `std::error::Error` blanket.
+//! - Types defined here should **not** implement `Display`.
 //! - This module provides structured data to the presentation layer for
 //!   formatting; it should never make presentation decisions itself.
 
@@ -89,26 +88,26 @@ struct FdInfo {
     extra_lines: Vec<String>,
 }
 
-fn parse_rlimit_val(s: &str) -> Result<RlimitVal, Error> {
+fn parse_rlimit_val(s: &str) -> io::Result<RlimitVal> {
     if s.eq_ignore_ascii_case("unlimited") {
         Ok(None)
     } else {
         s.parse::<u64>()
             .map(Some)
-            .map_err(|e| Error::parse("rlimit value", &e.to_string()))
+            .map_err(|e| parse_error("rlimit value", &e.to_string()))
     }
 }
 
 /// Try to parse a single resource limit from the raw limits text.
 ///
 /// Returns `Ok(None)` if the line for this resource is not present.
-fn parse_rlimit_line(limits: &str, prefix: &str) -> Result<Option<Rlimit>, Error> {
+fn parse_rlimit_line(limits: &str, prefix: &str) -> io::Result<Option<Rlimit>> {
     for line in limits.lines() {
         if let Some(rest) = line.strip_prefix(prefix) {
             let rest = rest.trim();
             let fields: Vec<&str> = rest.split_whitespace().collect();
             if fields.len() < 2 {
-                return Err(Error::parse(prefix, "line has fewer fields than expected"));
+                return Err(parse_error(prefix, "line has fewer fields than expected"));
             }
             return Ok(Some(Rlimit {
                 soft: parse_rlimit_val(fields[0])?,
@@ -124,7 +123,7 @@ fn parse_rlimit_line(limits: &str, prefix: &str) -> Result<Option<Rlimit>, Error
 /// The kernel formats limits with fixed-width columns:
 /// `%-25s %-20s %-20s %-10s\n`
 /// The header line is skipped.
-fn parse_resource_limits(text: &str) -> Result<Vec<ResourceLimit>, Error> {
+fn parse_resource_limits(text: &str) -> io::Result<Vec<ResourceLimit>> {
     let mut limits = Vec::new();
     for line in text.lines().skip(1) {
         if line.is_empty() {
@@ -133,7 +132,7 @@ fn parse_resource_limits(text: &str) -> Result<Vec<ResourceLimit>, Error> {
         // The kernel format is: %-25s %-20s %-20s %-10s
         // Name occupies columns 0..25, soft 25..45, hard 45..65, unit 65..
         if line.len() < 45 {
-            return Err(Error::parse("limits", "line too short"));
+            return Err(parse_error("limits", "line too short"));
         }
         let name = line[..25].trim_end().to_string();
         let soft_str = if line.len() >= 45 {
@@ -243,36 +242,36 @@ impl ProcHandle {
         self.source.pid()
     }
 
-    fn auxv_bytes(&self) -> Result<Vec<u8>, Error> {
-        Ok(self.source.read_auxv()?)
+    fn auxv_bytes(&self) -> io::Result<Vec<u8>> {
+        self.source.read_auxv()
     }
 
     /// Parse and return all auxiliary vector entries with metadata.
-    pub(crate) fn auxv(&self) -> Result<auxv::AuxvData, Error> {
+    pub(crate) fn auxv(&self) -> io::Result<auxv::AuxvData> {
         auxv::read_auxv(self)
     }
 
-    pub(crate) fn comm(&self) -> Result<String, Error> {
-        Ok(self.source.read_comm()?)
+    pub(crate) fn comm(&self) -> io::Result<String> {
+        self.source.read_comm()
     }
 
-    pub fn exe(&self) -> Result<PathBuf, Error> {
-        Ok(self.source.read_exe()?)
+    pub fn exe(&self) -> io::Result<PathBuf> {
+        self.source.read_exe()
     }
 
-    pub fn tids(&self) -> Result<Vec<u64>, Error> {
-        Ok(self.source.list_tids()?)
+    pub fn tids(&self) -> io::Result<Vec<u64>> {
+        self.source.list_tids()
     }
 
-    fn fds(&self) -> Result<Vec<u64>, Error> {
-        Ok(self.source.list_fds()?)
+    fn fds(&self) -> io::Result<Vec<u64>> {
+        self.source.list_fds()
     }
 
-    fn fd_path(&self, fd: u64) -> Result<PathBuf, Error> {
-        Ok(self.source.read_fd_link(fd)?)
+    fn fd_path(&self, fd: u64) -> io::Result<PathBuf> {
+        self.source.read_fd_link(fd)
     }
 
-    fn fdinfo(&self, fd: u64) -> Result<FdInfo, Error> {
+    fn fdinfo(&self, fd: u64) -> io::Result<FdInfo> {
         let contents = self.source.read_fdinfo(fd)?;
         let mut offset = None;
         let mut flags = None;
@@ -284,11 +283,11 @@ impl ProcHandle {
                 offset = Some(
                     val.trim()
                         .parse::<u64>()
-                        .map_err(|e| Error::in_file("fdinfo", &format!("invalid pos: {}", e)))?,
+                        .map_err(|e| file_parse_error("fdinfo", &format!("invalid pos: {}", e)))?,
                 );
             } else if let Some(val) = line.strip_prefix("flags:") {
                 let raw = i32::from_str_radix(val.trim(), 8)
-                    .map_err(|e| Error::in_file("fdinfo", &format!("invalid flags: {}", e)))?;
+                    .map_err(|e| file_parse_error("fdinfo", &format!("invalid flags: {}", e)))?;
                 flags = Some(OFlag::from_bits_truncate(raw));
             } else if let Some(val) = line.strip_prefix("mnt_id:") {
                 mnt_id = val.trim().parse::<u64>().ok();
@@ -298,8 +297,8 @@ impl ProcHandle {
         }
 
         Ok(FdInfo {
-            offset: offset.ok_or_else(|| Error::in_file("fdinfo", "missing 'pos' field"))?,
-            flags: flags.ok_or_else(|| Error::in_file("fdinfo", "missing 'flags' field"))?,
+            offset: offset.ok_or_else(|| file_parse_error("fdinfo", "missing 'pos' field"))?,
+            flags: flags.ok_or_else(|| file_parse_error("fdinfo", "missing 'flags' field"))?,
             mnt_id,
             extra_lines,
         })
@@ -308,26 +307,26 @@ impl ProcHandle {
     // -- Parsed from /proc/[pid]/stat --------------------------------
 
     /// Process state parsed from `/proc/[pid]/stat`.
-    pub fn state(&self) -> Result<ProcState, Error> {
+    pub fn state(&self) -> io::Result<ProcState> {
         let stat = self.source.read_stat()?;
         // Use rfind to handle comm fields containing parentheses.
         let after_comm = stat
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?
             + 1;
         let rest = stat[after_comm..].trim_start();
         rest.chars()
             .next()
             .map(ProcState::from_char)
-            .ok_or_else(|| Error::in_file("stat", "empty state field"))
+            .ok_or_else(|| file_parse_error("stat", "empty state field"))
     }
 
     /// User CPU time in clock ticks (field 14 of /proc/[pid]/stat).
-    pub fn utime(&self) -> Result<u64, Error> {
+    pub fn utime(&self) -> io::Result<u64> {
         let data = self.source.read_stat()?;
         let close_paren = data
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
         let after_comm = &data[close_paren + 2..];
         // Fields after comm: state(0) ppid(1) pgrp(2) session(3) tty_nr(4)
         //   tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10)
@@ -335,69 +334,69 @@ impl ProcHandle {
         let field = after_comm
             .split_whitespace()
             .nth(11)
-            .ok_or_else(|| Error::in_file("stat", "missing utime field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing utime field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| Error::in_file("stat", &format!("invalid utime: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid utime: {}", e)))
     }
 
     /// System CPU time in clock ticks (field 15 of /proc/[pid]/stat).
-    pub fn stime(&self) -> Result<u64, Error> {
+    pub fn stime(&self) -> io::Result<u64> {
         let data = self.source.read_stat()?;
         let close_paren = data
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
         let after_comm = &data[close_paren + 2..];
         // Fields after comm: state(0) ... utime(11) stime(12) ...
         let field = after_comm
             .split_whitespace()
             .nth(12)
-            .ok_or_else(|| Error::in_file("stat", "missing stime field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing stime field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| Error::in_file("stat", &format!("invalid stime: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid stime: {}", e)))
     }
 
     /// Process group ID (field 5 of /proc/[pid]/stat).
-    pub fn pgrp(&self) -> Result<u64, Error> {
+    pub fn pgrp(&self) -> io::Result<u64> {
         let data = self.source.read_stat()?;
         let close_paren = data
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
         let after_comm = &data[close_paren + 2..];
         // Fields after comm: state(0) ppid(1) pgrp(2) ...
         let field = after_comm
             .split_whitespace()
             .nth(2)
-            .ok_or_else(|| Error::in_file("stat", "missing pgrp field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing pgrp field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| Error::in_file("stat", &format!("invalid pgrp: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid pgrp: {}", e)))
     }
 
     /// Session ID (field 6 of /proc/[pid]/stat).
-    pub fn sid(&self) -> Result<u64, Error> {
+    pub fn sid(&self) -> io::Result<u64> {
         let data = self.source.read_stat()?;
         let close_paren = data
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
         let after_comm = &data[close_paren + 2..];
         // Fields after comm: state(0) ppid(1) pgrp(2) session(3) ...
         let field = after_comm
             .split_whitespace()
             .nth(3)
-            .ok_or_else(|| Error::in_file("stat", "missing session field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing session field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| Error::in_file("stat", &format!("invalid session: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid session: {}", e)))
     }
 
     /// Nice value (field 19 of /proc/[pid]/stat).
-    pub fn nice(&self) -> Result<i32, Error> {
+    pub fn nice(&self) -> io::Result<i32> {
         let data = self.source.read_stat()?;
         let close_paren = data
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
         let after_comm = &data[close_paren + 2..];
         // Fields after comm: state(0) ppid(1) pgrp(2) session(3) tty_nr(4)
         //   tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10)
@@ -405,83 +404,83 @@ impl ProcHandle {
         let field = after_comm
             .split_whitespace()
             .nth(16)
-            .ok_or_else(|| Error::in_file("stat", "missing nice field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing nice field"))?;
         field
             .parse::<i32>()
-            .map_err(|e| Error::in_file("stat", &format!("invalid nice: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid nice: {}", e)))
     }
 
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
-    pub fn starttime(&self) -> Result<u64, Error> {
+    pub fn starttime(&self) -> io::Result<u64> {
         let data = self.source.read_stat()?;
         let close_paren = data
             .rfind(')')
-            .ok_or_else(|| Error::in_file("stat", "missing ')' in comm field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
         let after_comm = &data[close_paren + 2..];
         // Fields after comm: state(0) ppid(1) ... starttime(19)
         let field = after_comm
             .split_whitespace()
             .nth(19)
-            .ok_or_else(|| Error::in_file("stat", "missing starttime field"))?;
+            .ok_or_else(|| file_parse_error("stat", "missing starttime field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| Error::in_file("stat", &format!("invalid starttime: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid starttime: {}", e)))
     }
 
     // -- Parsed from /proc/[pid]/status ------------------------------
 
-    pub fn ppid(&self) -> Result<u64, Error> {
+    pub fn ppid(&self) -> io::Result<u64> {
         let status = self.source.read_status()?;
         for line in status.lines() {
             if let Some(val) = line.strip_prefix("PPid:") {
                 return val
                     .trim()
                     .parse::<u64>()
-                    .map_err(|e| Error::in_file("status", &format!("invalid PPid: {}", e)));
+                    .map_err(|e| file_parse_error("status", &format!("invalid PPid: {}", e)));
             }
         }
-        Err(Error::in_file("status", "missing PPid"))
+        Err(file_parse_error("status", "missing PPid"))
     }
 
-    pub fn euid(&self) -> Result<u32, Error> {
+    pub fn euid(&self) -> io::Result<u32> {
         let status = self.source.read_status()?;
         for line in status.lines() {
             if let Some(val) = line.strip_prefix("Uid:") {
                 let fields: Vec<&str> = val.split_whitespace().collect();
                 if fields.len() < 2 {
-                    return Err(Error::in_file("status", "Uid field has too few values"));
+                    return Err(file_parse_error("status", "Uid field has too few values"));
                 }
                 return fields[1]
                     .parse::<u32>()
-                    .map_err(|e| Error::in_file("status", &format!("invalid euid: {}", e)));
+                    .map_err(|e| file_parse_error("status", &format!("invalid euid: {}", e)));
             }
         }
-        Err(Error::in_file("status", "missing Uid"))
+        Err(file_parse_error("status", "missing Uid"))
     }
 
-    pub fn umask(&self) -> Result<u32, Error> {
+    pub fn umask(&self) -> io::Result<u32> {
         let status = self.source.read_status()?;
         for line in status.lines() {
             if let Some(val) = line.strip_prefix("Umask:") {
                 return u32::from_str_radix(val.trim(), 8)
-                    .map_err(|e| Error::in_file("status", &format!("invalid Umask: {}", e)));
+                    .map_err(|e| file_parse_error("status", &format!("invalid Umask: {}", e)));
             }
         }
-        Err(Error::in_file("status", "missing Umask"))
+        Err(file_parse_error("status", "missing Umask"))
     }
 
-    pub fn thread_count(&self) -> Result<usize, Error> {
+    pub fn thread_count(&self) -> io::Result<usize> {
         let status = self.source.read_status()?;
         let val = status
             .lines()
             .find_map(|l| l.strip_prefix("Threads:"))
-            .ok_or_else(|| Error::in_file("status", "missing Threads"))?;
+            .ok_or_else(|| file_parse_error("status", "missing Threads"))?;
         val.trim()
             .parse::<usize>()
-            .map_err(|e| Error::in_file("status", &format!("invalid Threads: {}", e)))
+            .map_err(|e| file_parse_error("status", &format!("invalid Threads: {}", e)))
     }
 
-    pub fn cred(&self) -> Result<ProcCred, Error> {
+    pub fn cred(&self) -> io::Result<ProcCred> {
         let status = self.source.read_status()?;
         parse_cred(&status)
     }
@@ -490,7 +489,7 @@ impl ProcHandle {
 
     /// Parse signal masks (SigIgn/SigCgt/SigBlk/SigPnd/ShdPnd) from status.
     /// The blocked mask is the intersection across all threads.
-    pub fn signal_masks(&self) -> Result<SignalMasks, Error> {
+    pub fn signal_masks(&self) -> io::Result<SignalMasks> {
         let status = self.source.read_status()?;
 
         let mut sig_ign = None;
@@ -513,12 +512,12 @@ impl ProcHandle {
             }
         }
 
-        let sig_ign_hex = sig_ign.ok_or_else(|| Error::in_file("status", "missing SigIgn"))?;
-        let sig_cgt_hex = sig_cgt.ok_or_else(|| Error::in_file("status", "missing SigCgt"))?;
+        let sig_ign_hex = sig_ign.ok_or_else(|| file_parse_error("status", "missing SigIgn"))?;
+        let sig_cgt_hex = sig_cgt.ok_or_else(|| file_parse_error("status", "missing SigCgt"))?;
 
-        let parse = |name: &str, hex: &str| -> Result<BTreeSet<usize>, Error> {
+        let parse = |name: &str, hex: &str| -> io::Result<BTreeSet<usize>> {
             parse_signal_set(hex)
-                .map_err(|e| Error::in_file("status", &format!("invalid {}: {}", name, e)))
+                .map_err(|e| file_parse_error("status", &format!("invalid {}: {}", name, e)))
         };
 
         let ignored = parse("SigIgn", &sig_ign_hex)?;
@@ -605,35 +604,35 @@ impl ProcHandle {
     // -- Thread methods ----------------------------------------------
 
     /// CPU number a thread is currently running on (field 39 of tid/stat).
-    pub fn thread_cpu(&self, tid: u64) -> Result<u32, Error> {
+    pub fn thread_cpu(&self, tid: u64) -> io::Result<u32> {
         let stat = self.source.read_tid_stat(tid)?;
         let after_comm = stat
             .rfind(')')
-            .ok_or_else(|| Error::in_file("task/stat", "missing ')' in comm field"))?
+            .ok_or_else(|| file_parse_error("task/stat", "missing ')' in comm field"))?
             + 1;
         let fields: Vec<&str> = stat[after_comm..].split_whitespace().collect();
         // processor is at index 36 after the comm field
         let val = fields
             .get(36)
-            .ok_or_else(|| Error::in_file("task/stat", "missing processor field"))?;
+            .ok_or_else(|| file_parse_error("task/stat", "missing processor field"))?;
         val.parse::<u32>()
-            .map_err(|e| Error::in_file("task/stat", &format!("invalid processor: {}", e)))
+            .map_err(|e| file_parse_error("task/stat", &format!("invalid processor: {}", e)))
     }
 
     /// Cpus_allowed_list from a thread's status, as a `BTreeSet<u32>`.
-    pub fn thread_affinity(&self, tid: u64) -> Result<std::collections::BTreeSet<u32>, Error> {
+    pub fn thread_affinity(&self, tid: u64) -> io::Result<std::collections::BTreeSet<u32>> {
         let status = self.source.read_tid_status(tid)?;
         let line = status
             .lines()
             .find_map(|l| l.strip_prefix("Cpus_allowed_list:"))
-            .ok_or_else(|| Error::in_file("task/status", "missing Cpus_allowed_list"))?;
+            .ok_or_else(|| file_parse_error("task/status", "missing Cpus_allowed_list"))?;
         numa::parse_list_format(line.trim())
     }
 
     // -- Compound convenience ----------------------------------------
 
     /// Read cmdline and split on NUL into individual arguments.
-    pub fn argv(&self) -> Result<Vec<OsString>, Error> {
+    pub fn argv(&self) -> io::Result<Vec<OsString>> {
         let bytes = self.source.read_cmdline()?;
         let mut args: Vec<OsString> = bytes
             .split(|b| *b == b'\0')
@@ -651,7 +650,7 @@ impl ProcHandle {
     /// `(key, value)` pairs.  Entries that lack an `=` or have an
     /// empty key are silently skipped (processes like sshd can overwrite
     /// their environ memory with status info, leaving garbage).
-    pub(crate) fn environ(&self) -> Result<Vec<(OsString, OsString)>, Error> {
+    pub(crate) fn environ(&self) -> io::Result<Vec<(OsString, OsString)>> {
         let bytes = self.source.read_environ()?;
         let mut vars = Vec::new();
         for chunk in bytes.split(|b| *b == b'\0') {
@@ -675,24 +674,24 @@ impl ProcHandle {
     }
 
     /// Parse scheduler statistics from `/proc/[pid]/schedstat`.
-    pub fn schedstat(&self) -> Result<SchedStat, Error> {
+    pub fn schedstat(&self) -> io::Result<SchedStat> {
         let data = self.source.read_schedstat()?;
         let mut fields = data.split_whitespace();
         let run_time_ns = fields
             .next()
-            .ok_or_else(|| Error::in_file("schedstat", "missing run_time field"))?
+            .ok_or_else(|| file_parse_error("schedstat", "missing run_time field"))?
             .parse::<u64>()
-            .map_err(|e| Error::in_file("schedstat", &format!("invalid run_time: {}", e)))?;
+            .map_err(|e| file_parse_error("schedstat", &format!("invalid run_time: {}", e)))?;
         let wait_time_ns = fields
             .next()
-            .ok_or_else(|| Error::in_file("schedstat", "missing wait_time field"))?
+            .ok_or_else(|| file_parse_error("schedstat", "missing wait_time field"))?
             .parse::<u64>()
-            .map_err(|e| Error::in_file("schedstat", &format!("invalid wait_time: {}", e)))?;
+            .map_err(|e| file_parse_error("schedstat", &format!("invalid wait_time: {}", e)))?;
         let timeslices = fields
             .next()
-            .ok_or_else(|| Error::in_file("schedstat", "missing timeslices field"))?
+            .ok_or_else(|| file_parse_error("schedstat", "missing timeslices field"))?
             .parse::<u64>()
-            .map_err(|e| Error::in_file("schedstat", &format!("invalid timeslices: {}", e)))?;
+            .map_err(|e| file_parse_error("schedstat", &format!("invalid timeslices: {}", e)))?;
         Ok(SchedStat {
             run_time_ns,
             wait_time_ns,
@@ -701,14 +700,14 @@ impl ProcHandle {
     }
 
     /// Query the open-files resource limit from `/proc/[pid]/limits`.
-    pub fn nofile_limit(&self) -> Result<Rlimit, Error> {
+    pub fn nofile_limit(&self) -> io::Result<Rlimit> {
         let limits = self.source.read_limits()?;
         parse_rlimit_line(&limits, "Max open files")?
-            .ok_or_else(|| Error::parse("/proc/[pid]/limits", "Max open files line not found"))
+            .ok_or_else(|| parse_error("/proc/[pid]/limits", "Max open files line not found"))
     }
 
     /// Parse all resource limits from `/proc/[pid]/limits`.
-    pub fn resource_limits(&self) -> Result<Vec<ResourceLimit>, Error> {
+    pub fn resource_limits(&self) -> io::Result<Vec<ResourceLimit>> {
         let limits = self.source.read_limits()?;
         parse_resource_limits(&limits)
     }
@@ -720,7 +719,7 @@ impl ProcHandle {
     /// process's open files.  It combines fd path/stat/fdinfo, socket info
     /// from `/proc/net/*`, socket details via `getsockopt`, and peer process
     /// resolution into a single call.
-    pub fn file_descriptors(&self) -> Result<Vec<fd::FileDescriptor>, Error> {
+    pub fn file_descriptors(&self) -> io::Result<Vec<fd::FileDescriptor>> {
         let fds = self.fds()?;
         let sockets = net::parse_socket_info(&*self.source);
 
@@ -761,7 +760,7 @@ impl ProcHandle {
         sockets: &std::collections::HashMap<u64, net::SocketInfo>,
         tcp_peers: &std::collections::HashMap<u64, (u64, String)>,
         warnings: &mut Vec<String>,
-    ) -> Result<fd::FileDescriptor, Error> {
+    ) -> io::Result<fd::FileDescriptor> {
         let path = self.fd_path(fd_num)?;
         let link_text = path.to_string_lossy();
         let info = self.fdinfo(fd_num)?;
@@ -897,16 +896,16 @@ struct PidSpec {
     tid: Option<u64>,
 }
 
-fn parse_pid_spec(s: &str) -> Result<PidSpec, Error> {
+fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
     if let Some((pid_str, tid_str)) = s.split_once('/') {
         let pid = pid_str
             .parse::<u64>()
-            .map_err(|e| Error::parse(&format!("PID '{}'", pid_str), &format!("{}", e)))?;
+            .map_err(|e| parse_error(&format!("PID '{}'", pid_str), &format!("{}", e)))?;
         let tid = tid_str
             .parse::<u64>()
-            .map_err(|e| Error::parse(&format!("thread ID '{}'", tid_str), &format!("{}", e)))?;
+            .map_err(|e| parse_error(&format!("thread ID '{}'", tid_str), &format!("{}", e)))?;
         if pid == 0 {
-            return Err(Error::Parse("PID must be >= 1".to_string()));
+            return Err(io::Error::other("PID must be >= 1".to_string()));
         }
         Ok(PidSpec {
             pid,
@@ -915,16 +914,16 @@ fn parse_pid_spec(s: &str) -> Result<PidSpec, Error> {
     } else {
         let pid = s
             .parse::<u64>()
-            .map_err(|e| Error::parse(&format!("PID '{}'", s), &format!("{}", e)))?;
+            .map_err(|e| parse_error(&format!("PID '{}'", s), &format!("{}", e)))?;
         if pid == 0 {
-            return Err(Error::Parse("PID must be >= 1".to_string()));
+            return Err(io::Error::other("PID must be >= 1".to_string()));
         }
         Ok(PidSpec { pid, tid: None })
     }
 }
 
 /// Grab a process from a coredump
-fn grab_core(path: &Path) -> Result<ProcHandle, Error> {
+fn grab_core(path: &Path) -> io::Result<ProcHandle> {
     let (source, warnings) = crate::source::open_coredump(path)?;
     Ok(ProcHandle {
         source,
@@ -941,11 +940,11 @@ fn grab_core(path: &Path) -> Result<ProcHandle, Error> {
 ///
 /// This variant does **not** accept `pid/tid` syntax; use
 /// [`resolve_operand_with_tid`] for tools that support thread selection.
-pub fn resolve_operand(arg: &str) -> Result<ProcHandle, Error> {
+pub fn resolve_operand(arg: &str) -> io::Result<ProcHandle> {
     match arg.parse::<u64>() {
         Ok(pid) => {
             if pid == 0 {
-                return Err(Error::Parse("PID must be >= 1".to_string()));
+                return Err(io::Error::other("PID must be >= 1".to_string()));
             }
             Ok(ProcHandle::from_pid(pid))
         }
@@ -962,7 +961,7 @@ pub fn resolve_operand(arg: &str) -> Result<ProcHandle, Error> {
 /// 1. Try parsing as a PID spec (`1234` or `1234/5`)
 /// 2. If that fails and the arg is purely digits, surface the PID error
 /// 3. Otherwise treat as a coredump file path
-pub fn resolve_operand_with_tid(arg: &str) -> Result<(ProcHandle, Option<u64>), Error> {
+pub fn resolve_operand_with_tid(arg: &str) -> io::Result<(ProcHandle, Option<u64>)> {
     match parse_pid_spec(arg) {
         Ok(spec) => Ok((ProcHandle::from_pid(spec.pid), spec.tid)),
         Err(e) => {
@@ -975,55 +974,10 @@ pub fn resolve_operand_with_tid(arg: &str) -> Result<(ProcHandle, Option<u64>), 
     }
 }
 
-/// Unified error type for ptools operations.
-#[derive(Debug)]
-pub enum Error {
-    /// I/O error from the underlying data source.
-    Io(io::Error),
-    /// Error parsing procfs data.
-    Parse(String),
+fn parse_error(item: &str, reason: &str) -> io::Error {
+    io::Error::other(format!("Error parsing {}: {}", item, reason))
 }
 
-impl Error {
-    pub fn parse(item: &str, reason: &str) -> Self {
-        Error::Parse(format!("Error parsing {}: {}", item, reason))
-    }
-    pub fn in_file(file: &str, reason: &str) -> Self {
-        Error::Parse(format!("Error parsing /proc/[pid]/{}: {}", file, reason))
-    }
-
-    /// Whether the underlying error is an I/O "not found" error.
-    pub fn is_not_found(&self) -> bool {
-        matches!(self, Error::Io(e) if e.kind() == io::ErrorKind::NotFound)
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::Io(e) => Some(e),
-            Error::Parse(_) => None,
-        }
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Error::Io(e) => write!(f, "{}", e),
-            Error::Parse(reason) => write!(f, "{}", reason),
-        }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self {
-        Error::Io(e)
-    }
-}
-
-impl From<std::num::ParseIntError> for Error {
-    fn from(e: std::num::ParseIntError) -> Self {
-        Error::Parse(e.to_string())
-    }
+fn file_parse_error(file: &str, reason: &str) -> io::Error {
+    io::Error::other(format!("Error parsing /proc/[pid]/{}: {}", file, reason))
 }
