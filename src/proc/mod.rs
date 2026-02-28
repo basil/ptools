@@ -706,7 +706,7 @@ impl ProcHandle {
     pub fn nofile_limit(&self) -> io::Result<Rlimit> {
         let limits = self.source.read_limits()?;
         parse_rlimit_line(&limits, "Max open files")?
-            .ok_or_else(|| parse_error("/proc/[pid]/limits", "Max open files line not found"))
+            .ok_or_else(|| file_parse_error("limits", "Max open files line not found"))
     }
 
     /// Parse all resource limits from `/proc/[pid]/limits`.
@@ -903,10 +903,10 @@ fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
     if let Some((pid_str, tid_str)) = s.split_once('/') {
         let pid = pid_str
             .parse::<u64>()
-            .map_err(|e| parse_error(&format!("PID '{}'", pid_str), &format!("{}", e)))?;
-        let tid = tid_str
-            .parse::<u64>()
-            .map_err(|e| parse_error(&format!("thread ID '{}'", tid_str), &format!("{}", e)))?;
+            .map_err(|e| io::Error::other(format!("Error parsing PID '{}': {}", pid_str, e)))?;
+        let tid = tid_str.parse::<u64>().map_err(|e| {
+            io::Error::other(format!("Error parsing thread ID '{}': {}", tid_str, e))
+        })?;
         if pid == 0 {
             return Err(io::Error::other("PID must be >= 1".to_string()));
         }
@@ -917,7 +917,7 @@ fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
     } else {
         let pid = s
             .parse::<u64>()
-            .map_err(|e| parse_error(&format!("PID '{}'", s), &format!("{}", e)))?;
+            .map_err(|e| io::Error::other(format!("Error parsing PID '{}': {}", s, e)))?;
         if pid == 0 {
             return Err(io::Error::other("PID must be >= 1".to_string()));
         }
