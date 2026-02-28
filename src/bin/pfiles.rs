@@ -17,10 +17,9 @@
 use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
 use nix::sys::stat::{major, minor};
-use ptools::{
-    AnonFileType, Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, Socket,
-    SocketOptions, TcpState,
-};
+use ptools::proc::fd::{AnonFileType, FileDescriptor, FileType, PosixFileType};
+use ptools::proc::net::{SockType, Socket, SocketOptions, TcpState};
+use ptools::proc::{Error, ProcHandle};
 use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::process::exit;
@@ -41,7 +40,7 @@ fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
 }
 
 fn sockname_from_sockprotoname(sockprotoname: &str) -> String {
-    if let Some(addr_fam) = ptools::address_family_from_sockprotoname(sockprotoname) {
+    if let Some(addr_fam) = ptools::proc::fd::address_family_from_sockprotoname(sockprotoname) {
         address_family_str(addr_fam).to_string()
     } else {
         sockprotoname.to_string()
@@ -448,10 +447,10 @@ fn print_epoll_fdinfo(extra_lines: &[String]) {
 fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
     let pid = handle.pid();
 
-    ptools::print_proc_summary_from(handle);
+    ptools::display::print_proc_summary_from(handle);
     match handle.nofile_limit() {
         Ok(limit) => {
-            let fmt = |v: ptools::RlimitVal| match v {
+            let fmt = |v: ptools::proc::RlimitVal| match v {
                 Some(n) => n.to_string(),
                 None => "unlimited".into(),
             };
@@ -542,7 +541,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let handle = match ptools::proc::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("pfiles: {e}");

@@ -35,13 +35,13 @@
 //! - This module provides structured data to the presentation layer for
 //!   formatting; it should never make presentation decisions itself.
 
-pub(crate) mod auxv;
-pub(crate) mod cred;
-pub(crate) mod fd;
-pub(crate) mod net;
-pub(crate) mod numa;
-pub(crate) mod pidfd;
-pub(crate) mod signal;
+pub mod auxv;
+pub mod cred;
+pub mod fd;
+pub mod net;
+pub mod numa;
+pub mod pidfd;
+pub mod signal;
 
 use nix::fcntl::OFlag;
 use std::cell::RefCell;

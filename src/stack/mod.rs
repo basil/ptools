@@ -180,7 +180,7 @@ impl Symbol {
 }
 
 /// A convenience wrapper over `TraceOptions` which returns a maximally verbose trace.
-pub fn trace(handle: &crate::ProcHandle) -> io::Result<Process> {
+pub fn trace(handle: &crate::proc::ProcHandle) -> io::Result<Process> {
     TraceOptions::new()
         .thread_names(true)
         .symbols(true)
@@ -321,7 +321,7 @@ impl TraceOptions {
     }
 
     /// Traces the threads of the specified process.
-    pub fn trace(&self, handle: &crate::ProcHandle) -> io::Result<Process> {
+    pub fn trace(&self, handle: &crate::proc::ProcHandle) -> io::Result<Process> {
         let pid = handle.pid() as u32;
         let mut threads = Vec::new();
         self.trace_each(handle, |thread| threads.push(thread))?;
@@ -329,7 +329,7 @@ impl TraceOptions {
     }
 
     /// Traces the threads of the specified process, calling `each` per thread.
-    pub fn trace_each<F>(&self, handle: &crate::ProcHandle, mut each: F) -> io::Result<()>
+    pub fn trace_each<F>(&self, handle: &crate::proc::ProcHandle, mut each: F) -> io::Result<()>
     where
         F: FnMut(Thread),
     {
@@ -356,7 +356,7 @@ impl TraceOptions {
     /// The `ProcHandle` provides the core-file ELF data and is used to
     /// resolve the main thread's name via systemd-coredump metadata
     /// (`COREDUMP_COMM`).
-    pub fn trace_core(&self, handle: &crate::ProcHandle) -> io::Result<Process> {
+    pub fn trace_core(&self, handle: &crate::proc::ProcHandle) -> io::Result<Process> {
         let mut pid = 0;
         let mut threads = Vec::new();
         self.trace_core_each(handle, |p| pid = p, |thread| threads.push(thread))?;
@@ -368,7 +368,7 @@ impl TraceOptions {
     /// `header` is called with the core pid before any threads are streamed.
     pub fn trace_core_each<H, F>(
         &self,
-        handle: &crate::ProcHandle,
+        handle: &crate::proc::ProcHandle,
         header: H,
         mut each: F,
     ) -> io::Result<()>
@@ -415,7 +415,7 @@ impl TraceOptions {
 
     fn trace_snapshot_each<F>(
         &self,
-        handle: &crate::ProcHandle,
+        handle: &crate::proc::ProcHandle,
         pid: u32,
         each: &mut F,
     ) -> io::Result<()>
@@ -430,7 +430,7 @@ impl TraceOptions {
 
     fn trace_rolling_each<F>(
         &self,
-        handle: &crate::ProcHandle,
+        handle: &crate::proc::ProcHandle,
         pid: u32,
         each: &mut F,
     ) -> io::Result<()>
@@ -449,7 +449,7 @@ impl TraceOptions {
 fn open_thread_or_warn(
     tid: u32,
     ptrace_attach: bool,
-    handle: &crate::ProcHandle,
+    handle: &crate::proc::ProcHandle,
 ) -> io::Result<Option<TracedThread>> {
     let thread = if ptrace_attach {
         TracedThread::attach(tid)
@@ -469,7 +469,7 @@ fn open_thread_or_warn(
 fn snapshot_threads(
     pid: u32,
     ptrace_attach: bool,
-    handle: &crate::ProcHandle,
+    handle: &crate::proc::ProcHandle,
 ) -> io::Result<BTreeSet<TracedThread>> {
     let mut threads = BTreeSet::new();
 
@@ -490,7 +490,7 @@ fn add_threads(
     threads: &mut BTreeSet<TracedThread>,
     pid: u32,
     ptrace_attach: bool,
-    handle: &crate::ProcHandle,
+    handle: &crate::proc::ProcHandle,
 ) -> io::Result<()> {
     each_thread(pid, |tid| {
         if !threads.contains(&tid) {
@@ -686,7 +686,7 @@ impl TracedThread {
         }
     }
 
-    fn info(&self, pid: u32, options: &TraceOptions, handle: &crate::ProcHandle) -> Thread {
+    fn info(&self, pid: u32, options: &TraceOptions, handle: &crate::proc::ProcHandle) -> Thread {
         let name = if options.thread_names {
             self.name(pid, handle)
         } else {
@@ -702,7 +702,7 @@ impl TracedThread {
         }
     }
 
-    fn name(&self, pid: u32, handle: &crate::ProcHandle) -> Option<String> {
+    fn name(&self, pid: u32, handle: &crate::proc::ProcHandle) -> Option<String> {
         let path = format!("/proc/{}/task/{}/comm", pid, self.id);
         let mut name = vec![];
         match File::open(path).and_then(|mut f| f.read_to_end(&mut name)) {

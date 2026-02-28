@@ -17,7 +17,7 @@
 use std::process::exit;
 
 use nix::unistd::{Gid, Group, Uid, User};
-use ptools::ProcHandle;
+use ptools::proc::ProcHandle;
 
 struct Args {
     all: bool,
@@ -98,7 +98,7 @@ fn fmt_gid(gid: u32) -> String {
     }
 }
 
-fn print_cred(handle: &ProcHandle, all: bool) -> Result<(), ptools::Error> {
+fn print_cred(handle: &ProcHandle, all: bool) -> Result<(), ptools::proc::Error> {
     let pid = handle.pid();
     let cred = handle.cred().map_err(|e| {
         eprintln!("pcred: {}: {}", pid, e);
@@ -152,7 +152,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let handle = match ptools::proc::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("pcred: {e}");

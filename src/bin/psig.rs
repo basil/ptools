@@ -17,7 +17,8 @@
 use std::process::exit;
 
 use nix::libc;
-use ptools::{ProcHandle, SignalSet};
+use ptools::proc::signal::{signal_name, SignalSet};
+use ptools::proc::ProcHandle;
 
 #[derive(Copy, Clone)]
 enum SignalAction {
@@ -44,8 +45,8 @@ fn action_text(action: SignalAction) -> &'static str {
     }
 }
 
-fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::Error> {
-    ptools::print_proc_summary_from(handle);
+fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::proc::Error> {
+    ptools::display::print_proc_summary_from(handle);
 
     let masks = handle.signal_masks().map_err(|e| {
         eprintln!("psig: {}", e);
@@ -64,7 +65,7 @@ fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::Error> {
     );
 
     for sig in 1..=max_sig {
-        let name = ptools::signal_name(sig, rtmin, rtmax);
+        let name = signal_name(sig, rtmin, rtmax);
         let action = action_for_signal(sig, &masks.ignored, &masks.caught);
         let blocked = masks.blocked.contains(sig);
         let pending = masks.pending.contains(sig) || masks.shared_pending.contains(sig);
@@ -145,7 +146,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let handle = match ptools::proc::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("psig: {e}");

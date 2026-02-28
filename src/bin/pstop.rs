@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use ptools::ProcState;
+use ptools::proc::ProcState;
 
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
@@ -29,7 +29,7 @@ fn verify_stopped(pid: u64) -> bool {
     let cap = Duration::from_millis(100);
     let mut warned_d = false;
     loop {
-        let handle = ptools::ProcHandle::from_pid(pid);
+        let handle = ptools::proc::ProcHandle::from_pid(pid);
         match handle.state() {
             Ok(ProcState::Stopped) => return true,
             Ok(ProcState::TracingStop) => {

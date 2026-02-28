@@ -16,7 +16,7 @@
 
 use std::process::exit;
 
-use ptools::{ProcHandle, ResourceLimit, RlimitVal};
+use ptools::proc::{ProcHandle, ResourceLimit, RlimitVal};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum UnitMode {
@@ -147,7 +147,7 @@ fn format_row(rl: &ResourceLimit, mode: UnitMode) -> (String, String, String) {
     (label, fmt_val(soft), fmt_val(hard))
 }
 
-fn print_limits(handle: &ProcHandle, mode: UnitMode) -> Result<(), ptools::Error> {
+fn print_limits(handle: &ProcHandle, mode: UnitMode) -> Result<(), ptools::proc::Error> {
     let limits = handle.resource_limits().map_err(|e| {
         eprintln!("plimit: {}: {}", handle.pid(), e);
         e
@@ -176,7 +176,7 @@ fn print_limits(handle: &ProcHandle, mode: UnitMode) -> Result<(), ptools::Error
         .unwrap_or(0)
         .max("MAXIMUM".len());
 
-    ptools::print_proc_summary_from(handle);
+    ptools::display::print_proc_summary_from(handle);
     println!(
         "{:<res_w$}  {:>cur_w$}  {:>max_w$}",
         "RESOURCE", "CURRENT", "MAXIMUM"
@@ -199,7 +199,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let handle = match ptools::proc::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("plimit: {e}");

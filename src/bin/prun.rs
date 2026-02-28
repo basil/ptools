@@ -18,9 +18,9 @@ use std::process;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use ptools::ProcState;
+use ptools::proc::ProcState;
 
-fn process_state_str(state: &ptools::ProcState) -> &'static str {
+fn process_state_str(state: &ProcState) -> &'static str {
     match state {
         ProcState::Running => "running",
         ProcState::Sleeping => "sleeping",
@@ -36,7 +36,7 @@ fn process_state_str(state: &ptools::ProcState) -> &'static str {
 
 fn run_process(pid: u64) -> bool {
     let nix_pid = Pid::from_raw(pid as i32);
-    let handle = ptools::ProcHandle::from_pid(pid);
+    let handle = ptools::proc::ProcHandle::from_pid(pid);
 
     // Advisory pre-check: the state can change between this read and the
     // kill(2) below (TOCTOU), but that is harmless -- SIGCONT on a

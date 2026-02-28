@@ -17,9 +17,9 @@
 use std::ffi::OsString;
 use std::process::exit;
 
-use ptools::ProcHandle;
+use ptools::proc::ProcHandle;
 
-fn read_cmdline(handle: &ProcHandle) -> Result<Vec<OsString>, ptools::Error> {
+fn read_cmdline(handle: &ProcHandle) -> Result<Vec<OsString>, ptools::proc::Error> {
     handle.argv().map_err(|e| {
         eprintln!("Error opening /proc/{}/cmdline: {}", handle.pid(), e);
         e
@@ -41,16 +41,16 @@ fn shell_quote(arg: &str) -> String {
     }
 }
 
-fn print_args(handle: &ProcHandle) -> Result<(), ptools::Error> {
+fn print_args(handle: &ProcHandle) -> Result<(), ptools::proc::Error> {
     let args = read_cmdline(handle)?;
-    ptools::print_proc_summary_from(handle);
+    ptools::display::print_proc_summary_from(handle);
     for (i, arg) in args.iter().enumerate() {
         println!("argv[{}]: {}", i, arg.to_string_lossy());
     }
     Ok(())
 }
 
-fn print_cmdline(handle: &ProcHandle) -> Result<(), ptools::Error> {
+fn print_cmdline(handle: &ProcHandle) -> Result<(), ptools::proc::Error> {
     let args = read_cmdline(handle)?;
     // Use /proc/[pid]/exe to resolve the real executable path instead of
     // argv[0], which may be a relative path or a name set by the process.
@@ -157,7 +157,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let handle = match ptools::proc::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("pargs: {e}");
@@ -183,7 +183,7 @@ fn main() {
             if section {
                 println!();
             }
-            if let Err(e) = ptools::print_env_from(&handle) {
+            if let Err(e) = ptools::display::print_env_from(&handle) {
                 eprintln!("pargs: {}: {e}", handle.pid());
                 error = true;
             }
@@ -193,7 +193,7 @@ fn main() {
             if section {
                 println!();
             }
-            if let Err(e) = ptools::print_auxv_from(&handle) {
+            if let Err(e) = ptools::display::print_auxv_from(&handle) {
                 eprintln!("pargs: {}: {e}", handle.pid());
                 error = true;
             }

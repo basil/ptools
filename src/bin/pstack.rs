@@ -19,8 +19,8 @@ use std::io::Write;
 use std::path::Path;
 use std::process::exit;
 
+use ptools::proc::ProcHandle;
 use ptools::stack::{SourceLocation, Thread};
-use ptools::ProcHandle;
 
 fn format_source(src: &SourceLocation) -> String {
     let basename = Path::new(src.file())
@@ -104,7 +104,7 @@ fn print_stack(
             handle,
             |pid| {
                 print!("{pid}:\t");
-                ptools::print_cmd_summary_from(handle);
+                ptools::display::print_cmd_summary_from(handle);
                 println!();
                 first_thread.set(true);
             },
@@ -115,13 +115,13 @@ fn print_stack(
         // attaches to (and unwinds) this one TID instead of every thread.
         opts.tid(tid as u32);
         print!("{}:\t", tid);
-        ptools::print_cmd_summary_from(handle);
+        ptools::display::print_cmd_summary_from(handle);
         opts.trace_each(handle, |thread| {
             print_thread(&thread, Some(tid), args.max_frames, false, &first_thread);
         })?;
     } else {
         let multithread = handle.thread_count().is_ok_and(|n| n > 1);
-        ptools::print_proc_summary_from(handle);
+        ptools::display::print_proc_summary_from(handle);
         if multithread {
             println!();
         }
@@ -232,7 +232,7 @@ fn main() {
         }
         first = false;
 
-        match ptools::resolve_operand_with_tid(operand) {
+        match ptools::proc::resolve_operand_with_tid(operand) {
             Ok((handle, tid)) => {
                 for w in handle.drain_warnings() {
                     eprintln!("pstack: {w}");

@@ -20,7 +20,7 @@ use std::process;
 
 use nix::errno::Errno;
 use nix::poll::{self, PollFd, PollFlags, PollTimeout};
-use ptools::PidFd;
+use ptools::proc::pidfd::PidFd;
 
 struct Args {
     verbose: bool,

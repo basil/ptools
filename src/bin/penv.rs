@@ -78,7 +78,7 @@ fn main() {
             println!();
         }
         first = false;
-        let handle = match ptools::resolve_operand(operand) {
+        let handle = match ptools::proc::resolve_operand(operand) {
             Ok(h) => h,
             Err(e) => {
                 eprintln!("penv: {e}");
@@ -89,7 +89,7 @@ fn main() {
         for w in handle.drain_warnings() {
             eprintln!("penv: {w}");
         }
-        if let Err(e) = ptools::print_env_from(&handle) {
+        if let Err(e) = ptools::display::print_env_from(&handle) {
             eprintln!("penv: {}: {e}", handle.pid());
             error = true;
         }

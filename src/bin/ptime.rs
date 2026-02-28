@@ -22,7 +22,7 @@ use nix::sys::signal::{self, sigprocmask, SigHandler, SigSet, SigmaskHow, Signal
 use nix::sys::wait::WaitStatus;
 use nix::time::{clock_gettime, ClockId};
 use nix::unistd::{execvp, fork, sysconf, ForkResult, Pid, SysconfVar};
-use ptools::ProcHandle;
+use ptools::proc::ProcHandle;
 
 enum Args {
     Run { command: String, argv: Vec<CString> },
@@ -534,7 +534,7 @@ fn snapshot(pids: Vec<u64>) {
 
         let schedstat = handle.schedstat().ok();
 
-        ptools::print_proc_summary_from(&handle);
+        ptools::display::print_proc_summary_from(&handle);
 
         let real_ns = boottime - (starttime as u128 * 1_000_000_000 / clk_tck);
         let user_ns = utime as u128 * 1_000_000_000 / clk_tck;

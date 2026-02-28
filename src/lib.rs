@@ -16,31 +16,14 @@
 
 use nix::sys::signal::{signal, SigHandler, Signal};
 
-mod display;
+pub mod display;
 #[allow(dead_code)]
 mod dw;
 #[allow(dead_code)]
 mod dw_sys;
-mod proc;
+pub mod proc;
 mod source;
 pub mod stack;
-
-// Re-export public API at crate root.
-pub use display::{
-    print_auxv_from, print_cmd_summary_from, print_env_from, print_proc_summary_from,
-};
-pub use proc::cred::ProcCred;
-pub use proc::fd::{
-    address_family_from_sockprotoname, AnonFileType, FileDescriptor, FileType, PosixFileType,
-};
-pub use proc::net::{PeerProcess, SockType, Socket, SocketOptions, TcpState};
-pub use proc::numa::{cpu_to_node, numa_online_nodes, CpuSet, NodeAffinity};
-pub use proc::pidfd::PidFd;
-pub use proc::signal::{signal_name, SignalSet};
-pub use proc::{
-    resolve_operand, resolve_operand_with_tid, Error, ProcHandle, ProcState, ResourceLimit, Rlimit,
-    RlimitVal, SchedStat, SignalMasks,
-};
 
 // TODO Handle unprintable characters in anything we need to print and non-UTF8 in any input
 // TODO Test against 32-bit target processes

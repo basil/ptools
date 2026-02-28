@@ -77,7 +77,7 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
         let entry = entry?;
         let filename = entry.file_name();
         if let Some(pid) = filename.to_str().and_then(|s| s.parse::<u64>().ok()) {
-            let handle = ptools::ProcHandle::from_pid(pid);
+            let handle = ptools::proc::ProcHandle::from_pid(pid);
             let ppid = match handle.ppid() {
                 Ok(ppid) => ppid,
                 // Proc probably exited before we could read its status
@@ -231,15 +231,15 @@ fn print_ptree_line(
         }
     }
     print!("{}  ", pid);
-    let handle = ptools::ProcHandle::from_pid(pid);
-    ptools::print_cmd_summary_from(&handle);
+    let handle = ptools::proc::ProcHandle::from_pid(pid);
+    ptools::display::print_cmd_summary_from(&handle);
 }
 
 fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>, Box<dyn Error>> {
     let uid = match User::from_name(username)?.map(|u| u.uid.as_raw()) {
         Some(uid) => uid,
         None => {
-            return Err(From::from(ptools::Error::parse(
+            return Err(From::from(ptools::proc::Error::parse(
                 "username",
                 &format!("No such user '{}'", username),
             )))
