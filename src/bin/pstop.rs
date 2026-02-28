@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use ptools::ProcessState;
+use ptools::ProcState;
 
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
@@ -31,8 +31,8 @@ fn verify_stopped(pid: u64) -> bool {
     loop {
         let handle = ptools::ProcHandle::from_pid(pid);
         match handle.state() {
-            Ok(ProcessState::Stopped) => return true,
-            Ok(ProcessState::TracingStop) => {
+            Ok(ProcState::Stopped) => return true,
+            Ok(ProcState::TracingStop) => {
                 eprintln!(
                     "pstop: process {} is stopped under a debugger, not by us",
                     pid
@@ -43,7 +43,7 @@ fn verify_stopped(pid: u64) -> bool {
                 eprintln!("pstop: process {} has exited", pid);
                 return false;
             }
-            Ok(ProcessState::DiskSleep) => {
+            Ok(ProcState::DiskSleep) => {
                 if !warned_d {
                     eprintln!(
                         "pstop: process {} is in uninterruptible sleep; \

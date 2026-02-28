@@ -18,19 +18,19 @@ use std::process;
 
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use ptools::ProcessState;
+use ptools::ProcState;
 
-fn process_state_str(state: &ptools::ProcessState) -> &'static str {
+fn process_state_str(state: &ptools::ProcState) -> &'static str {
     match state {
-        ProcessState::Running => "running",
-        ProcessState::Sleeping => "sleeping",
-        ProcessState::DiskSleep => "uninterruptible sleep",
-        ProcessState::Zombie => "zombie",
-        ProcessState::Stopped => "stopped",
-        ProcessState::TracingStop => "tracing stop",
-        ProcessState::Dead => "dead",
-        ProcessState::Idle => "idle",
-        ProcessState::Other(_) => "unknown state",
+        ProcState::Running => "running",
+        ProcState::Sleeping => "sleeping",
+        ProcState::DiskSleep => "uninterruptible sleep",
+        ProcState::Zombie => "zombie",
+        ProcState::Stopped => "stopped",
+        ProcState::TracingStop => "tracing stop",
+        ProcState::Dead => "dead",
+        ProcState::Idle => "idle",
+        ProcState::Other(_) => "unknown state",
     }
 }
 
@@ -47,14 +47,14 @@ fn run_process(pid: u64) -> bool {
             eprintln!("prun: process {} does not exist", pid);
             return false;
         }
-        Ok(ProcessState::TracingStop) => {
+        Ok(ProcState::TracingStop) => {
             eprintln!(
                 "prun: process {} is ptrace-stopped by a debugger; SIGCONT has no effect",
                 pid
             );
             return false;
         }
-        Ok(ProcessState::Stopped) => {} // stopped -- this is the expected case
+        Ok(ProcState::Stopped) => {} // stopped -- this is the expected case
         Ok(ref state) => {
             eprintln!(
                 "prun: process {} is not stopped ({})",

@@ -306,7 +306,7 @@ impl ProcHandle {
     // -- Parsed from /proc/[pid]/stat --------------------------------
 
     /// Process state parsed from `/proc/[pid]/stat`.
-    pub fn state(&self) -> Result<ProcessState, Error> {
+    pub fn state(&self) -> Result<ProcState, Error> {
         let stat = self.source.read_stat()?;
         // Use rfind to handle comm fields containing parentheses.
         let after_comm = stat
@@ -316,7 +316,7 @@ impl ProcHandle {
         let rest = stat[after_comm..].trim_start();
         rest.chars()
             .next()
-            .map(ProcessState::from_char)
+            .map(ProcState::from_char)
             .ok_or_else(|| Error::in_file("stat", "empty state field"))
     }
 
@@ -834,7 +834,7 @@ impl ProcHandle {
 
 /// Process state from `/proc/[pid]/stat`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcessState {
+pub enum ProcState {
     Running,
     Sleeping,
     DiskSleep,
@@ -847,7 +847,7 @@ pub enum ProcessState {
     Other(char),
 }
 
-impl ProcessState {
+impl ProcState {
     fn from_char(c: char) -> Self {
         match c {
             'R' => Self::Running,
