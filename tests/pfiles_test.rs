@@ -489,7 +489,6 @@ fn pfiles_rejects_pid_zero() {
 #[test]
 fn pfiles_prints_header_lines() {
     const EXPECTED_SOFT: u64 = 123;
-    const EXPECTED_HARD: u64 = 456;
     const EXPECTED_UMASK: u32 = 0o022;
 
     let output = common::run_ptool(
@@ -508,22 +507,13 @@ fn pfiles_prints_header_lines() {
     assert!(output.status.success());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let soft_rlimit_line = stdout
+    let rlimit_line = stdout
         .lines()
-        .find(|line| line.trim_start().starts_with("Current soft rlimit:"))
-        .expect("missing Current soft rlimit line");
+        .find(|line| line.trim_start().starts_with("Current rlimit:"))
+        .expect("missing Current rlimit line");
     assert_eq!(
-        soft_rlimit_line.trim(),
-        format!("Current soft rlimit: {} file descriptors", EXPECTED_SOFT)
-    );
-
-    let hard_rlimit_line = stdout
-        .lines()
-        .find(|line| line.trim_start().starts_with("Current hard rlimit:"))
-        .expect("missing Current hard rlimit line");
-    assert_eq!(
-        hard_rlimit_line.trim(),
-        format!("Current hard rlimit: {} file descriptors", EXPECTED_HARD)
+        rlimit_line.trim(),
+        format!("Current rlimit: {} file descriptors", EXPECTED_SOFT)
     );
 
     let umask_line = stdout
@@ -562,8 +552,7 @@ fn pfiles_non_verbose_mode_prints_fstat_only_descriptor_lines() {
 
     let fd_map = parse_fd_map(&stdout);
     assert!(!fd_map.is_empty(), "expected at least one fd block");
-    assert_contains(&stdout, "Current soft rlimit:");
-    assert_contains(&stdout, "Current hard rlimit:");
+    assert_contains(&stdout, "Current rlimit:");
     assert_contains(&stdout, "Current umask:");
 
     for block in fd_map.values() {

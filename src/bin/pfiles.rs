@@ -454,14 +454,7 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
                 Some(n) => n.to_string(),
                 None => "unlimited".into(),
             };
-            println!(
-                "  Current soft rlimit: {} file descriptors",
-                fmt(limit.soft)
-            );
-            println!(
-                "  Current hard rlimit: {} file descriptors",
-                fmt(limit.hard)
-            );
+            println!("  Current rlimit: {} file descriptors", fmt(limit.soft));
         }
         Err(e) => eprintln!("pfiles: failed to read RLIMIT_NOFILE for {}: {}", pid, e),
     }

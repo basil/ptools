@@ -109,8 +109,7 @@ large files) and sockets. For more information, see Chris Siebenmann’s article
 ```text
 $ pfiles $(pgrep example)
 2785: sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
-  Current soft rlimit: 1024 file descriptors
-  Current hard rlimit: 524288 file descriptors
+  Current rlimit: 1024 file descriptors
   Current umask: 022
    0: S_IFCHR mode:0600 dev:0,27 ino:4 uid:1000 gid:5 rdev:136,1
       O_RDWR
