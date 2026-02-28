@@ -267,8 +267,8 @@ fn format_socket_options(opts: &SocketOptions) -> String {
 }
 
 fn print_peername(sock: &Socket) {
-    if let Some(ref peer) = sock.peer_process {
-        println!("        peer: {}[{}]", peer.comm, peer.pid);
+    if let (Some(pid), Some(comm)) = (sock.peer_pid, sock.peer_comm.as_ref()) {
+        println!("        peer: {comm}[{pid}]");
     }
 
     if let Some(addr) = sock.peer_addr {

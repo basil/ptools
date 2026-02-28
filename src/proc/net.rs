@@ -328,13 +328,6 @@ pub(crate) struct SocketDetails {
     pub congestion_control: Option<String>,
 }
 
-/// Peer process for a socket connection.
-#[derive(Clone)]
-pub struct PeerProcess {
-    pub pid: u64,
-    pub comm: String,
-}
-
 /// Unified socket metadata combining `/proc/net/*` info, `getsockopt` details,
 /// and peer process resolution.
 pub struct Socket {
@@ -349,19 +342,24 @@ pub struct Socket {
     pub options: SocketOptions,
     pub tcp_info: Option<libc::tcp_info>,
     pub congestion_control: Option<String>,
-    pub peer_process: Option<PeerProcess>,
+    pub peer_pid: Option<u64>,
+    pub peer_comm: Option<String>,
 }
 
 impl Socket {
     pub(crate) fn from_parts(
         info: SocketInfo,
         details: Option<SocketDetails>,
-        peer: Option<PeerProcess>,
+        peer: Option<(u64, String)>,
     ) -> Self {
         let (tcp_info, congestion_control, options) = if let Some(d) = details {
             (d.tcp_info, d.congestion_control, d.options)
         } else {
             (None, None, SocketOptions::default())
+        };
+        let (peer_pid, peer_comm) = match peer {
+            Some((pid, comm)) => (Some(pid), Some(comm)),
+            None => (None, None),
         };
         Socket {
             family: info.family,
@@ -375,7 +373,8 @@ impl Socket {
             options,
             tcp_info,
             congestion_control,
-            peer_process: peer,
+            peer_pid,
+            peer_comm,
         }
     }
 }
@@ -572,7 +571,7 @@ pub(crate) fn derive_peer_processes(
     target_pid: u64,
     sockets: &HashMap<u64, SocketInfo>,
     warnings: &mut Vec<String>,
-) -> HashMap<u64, PeerProcess> {
+) -> HashMap<u64, (u64, String)> {
     let mut peers = HashMap::new();
     let owners = list_socket_owners(warnings);
     let mut comm_cache = HashMap::<u64, String>::new();
@@ -601,27 +600,18 @@ pub(crate) fn derive_peer_processes(
             comm
         };
 
-        peers.insert(
-            inode,
-            PeerProcess {
-                pid: chosen_pid,
-                comm,
-            },
-        );
+        peers.insert(inode, (chosen_pid, comm));
     }
 
     peers
 }
 
-pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
+pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<(u64, String)> {
     let sock_fd = duplicate_target_fd(pid, fd)?;
     let creds = getsockopt(&sock_fd, sockopt::PeerCredentials).ok()?;
     let peer_pid = creds.pid() as u64;
     let comm = read_comm(peer_pid)?;
-    Some(PeerProcess {
-        pid: peer_pid,
-        comm,
-    })
+    Some((peer_pid, comm))
 }
 
 #[cfg(test)]

@@ -757,7 +757,7 @@ impl ProcHandle {
         &self,
         fd_num: u64,
         sockets: &std::collections::HashMap<u64, net::SocketInfo>,
-        tcp_peers: &std::collections::HashMap<u64, net::PeerProcess>,
+        tcp_peers: &std::collections::HashMap<u64, (u64, String)>,
         warnings: &mut Vec<String>,
     ) -> Result<fd::FileDescriptor, Error> {
         let path = self.fd_path(fd_num)?;
