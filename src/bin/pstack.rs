@@ -77,7 +77,7 @@ fn print_thread(
         println!();
     }
     if max_frames > 0 && thread.frames().len() >= max_frames {
-        eprintln!("maximum number of frames exceeded (use -n 0 for unlimited)");
+        eprintln!("pstack: maximum number of frames exceeded (use -n 0 for unlimited)");
     }
     std::io::stdout().flush().ok();
 }
@@ -235,14 +235,14 @@ fn main() {
         match ptools::resolve_operand_with_tid(operand) {
             Ok((handle, tid)) => {
                 for w in handle.drain_warnings() {
-                    eprintln!("{w}");
+                    eprintln!("pstack: {w}");
                 }
                 if let Err(e) = print_stack(&handle, tid, handle.is_core(), &args) {
                     eprintln!("pstack: {}: {e}", handle.pid());
                     error = true;
                 }
                 for w in handle.drain_warnings() {
-                    eprintln!("{w}");
+                    eprintln!("pstack: {w}");
                 }
             }
             Err(e) => {

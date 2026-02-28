@@ -87,11 +87,14 @@ fn main() {
             }
         };
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("pauxv: {w}");
         }
         if let Err(e) = ptools::print_auxv_from(&handle) {
             eprintln!("pauxv: {}: {e}", handle.pid());
             error = true;
+        }
+        for w in handle.drain_warnings() {
+            eprintln!("pauxv: {w}");
         }
     }
     if error {

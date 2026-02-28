@@ -304,7 +304,7 @@ fn main() {
             }
         };
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("plgrp: {w}");
         }
         if let Some(tid) = tid {
             if print_thread(&handle, tid, &args.affinity_nodes).is_err() {
@@ -340,6 +340,9 @@ fn main() {
                     error = true;
                 }
             }
+        }
+        for w in handle.drain_warnings() {
+            eprintln!("plgrp: {w}");
         }
     }
 

@@ -161,10 +161,13 @@ fn main() {
             }
         };
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("pcred: {w}");
         }
         if print_cred(&handle, args.all).is_err() {
             error = true;
+        }
+        for w in handle.drain_warnings() {
+            eprintln!("pcred: {w}");
         }
     }
     if error {

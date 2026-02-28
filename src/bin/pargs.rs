@@ -166,7 +166,7 @@ fn main() {
             }
         };
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("pargs: {w}");
         }
         let mut section = false;
         if want_args {
@@ -199,7 +199,7 @@ fn main() {
             }
         }
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("pargs: {w}");
         }
     }
     if error {

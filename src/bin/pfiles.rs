@@ -453,15 +453,15 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> Result<(), Error> {
                 fmt(limit.hard)
             );
         }
-        Err(e) => eprintln!("Failed to read RLIMIT_NOFILE for {}: {}", pid, e),
+        Err(e) => eprintln!("pfiles: failed to read RLIMIT_NOFILE for {}: {}", pid, e),
     }
     match handle.umask() {
         Ok(umask) => println!("  Current umask: {:03o}", umask),
-        Err(e) => eprintln!("Failed to read umask for {}: {}", pid, e),
+        Err(e) => eprintln!("pfiles: failed to read umask for {}: {}", pid, e),
     }
 
     let file_descs = handle.file_descriptors().map_err(|e| {
-        eprintln!("Unable to read /proc/{}/fd/: {}", pid, e);
+        eprintln!("pfiles: unable to read /proc/{}/fd/: {}", pid, e);
         e
     })?;
 
@@ -547,13 +547,13 @@ fn main() {
             }
         };
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("pfiles: {w}");
         }
         if print_files(&handle, args.non_verbose).is_err() {
             error = true;
         }
         for w in handle.drain_warnings() {
-            eprintln!("{w}");
+            eprintln!("pfiles: {w}");
         }
     }
 
