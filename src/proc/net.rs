@@ -328,55 +328,6 @@ pub(crate) struct SocketDetails {
     pub congestion_control: Option<String>,
 }
 
-/// Structured TCP connection metrics extracted from `libc::tcp_info`.
-pub struct TcpInfo {
-    pub snd_cwnd: u32,
-    pub snd_ssthresh: u32,
-    pub snd_wscale: u8,
-    pub rcv_wscale: u8,
-    pub rtt: u32,
-    pub rttvar: u32,
-    pub snd_mss: u32,
-    pub rcv_mss: u32,
-    pub advmss: u32,
-    pub pmtu: u32,
-    pub unacked: u32,
-    pub retrans: u32,
-    pub total_retrans: u32,
-    pub lost: u32,
-    pub rcv_space: u32,
-}
-
-impl TcpInfo {
-    fn from_raw(raw: &nix::libc::tcp_info) -> Self {
-        TcpInfo {
-            snd_cwnd: raw.tcpi_snd_cwnd,
-            snd_ssthresh: raw.tcpi_snd_ssthresh,
-            snd_wscale: if cfg!(target_endian = "little") {
-                raw.tcpi_snd_rcv_wscale & 0x0f
-            } else {
-                (raw.tcpi_snd_rcv_wscale >> 4) & 0x0f
-            },
-            rcv_wscale: if cfg!(target_endian = "little") {
-                (raw.tcpi_snd_rcv_wscale >> 4) & 0x0f
-            } else {
-                raw.tcpi_snd_rcv_wscale & 0x0f
-            },
-            rtt: raw.tcpi_rtt,
-            rttvar: raw.tcpi_rttvar,
-            snd_mss: raw.tcpi_snd_mss,
-            rcv_mss: raw.tcpi_rcv_mss,
-            advmss: raw.tcpi_advmss,
-            pmtu: raw.tcpi_pmtu,
-            unacked: raw.tcpi_unacked,
-            retrans: raw.tcpi_retrans,
-            total_retrans: raw.tcpi_total_retrans,
-            lost: raw.tcpi_lost,
-            rcv_space: raw.tcpi_rcv_space,
-        }
-    }
-}
-
 /// Peer process for a socket connection.
 #[derive(Clone)]
 pub struct PeerProcess {
@@ -396,7 +347,7 @@ pub struct Socket {
     pub tx_queue: Option<u32>,
     pub rx_queue: Option<u32>,
     pub options: SocketOptions,
-    pub tcp_info: Option<TcpInfo>,
+    pub tcp_info: Option<libc::tcp_info>,
     pub congestion_control: Option<String>,
     pub peer_process: Option<PeerProcess>,
 }
@@ -408,11 +359,7 @@ impl Socket {
         peer: Option<PeerProcess>,
     ) -> Self {
         let (tcp_info, congestion_control, options) = if let Some(d) = details {
-            (
-                d.tcp_info.map(|raw| TcpInfo::from_raw(&raw)),
-                d.congestion_control,
-                d.options,
-            )
+            (d.tcp_info, d.congestion_control, d.options)
         } else {
             (None, None, SocketOptions::default())
         };

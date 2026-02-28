@@ -34,7 +34,7 @@ pub use proc::fd::{
     address_family_from_sockprotoname, AnonFileType, FdStat, FileDescriptor, FileType,
     PosixFileType,
 };
-pub use proc::net::{PeerProcess, SockType, Socket, SocketOptions, TcpInfo, TcpState};
+pub use proc::net::{PeerProcess, SockType, Socket, SocketOptions, TcpState};
 pub use proc::numa::{cpu_to_node, numa_online_nodes, CpuSet, NodeAffinity};
 pub use proc::pidfd::PidFd;
 pub use proc::signal::{signal_name, SignalSet};

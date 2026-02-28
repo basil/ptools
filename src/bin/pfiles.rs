@@ -18,7 +18,7 @@ use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
 use ptools::{
     AnonFileType, Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, Socket,
-    SocketOptions, TcpInfo, TcpState,
+    SocketOptions, TcpState,
 };
 use std::borrow::Cow;
 use std::net::SocketAddr;
@@ -205,29 +205,39 @@ fn print_sockname(sock: &Socket) {
     );
 }
 
-fn print_tcp_info(info: &TcpInfo) {
+fn print_tcp_info(info: &libc::tcp_info) {
     println!(
         "        cwnd: {}  ssthresh: {}",
-        info.snd_cwnd, info.snd_ssthresh,
+        info.tcpi_snd_cwnd, info.tcpi_snd_ssthresh,
     );
+    let snd_wscale = if cfg!(target_endian = "little") {
+        info.tcpi_snd_rcv_wscale & 0x0f
+    } else {
+        (info.tcpi_snd_rcv_wscale >> 4) & 0x0f
+    };
+    let rcv_wscale = if cfg!(target_endian = "little") {
+        (info.tcpi_snd_rcv_wscale >> 4) & 0x0f
+    } else {
+        info.tcpi_snd_rcv_wscale & 0x0f
+    };
     println!(
         "        snd_wscale: {}  rcv_wscale: {}",
-        info.snd_wscale, info.rcv_wscale,
+        snd_wscale, rcv_wscale,
     );
 
-    let rtt_ms = info.rtt as f64 / 1000.0;
-    let rttvar_ms = info.rttvar as f64 / 1000.0;
+    let rtt_ms = info.tcpi_rtt as f64 / 1000.0;
+    let rttvar_ms = info.tcpi_rttvar as f64 / 1000.0;
     println!("        rtt: {:.3}ms  rttvar: {:.3}ms", rtt_ms, rttvar_ms,);
 
     println!(
         "        snd_mss: {}  rcv_mss: {}  advmss: {}  pmtu: {}",
-        info.snd_mss, info.rcv_mss, info.advmss, info.pmtu,
+        info.tcpi_snd_mss, info.tcpi_rcv_mss, info.tcpi_advmss, info.tcpi_pmtu,
     );
     println!(
         "        unacked: {}  retrans: {}/{}  lost: {}",
-        info.unacked, info.retrans, info.total_retrans, info.lost,
+        info.tcpi_unacked, info.tcpi_retrans, info.tcpi_total_retrans, info.tcpi_lost,
     );
-    println!("        rcv_space: {}", info.rcv_space);
+    println!("        rcv_space: {}", info.tcpi_rcv_space);
 }
 
 fn format_socket_options(opts: &SocketOptions) -> String {
