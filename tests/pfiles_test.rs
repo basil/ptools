@@ -1091,5 +1091,5 @@ fn pfiles_exits_nonzero_when_any_pid_fails() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_contains(&stderr, "Unable to read /proc/999999999/fd/");
+    assert_contains(&stderr, "unable to read /proc/999999999/fd/");
 }
