@@ -32,7 +32,7 @@ fn verify_stopped(pid: u64) -> bool {
         let handle = ptools::proc::ProcHandle::from_pid(pid);
         match handle.state() {
             Ok(ProcState::Stopped) => return true,
-            Ok(ProcState::TracingStop) => {
+            Ok(ProcState::Tracing) => {
                 eprintln!(
                     "pstop: process {} is stopped under a debugger, not by us",
                     pid
@@ -43,7 +43,7 @@ fn verify_stopped(pid: u64) -> bool {
                 eprintln!("pstop: process {} has exited", pid);
                 return false;
             }
-            Ok(ProcState::DiskSleep) => {
+            Ok(ProcState::Waiting) => {
                 if !warned_d {
                     eprintln!(
                         "pstop: process {} is in uninterruptible sleep; \

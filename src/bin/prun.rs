@@ -24,11 +24,14 @@ fn process_state_str(state: &ProcState) -> &'static str {
     match state {
         ProcState::Running => "running",
         ProcState::Sleeping => "sleeping",
-        ProcState::DiskSleep => "uninterruptible sleep",
+        ProcState::Waiting => "uninterruptible sleep",
         ProcState::Zombie => "zombie",
         ProcState::Stopped => "stopped",
-        ProcState::TracingStop => "tracing stop",
+        ProcState::Tracing => "tracing stop",
         ProcState::Dead => "dead",
+        ProcState::Wakekill => "wakekill",
+        ProcState::Waking => "waking",
+        ProcState::Parked => "parked",
         ProcState::Idle => "idle",
         ProcState::Other(_) => "unknown state",
     }
@@ -47,7 +50,7 @@ fn run_process(pid: u64) -> bool {
             eprintln!("prun: process {} does not exist", pid);
             return false;
         }
-        Ok(ProcState::TracingStop) => {
+        Ok(ProcState::Tracing) => {
             eprintln!(
                 "prun: process {} is ptrace-stopped by a debugger; SIGCONT has no effect",
                 pid

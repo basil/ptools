@@ -837,11 +837,14 @@ impl ProcHandle {
 pub enum ProcState {
     Running,
     Sleeping,
-    DiskSleep,
+    Waiting,
     Zombie,
     Stopped,
-    TracingStop,
+    Tracing,
     Dead,
+    Wakekill,
+    Waking,
+    Parked,
     Idle,
     /// A state character not covered by the known variants.
     Other(char),
@@ -852,11 +855,14 @@ impl ProcState {
         match c {
             'R' => Self::Running,
             'S' => Self::Sleeping,
-            'D' => Self::DiskSleep,
+            'D' => Self::Waiting,
             'Z' => Self::Zombie,
             'T' => Self::Stopped,
-            't' => Self::TracingStop,
+            't' => Self::Tracing,
             'X' | 'x' => Self::Dead,
+            'K' => Self::Wakekill,
+            'W' => Self::Waking,
+            'P' => Self::Parked,
             'I' => Self::Idle,
             other => Self::Other(other),
         }
