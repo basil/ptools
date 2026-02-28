@@ -19,7 +19,9 @@ use std::process;
 use nix::sched::sched_getaffinity;
 use nix::unistd::Pid;
 
-use ptools::proc::numa::{cpu_to_node, numa_online_nodes, CpuSet, NodeAffinity};
+use std::collections::BTreeSet;
+
+use ptools::proc::numa::{cpu_to_node, node_affinity, numa_online_nodes, NodeAffinity};
 use ptools::proc::ProcHandle;
 
 /// Format a sorted slice of node IDs, collapsing consecutive runs into ranges.
@@ -61,17 +63,20 @@ fn format_node_list(nodes: &[u32]) -> String {
 }
 
 /// Get the CPU affinity mask for a thread via syscall.
-fn get_thread_affinity(tid: u64) -> Option<CpuSet> {
-    sched_getaffinity(Pid::from_raw(tid as i32))
-        .ok()
-        .map(CpuSet::from)
+fn get_thread_affinity(tid: u64) -> Option<BTreeSet<u32>> {
+    let mask = sched_getaffinity(Pid::from_raw(tid as i32)).ok()?;
+    let set = (0..nix::sched::CpuSet::count())
+        .filter(|&i| mask.is_set(i).unwrap_or(false))
+        .map(|i| i as u32)
+        .collect();
+    Some(set)
 }
 
 /// Format affinities for display, grouping nodes by affinity level and
 /// collapsing consecutive node IDs into ranges.
 ///
 /// Example output: `0-2/all,3/some,4-7/none`
-fn format_affinity(nodes: &[u32], affinity: &Option<CpuSet>) -> String {
+fn format_affinity(nodes: &[u32], affinity: &Option<BTreeSet<u32>>) -> String {
     let Some(cpuset) = affinity else {
         let list = format_node_list(nodes);
         return if list.is_empty() {
@@ -86,7 +91,7 @@ fn format_affinity(nodes: &[u32], affinity: &Option<CpuSet>) -> String {
     let mut none = Vec::new();
 
     for &n in nodes {
-        match cpuset.node_affinity(n) {
+        match node_affinity(cpuset, n) {
             NodeAffinity::All => all.push(n),
             NodeAffinity::Some => some.push(n),
             NodeAffinity::None => none.push(n),
@@ -152,7 +157,7 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::proc::Error> {
                         ));
                     }
                     for n in start..=end {
-                        if online.contains(n) {
+                        if online.contains(&n) {
                             result.push(n);
                         } else {
                             eprintln!("plgrp: bad node {}", n);
@@ -163,7 +168,7 @@ fn parse_node_list(s: &str) -> Result<NodeList, ptools::proc::Error> {
                     let n: u32 = part.parse().map_err(|e| {
                         ptools::proc::Error::parse(&format!("node '{}'", part), &format!("{}", e))
                     })?;
-                    if online.contains(n) {
+                    if online.contains(&n) {
                         result.push(n);
                     } else {
                         eprintln!("plgrp: bad node {}", n);

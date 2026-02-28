@@ -620,8 +620,8 @@ impl ProcHandle {
             .map_err(|e| Error::in_file("task/stat", &format!("invalid processor: {}", e)))
     }
 
-    /// Cpus_allowed_list from a thread's status, as a `CpuSet`.
-    pub fn thread_affinity(&self, tid: u64) -> Result<numa::CpuSet, Error> {
+    /// Cpus_allowed_list from a thread's status, as a `BTreeSet<u32>`.
+    pub fn thread_affinity(&self, tid: u64) -> Result<std::collections::BTreeSet<u32>, Error> {
         let status = self.source.read_tid_status(tid)?;
         let line = status
             .lines()
