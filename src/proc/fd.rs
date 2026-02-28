@@ -17,7 +17,7 @@
 use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
-use nix::sys::stat::{major, minor, stat, SFlag};
+use nix::sys::stat::{stat, FileStat, SFlag};
 use std::path::PathBuf;
 
 use super::net::Socket;
@@ -56,20 +56,6 @@ pub enum FileType {
     Unknown,
 }
 
-/// Stat information for a file descriptor, gathered from `stat(2)` on
-/// `/proc/[pid]/fd/<fd>`.
-pub struct FdStat {
-    pub mode: u32,
-    pub dev_major: u64,
-    pub dev_minor: u64,
-    pub inode: u64,
-    pub uid: u32,
-    pub gid: u32,
-    pub size: i64,
-    pub rdev_major: u64,
-    pub rdev_minor: u64,
-}
-
 /// Fully-populated file descriptor information gathered from the library.
 ///
 /// Produced by [`ProcHandle::file_descriptors()`](super::ProcHandle::file_descriptors).
@@ -77,7 +63,7 @@ pub struct FileDescriptor {
     pub fd: u64,
     pub path: PathBuf,
     pub file_type: FileType,
-    pub stat: Option<FdStat>,
+    pub stat: Option<FileStat>,
     pub offset: u64,
     pub open_flags: OFlag,
     pub mnt_id: Option<u64>,
@@ -209,22 +195,10 @@ pub fn address_family_from_sockprotoname(
     })
 }
 
-/// Call `stat(2)` on `/proc/[pid]/fd/[fd]` and wrap the result in an `FdStat`.
-#[allow(clippy::unnecessary_cast)]
-pub(crate) fn stat_fd(pid: u64, fd: u64) -> Result<FdStat, std::io::Error> {
+/// Call `stat(2)` on `/proc/[pid]/fd/[fd]`.
+pub(crate) fn stat_fd(pid: u64, fd: u64) -> Result<FileStat, std::io::Error> {
     let path = format!("/proc/{}/fd/{}", pid, fd);
-    let info = stat(path.as_str())?;
-    Ok(FdStat {
-        mode: info.st_mode,
-        dev_major: major(info.st_dev),
-        dev_minor: minor(info.st_dev),
-        inode: info.st_ino as u64,
-        uid: info.st_uid,
-        gid: info.st_gid,
-        size: info.st_size as i64,
-        rdev_major: major(info.st_rdev),
-        rdev_minor: minor(info.st_rdev),
-    })
+    stat(path.as_str()).map_err(Into::into)
 }
 
 #[cfg(test)]

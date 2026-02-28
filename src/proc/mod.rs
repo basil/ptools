@@ -773,7 +773,7 @@ impl ProcHandle {
 
         // Classify file type
         let file_type = if let Some(ref st) = stat_result {
-            fd::file_type_from_stat(st.mode, &link_text)
+            fd::file_type_from_stat(st.st_mode, &link_text)
         } else {
             fd::file_type_from_link(&link_text)
         };
@@ -789,7 +789,7 @@ impl ProcHandle {
             // Try to find inode -- from stat if available, else from link text
             let inode = stat_result
                 .as_ref()
-                .map(|st| st.inode)
+                .map(|st| st.st_ino)
                 .or_else(|| fd::parse_socket_inode(&link_text));
 
             if let Some(inode) = inode {

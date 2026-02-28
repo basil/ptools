@@ -31,8 +31,7 @@ pub use display::{
 };
 pub use proc::cred::ProcCred;
 pub use proc::fd::{
-    address_family_from_sockprotoname, AnonFileType, FdStat, FileDescriptor, FileType,
-    PosixFileType,
+    address_family_from_sockprotoname, AnonFileType, FileDescriptor, FileType, PosixFileType,
 };
 pub use proc::net::{PeerProcess, SockType, Socket, SocketOptions, TcpState};
 pub use proc::numa::{cpu_to_node, numa_online_nodes, CpuSet, NodeAffinity};

@@ -16,6 +16,7 @@
 
 use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
+use nix::sys::stat::{major, minor};
 use ptools::{
     AnonFileType, Error, FileDescriptor, FileType, PosixFileType, ProcHandle, SockType, Socket,
     SocketOptions, TcpState,
@@ -331,18 +332,18 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
             "{: >4}: {} mode:0{:03o} dev:{},{} ino:{} uid:{} gid:{}",
             fd.fd,
             file_type_str(&fd.file_type),
-            st.mode & 0o7777,
-            st.dev_major,
-            st.dev_minor,
-            st.inode,
-            st.uid,
-            st.gid
+            st.st_mode & 0o7777,
+            major(st.st_dev),
+            minor(st.st_dev),
+            st.st_ino,
+            st.st_uid,
+            st.st_gid
         );
 
-        if st.rdev_major == 0 && st.rdev_minor == 0 {
-            println!(" size:{}", st.size)
+        if major(st.st_rdev) == 0 && minor(st.st_rdev) == 0 {
+            println!(" size:{}", st.st_size)
         } else {
-            println!(" rdev:{},{}", st.rdev_major, st.rdev_minor);
+            println!(" rdev:{},{}", major(st.st_rdev), minor(st.st_rdev));
         }
 
         if non_verbose {
@@ -370,7 +371,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
                 } else {
                     println!(
                         "      ERROR: failed to find info for socket with inode num {}",
-                        st.inode
+                        st.st_ino
                     );
                 }
             }
