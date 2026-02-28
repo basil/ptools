@@ -14,12 +14,20 @@
 //   limitations under the License.
 //
 
-use nix::sys::socket::{getsockopt, sockopt, AddressFamily};
 use std::collections::HashMap;
 use std::io;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
+use std::net::SocketAddr;
 use std::num::ParseIntError;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::AsRawFd;
+use std::os::fd::FromRawFd;
+use std::os::fd::OwnedFd;
+
+use nix::sys::socket::getsockopt;
+use nix::sys::socket::sockopt;
+use nix::sys::socket::AddressFamily;
 
 use super::fd::parse_socket_inode;
 use crate::source::ProcSource;

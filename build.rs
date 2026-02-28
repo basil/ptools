@@ -14,10 +14,14 @@
 //   limitations under the License.
 //
 
-use roff::{bold, roman, Roff};
 use std::fs;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
+use roff::bold;
+use roff::roman;
+use roff::Roff;
 
 struct Example<'a> {
     title: &'a str,

@@ -14,11 +14,14 @@
 //   limitations under the License.
 //
 
+use std::path::PathBuf;
+
 use nix::errno::Errno;
 use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
-use nix::sys::stat::{stat, FileStat, SFlag};
-use std::path::PathBuf;
+use nix::sys::stat::stat;
+use nix::sys::stat::FileStat;
+use nix::sys::stat::SFlag;
 
 use super::net::Socket;
 
@@ -203,8 +206,9 @@ pub(crate) fn stat_fd(pid: u64, fd: u64) -> Result<FileStat, std::io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use nix::sys::stat::SFlag;
+
+    use super::*;
 
     #[test]
     fn test_file_type_from_stat_regular() {

@@ -16,7 +16,8 @@
 
 mod common;
 
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 
 use common::find_exec;
 

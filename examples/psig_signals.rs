@@ -14,12 +14,19 @@
 //   limitations under the License.
 //
 
-use nix::sys::signal::{pthread_sigmask, SigmaskHow};
-use nix::sys::signal::{sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
 use std::env;
 use std::fs::File;
 use std::thread;
 use std::time::Duration;
+
+use nix::sys::signal::pthread_sigmask;
+use nix::sys::signal::sigaction;
+use nix::sys::signal::SaFlags;
+use nix::sys::signal::SigAction;
+use nix::sys::signal::SigHandler;
+use nix::sys::signal::SigSet;
+use nix::sys::signal::SigmaskHow;
+use nix::sys::signal::Signal;
 
 extern "C" fn sigusr1_handler(_signal: i32) {}
 

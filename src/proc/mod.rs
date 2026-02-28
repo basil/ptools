@@ -42,18 +42,21 @@ pub mod numa;
 pub mod pidfd;
 pub mod signal;
 
-use nix::fcntl::OFlag;
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 
-use std::collections::BTreeSet;
+use cred::parse_cred;
+use cred::ProcCred;
+use nix::fcntl::OFlag;
+use signal::intersect_blocked_masks;
+use signal::parse_signal_set;
 
 use crate::source::ProcSource;
-use cred::{parse_cred, ProcCred};
-use signal::{intersect_blocked_masks, parse_signal_set};
 
 /// A resource limit value (soft or hard).
 ///

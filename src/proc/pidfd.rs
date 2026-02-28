@@ -17,7 +17,9 @@
 //! pidfd wrapper for process-handle operations.
 
 use std::io;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::AsRawFd;
+use std::os::fd::FromRawFd;
+use std::os::fd::OwnedFd;
 
 use nix::errno::Errno;
 use nix::libc;

@@ -14,14 +14,17 @@
 //   limitations under the License.
 //
 
-use nix::fcntl::OFlag;
-use nix::sys::epoll::{Epoll, EpollCreateFlags, EpollEvent, EpollFlags};
-use nix::unistd::pipe2;
-
 use std::env;
 use std::fs::File;
 use std::thread;
 use std::time::Duration;
+
+use nix::fcntl::OFlag;
+use nix::sys::epoll::Epoll;
+use nix::sys::epoll::EpollCreateFlags;
+use nix::sys::epoll::EpollEvent;
+use nix::sys::epoll::EpollFlags;
+use nix::unistd::pipe2;
 
 fn main() {
     let signal_path =

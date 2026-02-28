@@ -14,15 +14,19 @@
 //   limitations under the License.
 //
 
-use nix::sys::socket::{
-    bind, socket, AddressFamily, NetlinkAddr, SockFlag, SockProtocol, SockType,
-};
-
 use std::env;
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::thread;
 use std::time::Duration;
+
+use nix::sys::socket::bind;
+use nix::sys::socket::socket;
+use nix::sys::socket::AddressFamily;
+use nix::sys::socket::NetlinkAddr;
+use nix::sys::socket::SockFlag;
+use nix::sys::socket::SockProtocol;
+use nix::sys::socket::SockType;
 
 fn main() {
     let signal_path =

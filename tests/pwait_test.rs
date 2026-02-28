@@ -16,11 +16,14 @@
 
 mod common;
 
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 
-use common::{find_exec, ReadySignal};
+use common::find_exec;
+use common::ReadySignal;
 
 /// Spawn the pwait_process example with the given environment overrides.
 /// Returns the child and the ReadySignal for cleanup.

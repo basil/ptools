@@ -14,12 +14,13 @@
 //   limitations under the License.
 //
 
-use libc::c_int;
 use std::borrow::Cow;
 use std::error;
 use std::ffi::CStr;
 use std::fmt;
 use std::io;
+
+use libc::c_int;
 
 /// A error returned by DWFL APIs.
 pub struct Error {

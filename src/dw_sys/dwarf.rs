@@ -14,7 +14,8 @@
 //   limitations under the License.
 //
 
-use libc::{c_int, c_uint};
+use libc::c_int;
+use libc::c_uint;
 
 pub const DW_TAG_array_type: c_int = 0x01;
 pub const DW_TAG_class_type: c_int = 0x02;

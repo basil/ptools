@@ -19,7 +19,9 @@ use std::fs::File;
 use std::thread;
 use std::time::Duration;
 
-use nix::sys::resource::{rlim_t, setrlimit, Resource};
+use nix::sys::resource::rlim_t;
+use nix::sys::resource::setrlimit;
+use nix::sys::resource::Resource;
 
 fn set_rlimit(resource: Resource, soft_var: &str, hard_var: &str) {
     let soft = env::var(soft_var).ok();

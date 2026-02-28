@@ -14,14 +14,19 @@
 //   limitations under the License.
 //
 
-use nix::fcntl::{open, OFlag};
-use nix::sys::stat::Mode;
 use std::env;
-use std::fs::{self, File};
-use std::io::{Seek, SeekFrom, Write};
+use std::fs::File;
+use std::fs::{self};
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::thread;
 use std::time::Duration;
+
+use nix::fcntl::open;
+use nix::fcntl::OFlag;
+use nix::sys::stat::Mode;
 
 fn main() {
     let signal_path =

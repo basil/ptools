@@ -14,14 +14,16 @@
 //   limitations under the License.
 //
 
-use std::cell::{OnceCell, RefCell};
+use std::cell::OnceCell;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
 use nix::libc;
 
-use super::dw::{self, Dwfl};
+use super::dw::Dwfl;
+use super::dw::{self};
 use super::ProcSource;
 
 /// Live-process backend: reads everything from `/proc/[pid]/...`.

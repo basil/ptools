@@ -14,15 +14,27 @@
 //   limitations under the License.
 //
 
-use foreign_types::{foreign_type, ForeignType, ForeignTypeRef};
-use libc::{c_int, c_void, pid_t};
 use std::any::Any;
 use std::borrow::Cow;
 use std::ffi::CStr;
-use std::panic::{self, AssertUnwindSafe};
-use std::ptr::{self, null};
+use std::panic::AssertUnwindSafe;
+use std::panic::{self};
+use std::ptr::null;
+use std::ptr::{self};
 
-use super::{cvt, Callbacks, Error, FrameRef, ModuleRef, ThreadRef};
+use foreign_types::foreign_type;
+use foreign_types::ForeignType;
+use foreign_types::ForeignTypeRef;
+use libc::c_int;
+use libc::c_void;
+use libc::pid_t;
+
+use super::cvt;
+use super::Callbacks;
+use super::Error;
+use super::FrameRef;
+use super::ModuleRef;
+use super::ThreadRef;
 
 foreign_type! {
     /// The base type used when interacting with libdwfl.

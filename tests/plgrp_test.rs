@@ -49,7 +49,8 @@ fn plgrp_shows_home_node_for_all_threads() {
 fn plgrp_shows_single_thread_with_tid() {
     // We need pid/tid syntax, so we can't use run_ptool's simple PID appending.
     // Spawn the example manually.
-    use std::process::{Command, Stdio};
+    use std::process::Command;
+    use std::process::Stdio;
 
     let ready = common::ReadySignal::new(false);
     let mut example_cmd = Command::new(common::find_exec("examples/plgrp_process"));

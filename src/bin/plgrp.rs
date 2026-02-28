@@ -14,14 +14,15 @@
 //   limitations under the License.
 //
 
+use std::collections::BTreeSet;
 use std::process;
 
 use nix::sched::sched_getaffinity;
 use nix::unistd::Pid;
-
-use std::collections::BTreeSet;
-
-use ptools::proc::numa::{cpu_to_node, node_affinity, numa_online_nodes, NodeAffinity};
+use ptools::proc::numa::cpu_to_node;
+use ptools::proc::numa::node_affinity;
+use ptools::proc::numa::numa_online_nodes;
+use ptools::proc::numa::NodeAffinity;
 use ptools::proc::ProcHandle;
 
 /// Format a sorted slice of node IDs, collapsing consecutive runs into ranges.

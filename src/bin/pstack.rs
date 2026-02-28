@@ -20,7 +20,8 @@ use std::path::Path;
 use std::process::exit;
 
 use ptools::proc::ProcHandle;
-use ptools::stack::{SourceLocation, Thread};
+use ptools::stack::SourceLocation;
+use ptools::stack::Thread;
 
 fn format_source(src: &SourceLocation) -> String {
     let basename = Path::new(src.file())

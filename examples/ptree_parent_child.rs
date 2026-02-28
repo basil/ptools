@@ -14,12 +14,13 @@
 //   limitations under the License.
 //
 
-use nix::unistd::getppid;
 use std::env;
 use std::fs::File;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+
+use nix::unistd::getppid;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

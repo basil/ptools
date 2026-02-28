@@ -14,11 +14,10 @@
 //   limitations under the License.
 //
 
+use std::collections::BTreeSet;
 use std::process::exit;
 
 use nix::libc;
-use std::collections::BTreeSet;
-
 use ptools::proc::signal::signal_name;
 use ptools::proc::ProcHandle;
 

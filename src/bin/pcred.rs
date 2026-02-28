@@ -16,7 +16,10 @@
 
 use std::process::exit;
 
-use nix::unistd::{Gid, Group, Uid, User};
+use nix::unistd::Gid;
+use nix::unistd::Group;
+use nix::unistd::Uid;
+use nix::unistd::User;
 use ptools::proc::ProcHandle;
 
 struct Args {

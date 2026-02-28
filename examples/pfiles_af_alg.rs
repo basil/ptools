@@ -14,13 +14,17 @@
 //   limitations under the License.
 //
 
-use nix::errno::Errno;
-use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::thread;
 use std::time::Duration;
+
+use nix::errno::Errno;
+use nix::sys::socket::socket;
+use nix::sys::socket::AddressFamily;
+use nix::sys::socket::SockFlag;
+use nix::sys::socket::SockType;
 
 fn main() {
     let signal_path =

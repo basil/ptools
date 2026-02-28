@@ -14,11 +14,27 @@
 //   limitations under the License.
 //
 
-use libc::{
-    c_char, c_int, c_long, c_uint, c_ulong, c_void, gid_t, mode_t, size_t, time_t, uid_t,
-    Elf32_Chdr, Elf32_Ehdr, Elf32_Off, Elf32_Phdr, Elf32_Shdr, Elf64_Chdr, Elf64_Ehdr, Elf64_Off,
-    Elf64_Phdr, Elf64_Shdr,
-};
+use libc::c_char;
+use libc::c_int;
+use libc::c_long;
+use libc::c_uint;
+use libc::c_ulong;
+use libc::c_void;
+use libc::gid_t;
+use libc::mode_t;
+use libc::size_t;
+use libc::time_t;
+use libc::uid_t;
+use libc::Elf32_Chdr;
+use libc::Elf32_Ehdr;
+use libc::Elf32_Off;
+use libc::Elf32_Phdr;
+use libc::Elf32_Shdr;
+use libc::Elf64_Chdr;
+use libc::Elf64_Ehdr;
+use libc::Elf64_Off;
+use libc::Elf64_Phdr;
+use libc::Elf64_Shdr;
 
 c_enum! {
     Elf_Type {

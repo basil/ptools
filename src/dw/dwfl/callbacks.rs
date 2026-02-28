@@ -14,9 +14,12 @@
 //   limitations under the License.
 //
 
-use libc::{c_char, c_int, c_void};
 use std::cell::UnsafeCell;
 use std::ptr;
+
+use libc::c_char;
+use libc::c_int;
+use libc::c_void;
 
 /// Callbacks used to configure the behavior of a `Dwfl`.
 pub struct Callbacks(UnsafeCell<crate::dw_sys::Dwfl_Callbacks>);

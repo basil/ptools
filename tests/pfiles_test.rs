@@ -21,8 +21,10 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
-use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::Command;
+use std::process::Stdio;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 fn assert_contains(output: &str, needle: &str) {
     assert!(

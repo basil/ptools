@@ -14,19 +14,29 @@
 //   limitations under the License.
 //
 
-use nix::fcntl::{open, OFlag};
-use nix::sys::epoll::{Epoll, EpollCreateFlags, EpollEvent, EpollFlags};
-use nix::sys::eventfd::{EfdFlags, EventFd};
-use nix::sys::stat::Mode;
-use nix::unistd::pipe2;
 use std::env;
 use std::ffi::CString;
-use std::fs::{self, File};
-use std::net::{TcpListener, TcpStream, UdpSocket};
-use std::os::fd::{AsFd, RawFd};
+use std::fs::File;
+use std::fs::{self};
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::net::UdpSocket;
+use std::os::fd::AsFd;
+use std::os::fd::RawFd;
 use std::os::unix::fs::FileTypeExt;
 use std::thread;
 use std::time::Duration;
+
+use nix::fcntl::open;
+use nix::fcntl::OFlag;
+use nix::sys::epoll::Epoll;
+use nix::sys::epoll::EpollCreateFlags;
+use nix::sys::epoll::EpollEvent;
+use nix::sys::epoll::EpollFlags;
+use nix::sys::eventfd::EfdFlags;
+use nix::sys::eventfd::EventFd;
+use nix::sys::stat::Mode;
+use nix::unistd::pipe2;
 
 fn open_signalfd() -> RawFd {
     unsafe {

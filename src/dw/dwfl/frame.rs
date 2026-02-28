@@ -14,10 +14,13 @@
 //   limitations under the License.
 //
 
-use foreign_types::{ForeignTypeRef, Opaque};
 use std::ptr;
 
-use super::{Error, ThreadRef};
+use foreign_types::ForeignTypeRef;
+use foreign_types::Opaque;
+
+use super::Error;
+use super::ThreadRef;
 
 /// A reference to a stack frame.
 pub struct FrameRef(Opaque);

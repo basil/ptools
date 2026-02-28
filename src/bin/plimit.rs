@@ -16,7 +16,9 @@
 
 use std::process::exit;
 
-use ptools::proc::{ProcHandle, ResourceLimit, RlimitVal};
+use ptools::proc::ProcHandle;
+use ptools::proc::ResourceLimit;
+use ptools::proc::RlimitVal;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum UnitMode {

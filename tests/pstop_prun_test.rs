@@ -16,11 +16,13 @@
 
 mod common;
 
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 
-use common::{find_exec, ReadySignal};
+use common::find_exec;
+use common::ReadySignal;
 
 /// Read the state character from /proc/[pid]/stat.
 fn proc_state(pid: u32) -> Option<char> {

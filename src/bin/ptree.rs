@@ -14,7 +14,8 @@
 //   limitations under the License.
 //
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::process::exit;

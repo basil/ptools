@@ -14,7 +14,11 @@
 //   limitations under the License.
 //
 
-use libc::{c_char, c_int, c_void, size_t, ssize_t};
+use libc::c_char;
+use libc::c_int;
+use libc::c_void;
+use libc::size_t;
+use libc::ssize_t;
 
 use super::super::*;
 

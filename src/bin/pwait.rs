@@ -14,12 +14,17 @@
 //   limitations under the License.
 //
 
-use std::collections::{HashMap, HashSet};
-use std::os::fd::{AsRawFd, BorrowedFd};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::os::fd::AsRawFd;
+use std::os::fd::BorrowedFd;
 use std::process;
 
 use nix::errno::Errno;
-use nix::poll::{self, PollFd, PollFlags, PollTimeout};
+use nix::poll::PollFd;
+use nix::poll::PollFlags;
+use nix::poll::PollTimeout;
+use nix::poll::{self};
 use ptools::proc::pidfd::PidFd;
 
 struct Args {

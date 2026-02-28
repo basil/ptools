@@ -14,12 +14,19 @@
 //   limitations under the License.
 //
 
-use foreign_types::{ForeignTypeRef, Opaque};
-use libc::{c_int, c_void};
 use std::any::Any;
-use std::panic::{self, AssertUnwindSafe};
+use std::panic::AssertUnwindSafe;
+use std::panic::{self};
 
-use super::{cvt, DwflRef, Error, FrameRef};
+use foreign_types::ForeignTypeRef;
+use foreign_types::Opaque;
+use libc::c_int;
+use libc::c_void;
+
+use super::cvt;
+use super::DwflRef;
+use super::Error;
+use super::FrameRef;
 
 /// A reference to a thread.
 pub struct ThreadRef(Opaque);

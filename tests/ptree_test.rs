@@ -17,7 +17,8 @@
 mod common;
 
 use std::fs;
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::process::Stdio;
 
 fn leading_spaces(line: &str) -> usize {
     line.chars().take_while(|c| *c == ' ').count()

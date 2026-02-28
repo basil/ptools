@@ -16,7 +16,8 @@
 
 use std::process;
 
-use nix::sys::signal::{self, Signal};
+use nix::sys::signal::Signal;
+use nix::sys::signal::{self};
 use nix::unistd::Pid;
 use ptools::proc::ProcState;
 

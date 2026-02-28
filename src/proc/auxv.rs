@@ -16,7 +16,8 @@
 
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::Read;
+use std::io::{self};
 use std::mem::size_of;
 use std::path::Path;
 

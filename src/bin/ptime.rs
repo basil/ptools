@@ -18,10 +18,21 @@ use std::ffi::CString;
 use std::process;
 
 use nix::errno::Errno;
-use nix::sys::signal::{self, sigprocmask, SigHandler, SigSet, SigmaskHow, Signal};
+use nix::sys::signal::sigprocmask;
+use nix::sys::signal::SigHandler;
+use nix::sys::signal::SigSet;
+use nix::sys::signal::SigmaskHow;
+use nix::sys::signal::Signal;
+use nix::sys::signal::{self};
 use nix::sys::wait::WaitStatus;
-use nix::time::{clock_gettime, ClockId};
-use nix::unistd::{execvp, fork, sysconf, ForkResult, Pid, SysconfVar};
+use nix::time::clock_gettime;
+use nix::time::ClockId;
+use nix::unistd::execvp;
+use nix::unistd::fork;
+use nix::unistd::sysconf;
+use nix::unistd::ForkResult;
+use nix::unistd::Pid;
+use nix::unistd::SysconfVar;
 use ptools::proc::ProcHandle;
 
 enum Args {

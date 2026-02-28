@@ -21,7 +21,10 @@
 
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::{self};
 use std::os::raw::c_int;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;

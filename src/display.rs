@@ -27,10 +27,14 @@
 //!   pre-parsed through the proc-handle API.
 
 use std::borrow::Cow;
-
-use nix::unistd::{sysconf, Gid, Group, SysconfVar, Uid, User};
-
 use std::io;
+
+use nix::unistd::sysconf;
+use nix::unistd::Gid;
+use nix::unistd::Group;
+use nix::unistd::SysconfVar;
+use nix::unistd::Uid;
+use nix::unistd::User;
 
 use crate::proc::auxv::AuxvType;
 use crate::proc::ProcHandle;

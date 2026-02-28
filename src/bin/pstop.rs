@@ -18,7 +18,8 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
-use nix::sys::signal::{self, Signal};
+use nix::sys::signal::Signal;
+use nix::sys::signal::{self};
 use nix::unistd::Pid;
 use ptools::proc::ProcState;
 

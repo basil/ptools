@@ -38,7 +38,8 @@ mod elf;
 mod live;
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Abstraction over process data sources.

@@ -17,10 +17,14 @@
 #![allow(dead_code)]
 
 use std::path::PathBuf;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::Child;
+use std::process::Command;
+use std::process::Output;
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 // Find an executable produced by the Cargo build
 pub fn find_exec(name: &str) -> PathBuf {

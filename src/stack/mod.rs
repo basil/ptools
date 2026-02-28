@@ -16,16 +16,29 @@
 
 //! Thread stack traces of remote processes.
 
-use libc::{
-    c_void, pid_t, ptrace, waitpid, ESRCH, PTRACE_ATTACH, PTRACE_CONT, PTRACE_DETACH,
-    PTRACE_INTERRUPT, PTRACE_SEIZE, SIGSTOP, WIFSTOPPED, WSTOPSIG, __WALL,
-};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::fs::{self, File};
-use std::io::{self, Read};
+use std::fs::File;
+use std::fs::{self};
+use std::io::Read;
+use std::io::{self};
 use std::ptr;
+
+use libc::c_void;
+use libc::pid_t;
+use libc::ptrace;
+use libc::waitpid;
+use libc::ESRCH;
+use libc::PTRACE_ATTACH;
+use libc::PTRACE_CONT;
+use libc::PTRACE_DETACH;
+use libc::PTRACE_INTERRUPT;
+use libc::PTRACE_SEIZE;
+use libc::SIGSTOP;
+use libc::WIFSTOPPED;
+use libc::WSTOPSIG;
+use libc::__WALL;
 
 /// Information about a remote process.
 #[derive(Debug, Clone)]

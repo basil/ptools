@@ -14,15 +14,23 @@
 //   limitations under the License.
 //
 
-use nix::fcntl::OFlag;
-use nix::sys::socket::AddressFamily;
-use nix::sys::stat::{major, minor};
-use ptools::proc::fd::{AnonFileType, FileDescriptor, FileType, PosixFileType};
-use ptools::proc::net::{SockType, Socket, SocketOptions, TcpState};
-use ptools::proc::ProcHandle;
 use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::process::exit;
+
+use nix::fcntl::OFlag;
+use nix::sys::socket::AddressFamily;
+use nix::sys::stat::major;
+use nix::sys::stat::minor;
+use ptools::proc::fd::AnonFileType;
+use ptools::proc::fd::FileDescriptor;
+use ptools::proc::fd::FileType;
+use ptools::proc::fd::PosixFileType;
+use ptools::proc::net::SockType;
+use ptools::proc::net::Socket;
+use ptools::proc::net::SocketOptions;
+use ptools::proc::net::TcpState;
+use ptools::proc::ProcHandle;
 
 fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
     for line in extra_lines
@@ -567,8 +575,9 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use nix::sys::socket::AddressFamily;
+
+    use super::*;
 
     #[test]
     fn test_address_family_str() {

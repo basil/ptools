@@ -14,7 +14,9 @@
 //   limitations under the License.
 //
 
-use nix::sys::signal::{signal, SigHandler, Signal};
+use nix::sys::signal::signal;
+use nix::sys::signal::SigHandler;
+use nix::sys::signal::Signal;
 
 pub mod display;
 #[allow(dead_code)]

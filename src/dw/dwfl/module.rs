@@ -14,12 +14,14 @@
 //   limitations under the License.
 //
 
-use foreign_types::{ForeignTypeRef, Opaque};
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_int;
 use std::ptr;
+
+use foreign_types::ForeignTypeRef;
+use foreign_types::Opaque;
 
 use super::super::elf::Symbol;
 use super::Error;

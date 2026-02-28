@@ -14,13 +14,31 @@
 //   limitations under the License.
 //
 
-use libc::{
-    c_int, c_long, c_uint, c_void, size_t, Elf32_Word, Elf64_Addr, Elf64_Chdr, Elf64_Ehdr,
-    Elf64_Half, Elf64_Off, Elf64_Phdr, Elf64_Rel, Elf64_Rela, Elf64_Shdr, Elf64_Sword,
-    Elf64_Sxword, Elf64_Sym, Elf64_Word, Elf64_Xword,
-};
+use libc::c_int;
+use libc::c_long;
+use libc::c_uint;
+use libc::c_void;
+use libc::size_t;
+use libc::Elf32_Word;
+use libc::Elf64_Addr;
+use libc::Elf64_Chdr;
+use libc::Elf64_Ehdr;
+use libc::Elf64_Half;
+use libc::Elf64_Off;
+use libc::Elf64_Phdr;
+use libc::Elf64_Rel;
+use libc::Elf64_Rela;
+use libc::Elf64_Shdr;
+use libc::Elf64_Sword;
+use libc::Elf64_Sxword;
+use libc::Elf64_Sym;
+use libc::Elf64_Word;
+use libc::Elf64_Xword;
 
-use super::super::{Elf, Elf_Data, Elf_Scn, Elf_Type};
+use super::super::Elf;
+use super::super::Elf_Data;
+use super::super::Elf_Scn;
+use super::super::Elf_Type;
 
 pub type GElf_Half = Elf64_Half;
 pub type GElf_Word = Elf64_Word;

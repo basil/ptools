@@ -21,17 +21,24 @@
 //! source layer.  It is `pub(super)` -- visible only within the `source`
 //! module, so no dwfl types or ELF pointers leak to the rest of the crate.
 
-pub(super) use crate::dw::dwfl::Dwfl;
-use crate::dw::dwfl::{Callbacks, FindDebuginfo, FindElf, ModuleRef};
-use crate::stack::{Frame, SourceLocation, Symbol, TraceOptions};
 use std::cell::RefCell;
 use std::ffi::CStr;
 use std::os::raw::c_int;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
+use std::sync::LazyLock;
 
 use nix::libc;
 
 use super::elf::CoreElf;
+use crate::dw::dwfl::Callbacks;
+pub(super) use crate::dw::dwfl::Dwfl;
+use crate::dw::dwfl::FindDebuginfo;
+use crate::dw::dwfl::FindElf;
+use crate::dw::dwfl::ModuleRef;
+use crate::stack::Frame;
+use crate::stack::SourceLocation;
+use crate::stack::Symbol;
+use crate::stack::TraceOptions;
 
 // ---------------------------------------------------------------------------
 // Dwfl session constructors
