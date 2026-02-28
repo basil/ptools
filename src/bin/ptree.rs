@@ -114,22 +114,32 @@ fn print_tree(
     parent_map: &HashMap<u64, u64>,
     child_map: &HashMap<u64, Vec<u64>>,
     graph: Option<&GraphChars>,
+    printed: &mut HashSet<u64>,
 ) -> bool {
     if !parent_map.contains_key(&pid) {
         eprintln!("No such pid {}", pid);
         return false;
     }
     let mut cont = Vec::new();
-    let indent_level = print_parents(parent_map, pid, graph, &mut cont);
-    print_children(child_map, pid, indent_level, graph, &mut cont, true);
+    let indent_level = print_parents(parent_map, pid, graph, &mut cont, printed);
+    print_children(
+        child_map,
+        pid,
+        indent_level,
+        graph,
+        &mut cont,
+        true,
+        printed,
+    );
     true
 }
 
 fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>, graph: Option<&GraphChars>) {
+    let mut printed = HashSet::new();
     if let Some(root_children) = child_map.get(&0) {
         for pid in root_children {
             let mut cont = Vec::new();
-            print_children(child_map, *pid, 0, graph, &mut cont, true);
+            print_children(child_map, *pid, 0, graph, &mut cont, true, &mut printed);
         }
     }
 }
@@ -140,6 +150,7 @@ fn print_parents(
     pid: u64,
     graph: Option<&GraphChars>,
     cont: &mut Vec<bool>,
+    printed: &mut HashSet<u64>,
 ) -> u64 {
     let ppid = match parent_map.get(&pid) {
         Some(ppid) => *ppid,
@@ -154,8 +165,9 @@ fn print_parents(
         return 0;
     }
 
-    let indent_level = print_parents(parent_map, ppid, graph, cont);
+    let indent_level = print_parents(parent_map, ppid, graph, cont, printed);
     print_ptree_line(ppid, indent_level, graph, cont, true);
+    printed.insert(ppid);
     // Ancestor path is a single chain, no siblings to continue
     cont.push(false);
     indent_level + 1
@@ -168,8 +180,10 @@ fn print_children(
     graph: Option<&GraphChars>,
     cont: &mut Vec<bool>,
     is_last: bool,
+    printed: &mut HashSet<u64>,
 ) {
     print_ptree_line(pid, indent_level, graph, cont, is_last);
+    printed.insert(pid);
     if let Some(children) = child_map.get(&pid) {
         for (i, child) in children.iter().enumerate() {
             let child_is_last = i == children.len() - 1;
@@ -181,6 +195,7 @@ fn print_children(
                 graph,
                 cont,
                 child_is_last,
+                printed,
             );
             cont.pop();
         }
@@ -322,7 +337,9 @@ fn main() {
                     error = true;
                     continue;
                 }
-                if printed.insert(pid) && !print_tree(pid, &parent_map, &child_map, graph) {
+                if printed.insert(pid)
+                    && !print_tree(pid, &parent_map, &child_map, graph, &mut printed)
+                {
                     error = true;
                 }
                 continue;
@@ -331,7 +348,9 @@ fn main() {
             match pids_for_user(target, &uid_map) {
                 Ok(pids) => {
                     for pid in pids {
-                        if printed.insert(pid) && !print_tree(pid, &parent_map, &child_map, graph) {
+                        if printed.insert(pid)
+                            && !print_tree(pid, &parent_map, &child_map, graph, &mut printed)
+                        {
                             error = true;
                         }
                     }
@@ -345,9 +364,10 @@ fn main() {
     } else if args.all {
         print_all_trees(&child_map, graph);
     } else if let Some(children) = child_map.get(&1) {
+        let mut printed = HashSet::new();
         for pid in children {
             let mut cont = Vec::new();
-            print_children(&child_map, *pid, 0, graph, &mut cont, true);
+            print_children(&child_map, *pid, 0, graph, &mut cont, true, &mut printed);
         }
     }
     if error {
