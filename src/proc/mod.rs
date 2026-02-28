@@ -789,7 +789,7 @@ impl ProcHandle {
             // Try to find inode -- from stat if available, else from link text
             let inode = stat_result
                 .as_ref()
-                .map(|st| st.st_ino)
+                .map(|st| st.st_ino as u64)
                 .or_else(|| fd::parse_socket_inode(&link_text));
 
             if let Some(inode) = inode {
