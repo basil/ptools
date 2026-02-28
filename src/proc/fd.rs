@@ -143,53 +143,43 @@ pub(crate) fn parse_socket_inode(link_text: &str) -> Option<u64> {
 
 /// Read `system.sockprotoname` xattr from `/proc/[pid]/fd/[fd]`.
 pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -> Option<String> {
-    #[cfg(target_os = "linux")]
-    {
-        let path = std::ffi::CString::new(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
-        let name = std::ffi::CString::new("system.sockprotoname").ok()?;
+    let path = std::ffi::CString::new(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
+    let name = std::ffi::CString::new("system.sockprotoname").ok()?;
 
-        let size =
-            unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
+    let size =
+        unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
 
-        if size < 0 {
-            warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
-            return None;
-        }
-
-        let mut buf = vec![0u8; size as usize];
-        let filled = unsafe {
-            nix::libc::getxattr(
-                path.as_ptr(),
-                name.as_ptr(),
-                buf.as_mut_ptr().cast::<nix::libc::c_void>(),
-                buf.len(),
-            )
-        };
-        if filled < 0 {
-            warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
-            return None;
-        }
-
-        buf.truncate(filled as usize);
-        if buf.last() == Some(&0) {
-            buf.pop();
-        }
-
-        if buf.is_empty() {
-            return None;
-        }
-
-        String::from_utf8(buf).ok()
+    if size < 0 {
+        warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
+        return None;
     }
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (pid, fd, warnings);
-        None
+    let mut buf = vec![0u8; size as usize];
+    let filled = unsafe {
+        nix::libc::getxattr(
+            path.as_ptr(),
+            name.as_ptr(),
+            buf.as_mut_ptr().cast::<nix::libc::c_void>(),
+            buf.len(),
+        )
+    };
+    if filled < 0 {
+        warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
+        return None;
     }
+
+    buf.truncate(filled as usize);
+    if buf.last() == Some(&0) {
+        buf.pop();
+    }
+
+    if buf.is_empty() {
+        return None;
+    }
+
+    String::from_utf8(buf).ok()
 }
 
-#[cfg(target_os = "linux")]
 fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) -> Option<String> {
     match Errno::last() {
         Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => None,

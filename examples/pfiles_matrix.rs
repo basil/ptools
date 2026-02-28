@@ -94,7 +94,6 @@ fn find_block_device_path() -> Option<String> {
     })
 }
 
-#[cfg(target_os = "linux")]
 fn allow_ptrace_for_tests() {
     unsafe {
         nix::libc::prctl(
@@ -106,9 +105,6 @@ fn allow_ptrace_for_tests() {
         );
     }
 }
-
-#[cfg(not(target_os = "linux"))]
-fn allow_ptrace_for_tests() {}
 
 fn main() {
     allow_ptrace_for_tests();

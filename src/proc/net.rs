@@ -20,7 +20,6 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::ParseIntError;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
-#[cfg(target_os = "linux")]
 use super::fd::parse_socket_inode;
 use super::Error;
 use crate::source::ProcSource;
@@ -434,7 +433,6 @@ impl Socket {
     }
 }
 
-#[cfg(target_os = "linux")]
 fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
     let pid_i32 = i32::try_from(pid).ok()?;
     let fd_i32 = i32::try_from(fd).ok()?;
@@ -452,11 +450,6 @@ fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
     }
 
     Some(unsafe { OwnedFd::from_raw_fd(duplicated as i32) })
-}
-
-#[cfg(not(target_os = "linux"))]
-fn duplicate_target_fd(_pid: u64, _fd: u64) -> Option<OwnedFd> {
-    None
 }
 
 fn query_socket_options(sock_fd: &OwnedFd) -> SocketOptions {
@@ -519,8 +512,8 @@ fn query_tcp_info(sock_fd: &OwnedFd) -> Option<nix::libc::tcp_info> {
 /// socket-level and TCP-level options, and returns the results bundled
 /// in a [`SocketDetails`].
 ///
-/// Returns `None` if the fd cannot be duplicated (e.g., coredumps,
-/// insufficient privileges, or non-Linux platforms).
+/// Returns `None` if the fd cannot be duplicated (e.g., coredumps or
+/// insufficient privileges).
 pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
     let sock_fd = duplicate_target_fd(pid, fd)?;
     Some(SocketDetails {
@@ -532,19 +525,12 @@ pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
 
 // -- Peer process resolution --------------------------------------------------
 
-#[cfg(target_os = "linux")]
 pub(crate) fn read_comm(pid: u64) -> Option<String> {
     std::fs::read_to_string(format!("/proc/{}/comm", pid))
         .ok()
         .map(|comm| comm.trim_end().to_string())
 }
 
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn read_comm(_pid: u64) -> Option<String> {
-    None
-}
-
-#[cfg(target_os = "linux")]
 fn list_socket_owners(warnings: &mut Vec<String>) -> HashMap<u64, std::collections::HashSet<u64>> {
     let mut owners = HashMap::<u64, std::collections::HashSet<u64>>::new();
     let proc_entries = match std::fs::read_dir("/proc") {
@@ -582,7 +568,6 @@ fn list_socket_owners(warnings: &mut Vec<String>) -> HashMap<u64, std::collectio
     owners
 }
 
-#[cfg(target_os = "linux")]
 fn local_tcp_peer_inodes(sockets: &HashMap<u64, SocketInfo>) -> HashMap<u64, u64> {
     let mut by_tuple = HashMap::<(AddressFamily, SocketAddr, SocketAddr), Vec<u64>>::new();
     for sock in sockets.values() {
@@ -636,7 +621,6 @@ pub(crate) fn has_loopback_tcp_peers(sockets: &HashMap<u64, SocketInfo>) -> bool
     })
 }
 
-#[cfg(target_os = "linux")]
 pub(crate) fn derive_peer_processes(
     target_pid: u64,
     sockets: &HashMap<u64, SocketInfo>,
@@ -682,16 +666,6 @@ pub(crate) fn derive_peer_processes(
     peers
 }
 
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn derive_peer_processes(
-    _target_pid: u64,
-    _sockets: &HashMap<u64, SocketInfo>,
-    _warnings: &mut Vec<String>,
-) -> HashMap<u64, PeerProcess> {
-    HashMap::new()
-}
-
-#[cfg(target_os = "linux")]
 pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
     let sock_fd = duplicate_target_fd(pid, fd)?;
     let creds = getsockopt(&sock_fd, sockopt::PeerCredentials).ok()?;
@@ -701,11 +675,6 @@ pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<PeerProcess> {
         pid: peer_pid,
         comm,
     })
-}
-
-#[cfg(not(target_os = "linux"))]
-pub(crate) fn unix_peer_process(_pid: u64, _fd: u64) -> Option<PeerProcess> {
-    None
 }
 
 #[cfg(test)]
