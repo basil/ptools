@@ -14,51 +14,19 @@
 //   limitations under the License.
 //
 
+use std::collections::BTreeSet;
+
 use nix::sys::signal::Signal;
 
-/// A set of signal numbers, parsed from a kernel hex mask.
-///
-/// Analogous to [`super::numa::CpuSet`] but for signal numbers.
-/// Internally stored as a boolean vector indexed by signal number.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SignalSet {
-    signals: Vec<bool>,
-}
-
-impl SignalSet {
-    /// Whether the given signal number is a member of this set.
-    pub fn contains(&self, sig: usize) -> bool {
-        sig < self.signals.len() && self.signals[sig]
-    }
-
-    /// Whether the set contains no signals.
-    pub fn is_empty(&self) -> bool {
-        !self.signals.iter().any(|&b| b)
-    }
-
-    /// The highest signal number representable by this set (the length of the
-    /// underlying storage minus one). Returns 0 for an empty set.
-    pub fn max_signal(&self) -> usize {
-        self.signals.len().saturating_sub(1)
-    }
-
-    /// Iterate over the signal numbers that are set.
-    pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
-        self.signals
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &set)| if set { Some(i) } else { None })
-    }
-}
-
-/// Parse a hex signal mask (e.g. from `SigIgn`) into a [`SignalSet`].
-pub(crate) fn parse_signal_set(hex: &str) -> Result<SignalSet, super::Error> {
+/// Parse a hex signal mask (e.g. from `SigIgn`) into a `BTreeSet<usize>` of
+/// 1-indexed signal numbers.
+pub(crate) fn parse_signal_set(hex: &str) -> Result<BTreeSet<usize>, super::Error> {
     let trimmed = hex.trim();
     if trimmed.is_empty() {
         return Err(super::Error::parse("signal mask", "empty"));
     }
 
-    let mut bits = vec![false; 1];
+    let mut set = BTreeSet::new();
     for (nibble_idx, ch) in trimmed.bytes().rev().enumerate() {
         let nibble = match ch {
             b'0'..=b'9' => ch - b'0',
@@ -73,35 +41,25 @@ pub(crate) fn parse_signal_set(hex: &str) -> Result<SignalSet, super::Error> {
         };
 
         for bit in 0..4 {
-            if (nibble & (1 << bit)) == 0 {
-                continue;
+            if (nibble & (1 << bit)) != 0 {
+                let sig = nibble_idx * 4 + bit as usize + 1;
+                set.insert(sig);
             }
-            let sig = nibble_idx * 4 + bit as usize + 1;
-            if sig >= bits.len() {
-                bits.resize(sig + 1, false);
-            }
-            bits[sig] = true;
         }
     }
 
-    Ok(SignalSet { signals: bits })
+    Ok(set)
 }
 
 /// Compute the intersection of per-thread blocked masks.
-pub(crate) fn intersect_blocked_masks(masks: &[SignalSet]) -> SignalSet {
+pub(crate) fn intersect_blocked_masks(masks: &[BTreeSet<usize>]) -> BTreeSet<usize> {
     let Some(first) = masks.first() else {
-        return SignalSet::default();
+        return BTreeSet::new();
     };
-    // If there's only one thread, just return its mask directly.
     if masks.len() == 1 {
         return first.clone();
     }
-    let max_len = masks.iter().map(|m| m.signals.len()).max().unwrap_or(0);
-    let mut result = vec![false; max_len];
-    for (i, slot) in result.iter_mut().enumerate().take(max_len) {
-        *slot = masks.iter().all(|m| i < m.signals.len() && m.signals[i]);
-    }
-    SignalSet { signals: result }
+    masks[1..].iter().fold(first.clone(), |acc, m| &acc & m)
 }
 
 /// Return a human-readable name for the given signal number.
@@ -170,17 +128,17 @@ mod tests {
     fn parse_single_signal() {
         // Bit 0 of nibble 0 -> signal 1 (SIGHUP)
         let set = parse_signal_set("0000000000000001").unwrap();
-        assert!(set.contains(1));
-        assert!(!set.contains(2));
+        assert!(set.contains(&1));
+        assert!(!set.contains(&2));
     }
 
     #[test]
     fn parse_multiple_signals() {
         // 0x3 = bits 0,1 -> signals 1,2
         let set = parse_signal_set("0000000000000003").unwrap();
-        assert!(set.contains(1));
-        assert!(set.contains(2));
-        assert!(!set.contains(3));
+        assert!(set.contains(&1));
+        assert!(set.contains(&2));
+        assert!(!set.contains(&3));
     }
 
     #[test]
@@ -197,13 +155,13 @@ mod tests {
     fn iter_yields_set_signals() {
         // 0x5 = bits 0,2 -> signals 1,3
         let set = parse_signal_set("5").unwrap();
-        assert_eq!(set.iter().collect::<Vec<_>>(), vec![1, 3]);
+        assert_eq!(set.iter().copied().collect::<Vec<_>>(), vec![1, 3]);
     }
 
     #[test]
     fn max_signal_empty() {
-        let set = SignalSet::default();
-        assert_eq!(set.max_signal(), 0);
+        let set: BTreeSet<usize> = BTreeSet::new();
+        assert_eq!(set.last().copied().unwrap_or(0), 0);
     }
 
     #[test]
@@ -218,9 +176,9 @@ mod tests {
         let a = parse_signal_set("7").unwrap(); // signals 1,2,3
         let b = parse_signal_set("5").unwrap(); // signals 1,3
         let result = intersect_blocked_masks(&[a, b]);
-        assert!(result.contains(1));
-        assert!(!result.contains(2));
-        assert!(result.contains(3));
+        assert!(result.contains(&1));
+        assert!(!result.contains(&2));
+        assert!(result.contains(&3));
     }
 
     #[test]

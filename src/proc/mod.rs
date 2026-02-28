@@ -50,9 +50,11 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
+use std::collections::BTreeSet;
+
 use crate::source::ProcSource;
 use cred::{parse_cred, ProcCred};
-use signal::{intersect_blocked_masks, parse_signal_set, SignalSet};
+use signal::{intersect_blocked_masks, parse_signal_set};
 
 /// A resource limit value (soft or hard).
 ///
@@ -514,7 +516,7 @@ impl ProcHandle {
         let sig_ign_hex = sig_ign.ok_or_else(|| Error::in_file("status", "missing SigIgn"))?;
         let sig_cgt_hex = sig_cgt.ok_or_else(|| Error::in_file("status", "missing SigCgt"))?;
 
-        let parse = |name: &str, hex: &str| -> Result<SignalSet, Error> {
+        let parse = |name: &str, hex: &str| -> Result<BTreeSet<usize>, Error> {
             parse_signal_set(hex)
                 .map_err(|e| Error::in_file("status", &format!("invalid {}: {}", name, e)))
         };
@@ -547,7 +549,7 @@ impl ProcHandle {
     }
 
     /// Per-thread blocked masks (SigBlk from each thread's status).
-    fn thread_blocked_masks(&self) -> Option<Vec<SignalSet>> {
+    fn thread_blocked_masks(&self) -> Option<Vec<BTreeSet<usize>>> {
         let tids = self.source.list_tids().ok()?;
 
         // Warn if the source reports fewer threads than actually existed.
@@ -871,12 +873,12 @@ impl ProcState {
 
 /// Signal disposition masks parsed from /proc/[pid]/status.
 pub struct SignalMasks {
-    pub ignored: SignalSet,
-    pub caught: SignalSet,
+    pub ignored: BTreeSet<usize>,
+    pub caught: BTreeSet<usize>,
     /// Intersection of SigBlk across all threads.
-    pub blocked: SignalSet,
-    pub pending: SignalSet,
-    pub shared_pending: SignalSet,
+    pub blocked: BTreeSet<usize>,
+    pub pending: BTreeSet<usize>,
+    pub shared_pending: BTreeSet<usize>,
 }
 
 impl ProcHandle {

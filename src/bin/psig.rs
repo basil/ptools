@@ -17,7 +17,9 @@
 use std::process::exit;
 
 use nix::libc;
-use ptools::proc::signal::{signal_name, SignalSet};
+use std::collections::BTreeSet;
+
+use ptools::proc::signal::signal_name;
 use ptools::proc::ProcHandle;
 
 #[derive(Copy, Clone)]
@@ -27,10 +29,14 @@ enum SignalAction {
     Caught,
 }
 
-fn action_for_signal(sig: usize, sig_ign: &SignalSet, sig_cgt: &SignalSet) -> SignalAction {
-    if sig_ign.contains(sig) {
+fn action_for_signal(
+    sig: usize,
+    sig_ign: &BTreeSet<usize>,
+    sig_cgt: &BTreeSet<usize>,
+) -> SignalAction {
+    if sig_ign.contains(&sig) {
         SignalAction::Ignored
-    } else if sig_cgt.contains(sig) {
+    } else if sig_cgt.contains(&sig) {
         SignalAction::Caught
     } else {
         SignalAction::Default
@@ -60,15 +66,18 @@ fn print_signal_actions(handle: &ProcHandle) -> Result<(), ptools::proc::Error> 
         64,
         std::cmp::max(
             rtmax,
-            std::cmp::max(masks.ignored.max_signal(), masks.caught.max_signal()),
+            std::cmp::max(
+                masks.ignored.last().copied().unwrap_or(0),
+                masks.caught.last().copied().unwrap_or(0),
+            ),
         ),
     );
 
     for sig in 1..=max_sig {
         let name = signal_name(sig, rtmin, rtmax);
         let action = action_for_signal(sig, &masks.ignored, &masks.caught);
-        let blocked = masks.blocked.contains(sig);
-        let pending = masks.pending.contains(sig) || masks.shared_pending.contains(sig);
+        let blocked = masks.blocked.contains(&sig);
+        let pending = masks.pending.contains(&sig) || masks.shared_pending.contains(&sig);
 
         let mut parts = Vec::new();
         if blocked {
