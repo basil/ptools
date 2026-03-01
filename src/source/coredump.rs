@@ -27,9 +27,13 @@ use nix::libc;
 
 use super::dw::CoreDwfl;
 use super::elf::CoreElf;
+use super::elf::Prpsinfo;
+use super::elf::Prstatus;
 use super::ProcSource;
+use crate::model;
+use crate::model::auxv::ByteOrder;
+use crate::model::status::signal_bitmask_to_set;
 use crate::model::FromBufRead;
-use crate::model::{self};
 
 // ---------------------------------------------------------------------------
 // libsystemd journal FFI (minimal subset)
@@ -117,11 +121,14 @@ impl Drop for Journal {
 /// auxv, open fds, limits, proc status) are filled in from the systemd
 /// journal entry matching the coredump.
 pub(super) struct CoredumpSource {
+    fields: HashMap<String, Vec<u8>>,
     core_dwfl: OnceCell<Option<CoreDwfl>>,
     core_elf: Option<Arc<CoreElf>>,
     pid: OnceCell<u64>,
     tids: OnceCell<Vec<u64>>,
-    fields: HashMap<String, Vec<u8>>,
+    prpsinfo: OnceCell<Option<Prpsinfo>>,
+    auxv_bytes: OnceCell<Option<Vec<u8>>>,
+    prstatus_map: OnceCell<HashMap<u64, Prstatus>>,
 }
 
 /// A parsed entry from `COREDUMP_OPEN_FDS`.
@@ -195,11 +202,14 @@ impl CoredumpSource {
         }
 
         Ok(CoredumpSource {
+            fields,
             core_dwfl: OnceCell::new(),
             core_elf: core_elf.map(Arc::clone),
             pid: OnceCell::new(),
             tids: OnceCell::new(),
-            fields,
+            prpsinfo: OnceCell::new(),
+            auxv_bytes: OnceCell::new(),
+            prstatus_map: OnceCell::new(),
         })
     }
 
@@ -257,6 +267,70 @@ impl CoredumpSource {
             )
         })
     }
+
+    /// Lazily parse and cache all ELF notes (prstatus, prpsinfo, auxv).
+    fn ensure_notes(&self) {
+        self.prstatus_map
+            .get_or_init(|| match self.core_elf.as_ref() {
+                Some(elf) => {
+                    let (map, prpsinfo, auxv) = elf.parse_notes();
+                    let _ = self.prpsinfo.set(prpsinfo);
+                    let _ = self.auxv_bytes.set(auxv);
+                    map
+                }
+                None => {
+                    let _ = self.prpsinfo.set(None);
+                    let _ = self.auxv_bytes.set(None);
+                    HashMap::new()
+                }
+            });
+    }
+}
+
+/// Convert a timeval (sec, usec) to approximate clock ticks.
+fn timeval_to_ticks(sec: u64, usec: u64) -> u64 {
+    // sysconf(_SC_CLK_TCK) is typically 100 on Linux.
+    let hz = unsafe { nix::libc::sysconf(nix::libc::_SC_CLK_TCK) };
+    let hz = if hz > 0 { hz as u64 } else { 100 };
+    sec.saturating_mul(hz)
+        .saturating_add(usec.saturating_mul(hz) / 1_000_000)
+}
+
+/// Build a [`model::stat::Stat`] from prpsinfo and/or prstatus notes.
+fn prstatus_to_stat(prpsinfo: Option<&Prpsinfo>, prstatus: Option<&Prstatus>) -> model::stat::Stat {
+    model::stat::Stat {
+        state: prpsinfo.map(|p| model::stat::ProcState::from(p.pr_sname)),
+        ppid: prstatus
+            .map(|p| p.pr_ppid as u64)
+            .or_else(|| prpsinfo.map(|p| p.pr_ppid as u64)),
+        pgrp: prstatus
+            .map(|p| p.pr_pgrp as u64)
+            .or_else(|| prpsinfo.map(|p| p.pr_pgrp as u64)),
+        sid: prstatus
+            .map(|p| p.pr_sid as u64)
+            .or_else(|| prpsinfo.map(|p| p.pr_sid as u64)),
+        utime: prstatus.map(|p| timeval_to_ticks(p.pr_utime_sec, p.pr_utime_usec)),
+        stime: prstatus.map(|p| timeval_to_ticks(p.pr_stime_sec, p.pr_stime_usec)),
+        nice: prpsinfo.map(|p| p.pr_nice as i32),
+        ..model::stat::Stat::default()
+    }
+}
+
+/// Build a [`model::status::Status`] from prpsinfo and/or prstatus notes.
+fn prstatus_to_status(
+    prpsinfo: Option<&Prpsinfo>,
+    prstatus: Option<&Prstatus>,
+) -> model::status::Status {
+    model::status::Status {
+        ppid: prstatus
+            .map(|p| p.pr_ppid as u64)
+            .or_else(|| prpsinfo.map(|p| p.pr_ppid as u64)),
+        ruid: prpsinfo.map(|p| p.pr_uid),
+        rgid: prpsinfo.map(|p| p.pr_gid),
+        sig_blk: prstatus.map(|p| signal_bitmask_to_set(p.pr_sighold)),
+        sig_pnd: prstatus.map(|p| signal_bitmask_to_set(p.pr_sigpend)),
+        ..model::status::Status::default()
+    }
 }
 
 fn unsupported(what: &str) -> io::Error {
@@ -285,32 +359,117 @@ impl ProcSource for CoredumpSource {
     }
 
     fn word_size(&self) -> usize {
-        std::mem::size_of::<usize>()
+        self.core_elf
+            .as_ref()
+            .and_then(|elf| elf.word_size())
+            .unwrap_or(std::mem::size_of::<usize>())
     }
 
-    fn byte_order(&self) -> model::auxv::ByteOrder {
-        if cfg!(target_endian = "big") {
-            model::auxv::ByteOrder::Big
-        } else {
-            model::auxv::ByteOrder::Little
-        }
+    fn byte_order(&self) -> ByteOrder {
+        self.core_elf
+            .as_ref()
+            .and_then(|elf| elf.byte_order())
+            .unwrap_or(if cfg!(target_endian = "big") {
+                ByteOrder::Big
+            } else {
+                ByteOrder::Little
+            })
     }
 
     fn read_stat(&self) -> io::Result<model::stat::Stat> {
-        Err(unsupported("stat"))
+        let pid = self.pid();
+        self.ensure_notes();
+        let prpsinfo = self
+            .prpsinfo
+            .get()
+            .expect("ensure_notes initialized")
+            .as_ref();
+        let prstatus = self
+            .prstatus_map
+            .get()
+            .expect("ensure_notes initialized")
+            .get(&pid);
+        if prstatus.is_some() || prpsinfo.is_some() {
+            return Ok(prstatus_to_stat(prpsinfo, prstatus));
+        }
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "stat not available from coredump",
+        ))
     }
 
     fn read_status(&self) -> io::Result<model::status::Status> {
-        let text = self.get_field_str("COREDUMP_PROC_STATUS")?;
-        model::status::Status::from_buf_read(text.as_bytes())
+        // Prefer the journal's COREDUMP_PROC_STATUS (full /proc/pid/status snapshot).
+        if let Ok(text) = self.get_field_str("COREDUMP_PROC_STATUS") {
+            return model::status::Status::from_buf_read(text.as_bytes());
+        }
+        // Fall back to prstatus/prpsinfo notes for the main thread.
+        let pid = self.pid();
+        self.ensure_notes();
+        let prpsinfo = self
+            .prpsinfo
+            .get()
+            .expect("ensure_notes initialized")
+            .as_ref();
+        let prstatus = self
+            .prstatus_map
+            .get()
+            .expect("ensure_notes initialized")
+            .get(&pid);
+        if prstatus.is_some() || prpsinfo.is_some() {
+            return Ok(prstatus_to_status(prpsinfo, prstatus));
+        }
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "status not available from coredump",
+        ))
     }
 
     fn read_comm(&self) -> io::Result<String> {
-        self.get_field_str("COREDUMP_COMM").map(str::to_string)
+        if let Ok(s) = self.get_field_str("COREDUMP_COMM") {
+            return Ok(s.to_string());
+        }
+        self.ensure_notes();
+        if let Some(prpsinfo) = self
+            .prpsinfo
+            .get()
+            .expect("ensure_notes initialized")
+            .as_ref()
+        {
+            return Ok(prpsinfo.pr_fname.clone());
+        }
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "comm not available from coredump",
+        ))
     }
 
     fn read_cmdline(&self) -> io::Result<Vec<u8>> {
-        self.get_field("COREDUMP_CMDLINE").map(|b| b.to_vec())
+        if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
+            return Ok(b.to_vec());
+        }
+        // Fall back to prpsinfo pr_psargs as a single opaque argument.
+        // pr_psargs is a space-joined, truncated kernel rendering of the
+        // command line -- we cannot recover original argv boundaries from it,
+        // so return it whole rather than fabricating entries by splitting on
+        // spaces.
+        self.ensure_notes();
+        if let Some(prpsinfo) = self
+            .prpsinfo
+            .get()
+            .expect("ensure_notes initialized")
+            .as_ref()
+        {
+            if !prpsinfo.pr_psargs.is_empty() {
+                let mut bytes = prpsinfo.pr_psargs.as_bytes().to_vec();
+                bytes.push(0);
+                return Ok(bytes);
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cmdline not available from coredump",
+        ))
     }
 
     fn read_environ(&self) -> io::Result<Vec<u8>> {
@@ -318,7 +477,24 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
-        let bytes = self.get_field("COREDUMP_PROC_AUXV")?;
+        // Try the journal field first, then fall back to the ELF NT_AUXV note.
+        let bytes = match self.get_field("COREDUMP_PROC_AUXV") {
+            Ok(b) => b,
+            Err(_) => {
+                // Trigger note parsing so auxv_bytes gets populated.
+                self.ensure_notes();
+                match self.auxv_bytes.get().and_then(|o| o.as_deref()) {
+                    Some(b) => b,
+                    None => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::Unsupported,
+                            "auxv data not found in coredump",
+                        ))
+                    }
+                }
+            }
+        };
+
         model::auxv::Auxv::from_read(bytes, self.word_size(), self.byte_order())
     }
 
@@ -356,8 +532,21 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_tid_stat(&self, tid: u64) -> io::Result<model::stat::Stat> {
-        if tid == self.pid() {
-            self.read_stat()
+        self.ensure_notes();
+        let prpsinfo = self
+            .prpsinfo
+            .get()
+            .expect("ensure_notes initialized")
+            .as_ref();
+        let prstatus = self
+            .prstatus_map
+            .get()
+            .expect("ensure_notes initialized")
+            .get(&tid);
+        if prstatus.is_some() {
+            Ok(prstatus_to_stat(prpsinfo, prstatus))
+        } else if tid == self.pid() && prpsinfo.is_some() {
+            Ok(prstatus_to_stat(prpsinfo, None))
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -367,8 +556,28 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_tid_status(&self, tid: u64) -> io::Result<model::status::Status> {
+        // Main thread: prefer journal string, fall back to prstatus.
         if tid == self.pid() {
-            self.read_status()
+            if let Ok(text) = self.get_field_str("COREDUMP_PROC_STATUS") {
+                return model::status::Status::from_buf_read(text.as_bytes());
+            }
+        }
+        // Any thread: fall back to prstatus/prpsinfo notes.
+        self.ensure_notes();
+        let prpsinfo = self
+            .prpsinfo
+            .get()
+            .expect("ensure_notes initialized")
+            .as_ref();
+        let prstatus = self
+            .prstatus_map
+            .get()
+            .expect("ensure_notes initialized")
+            .get(&tid);
+        if prstatus.is_some() {
+            Ok(prstatus_to_status(prpsinfo, prstatus))
+        } else if tid == self.pid() && prpsinfo.is_some() {
+            Ok(prstatus_to_status(prpsinfo, None))
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotFound,

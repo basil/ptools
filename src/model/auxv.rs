@@ -30,6 +30,29 @@ pub enum ByteOrder {
     Big,
 }
 
+impl ByteOrder {
+    pub fn u16(self, bytes: [u8; 2]) -> u16 {
+        match self {
+            ByteOrder::Little => u16::from_le_bytes(bytes),
+            ByteOrder::Big => u16::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn u32(self, bytes: [u8; 4]) -> u32 {
+        match self {
+            ByteOrder::Little => u32::from_le_bytes(bytes),
+            ByteOrder::Big => u32::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn u64(self, bytes: [u8; 8]) -> u64 {
+        match self {
+            ByteOrder::Little => u64::from_le_bytes(bytes),
+            ByteOrder::Big => u64::from_be_bytes(bytes),
+        }
+    }
+}
+
 /// An auxiliary vector entry type (`AT_*` constant).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuxvType {
@@ -132,18 +155,12 @@ impl Auxv {
                 4 => {
                     let mut buf = [0u8; 4];
                     reader.read_exact(&mut buf)?;
-                    Ok(match byte_order {
-                        ByteOrder::Little => u32::from_le_bytes(buf) as u64,
-                        ByteOrder::Big => u32::from_be_bytes(buf) as u64,
-                    })
+                    Ok(byte_order.u32(buf) as u64)
                 }
                 8 => {
                     let mut buf = [0u8; 8];
                     reader.read_exact(&mut buf)?;
-                    Ok(match byte_order {
-                        ByteOrder::Little => u64::from_le_bytes(buf),
-                        ByteOrder::Big => u64::from_be_bytes(buf),
-                    })
+                    Ok(byte_order.u64(buf))
                 }
                 _ => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
