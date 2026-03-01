@@ -48,6 +48,8 @@ use crate::model;
 /// supplies the same data from journal fields or ELF notes.
 pub(crate) trait ProcSource {
     fn pid(&self) -> u64;
+    fn word_size(&self) -> usize;
+    fn byte_order(&self) -> model::auxv::ByteOrder;
 
     // Per-process files
     fn read_stat(&self) -> io::Result<String>;
@@ -55,7 +57,7 @@ pub(crate) trait ProcSource {
     fn read_comm(&self) -> io::Result<String>;
     fn read_cmdline(&self) -> io::Result<Vec<u8>>;
     fn read_environ(&self) -> io::Result<Vec<u8>>;
-    fn read_auxv(&self) -> io::Result<Vec<u8>>;
+    fn read_auxv(&self) -> io::Result<model::auxv::Auxv>;
     fn read_exe(&self) -> io::Result<PathBuf>;
     fn read_limits(&self) -> io::Result<String>;
     fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat>;

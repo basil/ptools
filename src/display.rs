@@ -36,7 +36,7 @@ use nix::unistd::SysconfVar;
 use nix::unistd::Uid;
 use nix::unistd::User;
 
-use crate::proc::auxv::AuxvType;
+use crate::model::auxv::AuxvType;
 use crate::proc::ProcHandle;
 
 fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
@@ -99,12 +99,12 @@ pub fn print_env_from(handle: &ProcHandle) -> io::Result<()> {
 #[allow(clippy::unnecessary_cast)]
 pub fn print_auxv_from(handle: &ProcHandle) -> io::Result<()> {
     let auxv = handle.auxv()?;
-    let hex_width = auxv.word_size * 2;
+    let hex_width = handle.word_size() * 2;
     let page_size = auxv
-        .entries
+        .0
         .iter()
-        .find(|e| e.key == AuxvType::PageSz)
-        .map(|e| e.value)
+        .find(|(typ, _)| *typ == AuxvType::PageSz)
+        .map(|(_, value)| *value)
         .or_else(|| {
             sysconf(SysconfVar::PAGE_SIZE)
                 .ok()
@@ -114,64 +114,44 @@ pub fn print_auxv_from(handle: &ProcHandle) -> io::Result<()> {
         .unwrap_or(4096);
 
     print_proc_summary_from(handle);
-    for entry in &auxv.entries {
-        let key = auxv_type_str(&entry.key);
-        if entry.key.is_string_pointer() {
-            if let Some(s) = handle.read_cstring_at(entry.value, page_size) {
-                println!(
-                    "{:<15} 0x{:0width$x} {}",
-                    key,
-                    entry.value,
-                    s,
-                    width = hex_width
-                );
+    for &(typ, value) in &auxv.0 {
+        let key = auxv_type_str(&typ);
+        if typ.is_string_pointer() {
+            if let Some(s) = handle.read_cstring_at(value, page_size) {
+                println!("{key:<15} 0x{value:0hex_width$x} {s}");
             } else {
-                println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
+                println!("{key:<15} 0x{value:0hex_width$x}");
             }
-        } else if let Some(flags) = decode_hwcap(entry.key, entry.value) {
+        } else if let Some(flags) = decode_hwcap(typ, value) {
             println!(
                 "{:<15} 0x{:0width$x} {}",
                 key,
-                entry.value,
+                value,
                 flags.join(" | "),
                 width = hex_width
             );
-        } else if entry.key.is_uid() {
-            if let Some(name) = User::from_uid(Uid::from_raw(entry.value as u32))
+        } else if typ.is_uid() {
+            if let Some(name) = User::from_uid(Uid::from_raw(value as u32))
                 .ok()
                 .flatten()
                 .map(|u| u.name)
             {
-                println!(
-                    "{:<15} 0x{:0width$x} {}({})",
-                    key,
-                    entry.value,
-                    entry.value,
-                    name,
-                    width = hex_width
-                );
+                println!("{key:<15} 0x{value:0hex_width$x} {value}({name})");
             } else {
-                println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
+                println!("{key:<15} 0x{value:0hex_width$x}");
             }
-        } else if entry.key.is_gid() {
-            if let Some(name) = Group::from_gid(Gid::from_raw(entry.value as u32))
+        } else if typ.is_gid() {
+            if let Some(name) = Group::from_gid(Gid::from_raw(value as u32))
                 .ok()
                 .flatten()
                 .map(|g| g.name)
             {
-                println!(
-                    "{:<15} 0x{:0width$x} {}({})",
-                    key,
-                    entry.value,
-                    entry.value,
-                    name,
-                    width = hex_width
-                );
+                println!("{key:<15} 0x{value:0hex_width$x} {value}({name})");
             } else {
-                println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
+                println!("{key:<15} 0x{value:0hex_width$x}");
             }
         } else {
-            println!("{:<15} 0x{:0width$x}", key, entry.value, width = hex_width);
+            println!("{key:<15} 0x{value:0hex_width$x}");
         }
     }
     Ok(())

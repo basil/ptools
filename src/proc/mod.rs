@@ -32,7 +32,6 @@
 //! - This module provides structured data to the presentation layer for
 //!   formatting; it should never make presentation decisions itself.
 
-pub mod auxv;
 pub mod cred;
 pub mod fd;
 pub mod net;
@@ -214,13 +213,12 @@ impl ProcHandle {
         self.source.pid()
     }
 
-    fn auxv_bytes(&self) -> io::Result<Vec<u8>> {
-        self.source.read_auxv()
+    pub(crate) fn word_size(&self) -> usize {
+        self.source.word_size()
     }
 
-    /// Parse and return all auxiliary vector entries with metadata.
-    pub(crate) fn auxv(&self) -> io::Result<auxv::AuxvData> {
-        auxv::read_auxv(self)
+    pub(crate) fn auxv(&self) -> io::Result<model::auxv::Auxv> {
+        self.source.read_auxv()
     }
 
     pub(crate) fn comm(&self) -> io::Result<String> {

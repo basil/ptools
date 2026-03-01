@@ -284,6 +284,18 @@ impl ProcSource for CoredumpSource {
         })
     }
 
+    fn word_size(&self) -> usize {
+        std::mem::size_of::<usize>()
+    }
+
+    fn byte_order(&self) -> model::auxv::ByteOrder {
+        if cfg!(target_endian = "big") {
+            model::auxv::ByteOrder::Big
+        } else {
+            model::auxv::ByteOrder::Little
+        }
+    }
+
     fn read_stat(&self) -> io::Result<String> {
         Err(unsupported("stat"))
     }
@@ -305,8 +317,9 @@ impl ProcSource for CoredumpSource {
         self.get_field("COREDUMP_ENVIRON").map(|b| b.to_vec())
     }
 
-    fn read_auxv(&self) -> io::Result<Vec<u8>> {
-        self.get_field("COREDUMP_PROC_AUXV").map(|b| b.to_vec())
+    fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
+        let bytes = self.get_field("COREDUMP_PROC_AUXV")?;
+        model::auxv::Auxv::from_read(bytes, self.word_size(), self.byte_order())
     }
 
     fn read_exe(&self) -> io::Result<PathBuf> {

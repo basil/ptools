@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+pub mod auxv;
 pub mod fdinfo;
 pub mod schedstat;
 

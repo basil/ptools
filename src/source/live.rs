@@ -45,7 +45,7 @@ pub(super) struct LiveProcess {
     comm: OnceCell<String>,
     cmdline: OnceCell<Vec<u8>>,
     environ: OnceCell<Vec<u8>>,
-    auxv: OnceCell<Vec<u8>>,
+    auxv: OnceCell<model::auxv::Auxv>,
     exe: OnceCell<PathBuf>,
     limits: OnceCell<String>,
     schedstat: OnceCell<model::schedstat::SchedStat>,
@@ -103,6 +103,18 @@ impl ProcSource for LiveProcess {
         self.pid
     }
 
+    fn word_size(&self) -> usize {
+        std::mem::size_of::<usize>()
+    }
+
+    fn byte_order(&self) -> model::auxv::ByteOrder {
+        if cfg!(target_endian = "big") {
+            model::auxv::ByteOrder::Big
+        } else {
+            model::auxv::ByteOrder::Little
+        }
+    }
+
     fn read_stat(&self) -> io::Result<String> {
         if let Some(val) = self.stat.get() {
             return Ok(val.clone());
@@ -149,11 +161,13 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn read_auxv(&self) -> io::Result<Vec<u8>> {
+    fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
         if let Some(val) = self.auxv.get() {
             return Ok(val.clone());
         }
-        let val = std::fs::read(format!("/proc/{}/auxv", self.pid))?;
+        let path = format!("/proc/{}/auxv", self.pid);
+        let bytes = std::fs::read(&path)?;
+        let val = model::auxv::Auxv::from_read(&*bytes, self.word_size(), self.byte_order())?;
         let _ = self.auxv.set(val.clone());
         Ok(val)
     }
