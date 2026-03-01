@@ -311,6 +311,8 @@ fn prstatus_to_stat(prpsinfo: Option<&Prpsinfo>, prstatus: Option<&Prstatus>) ->
             .or_else(|| prpsinfo.map(|p| p.pr_sid as u64)),
         utime: prstatus.map(|p| timeval_to_ticks(p.pr_utime_sec, p.pr_utime_usec)),
         stime: prstatus.map(|p| timeval_to_ticks(p.pr_stime_sec, p.pr_stime_usec)),
+        cutime: prstatus.map(|p| timeval_to_ticks(p.pr_cutime_sec, p.pr_cutime_usec)),
+        cstime: prstatus.map(|p| timeval_to_ticks(p.pr_cstime_sec, p.pr_cstime_usec)),
         nice: prpsinfo.map(|p| p.pr_nice as i32),
         ..model::stat::Stat::default()
     }

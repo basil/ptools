@@ -218,6 +218,10 @@ pub(super) struct Prstatus {
     pub pr_utime_usec: u64,
     pub pr_stime_sec: u64,
     pub pr_stime_usec: u64,
+    pub pr_cutime_sec: u64,
+    pub pr_cutime_usec: u64,
+    pub pr_cstime_sec: u64,
+    pub pr_cstime_usec: u64,
     pub pr_reg: Vec<u8>,
 }
 
@@ -276,6 +280,10 @@ fn parse_prstatus64(desc: &[u8], endian: ByteOrder) -> Option<Prstatus> {
         pr_utime_usec: rd64(56),
         pr_stime_sec: rd64(64),
         pr_stime_usec: rd64(72),
+        pr_cutime_sec: rd64(80),
+        pr_cutime_usec: rd64(88),
+        pr_cstime_sec: rd64(96),
+        pr_cstime_usec: rd64(104),
         pr_reg: desc[112..].to_vec(),
     })
 }
@@ -319,6 +327,10 @@ fn parse_prstatus32(desc: &[u8], endian: ByteOrder) -> Option<Prstatus> {
         pr_utime_usec: rd32(44) as u64,
         pr_stime_sec: rd32(48) as u64,
         pr_stime_usec: rd32(52) as u64,
+        pr_cutime_sec: rd32(56) as u64,
+        pr_cutime_usec: rd32(60) as u64,
+        pr_cstime_sec: rd32(64) as u64,
+        pr_cstime_usec: rd32(68) as u64,
         pr_reg: desc[72..].to_vec(),
     })
 }
