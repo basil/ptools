@@ -45,7 +45,10 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 
+use nix::unistd::{sysconf, SysconfVar};
+
 use crate::model;
+use crate::model::auxv::AuxvType;
 use crate::source::ProcSource;
 
 /// Opaque process handle
@@ -80,15 +83,45 @@ impl ProcHandle {
         self.source.read_memory(addr, buf)
     }
 
+    /// Return the page size for the target process.
+    ///
+    /// Prefers `AT_PAGESZ` from the auxiliary vector, falls back to
+    /// `sysconf(_SC_PAGE_SIZE)`.
+    pub(crate) fn page_size(&self) -> io::Result<u64> {
+        if let Some(page_sz) = self.auxv().ok().and_then(|auxv| {
+            auxv.0
+                .iter()
+                .find(|(typ, _)| *typ == AuxvType::PageSz)
+                .map(|(_, value)| *value)
+        }) {
+            return Ok(page_sz);
+        }
+
+        eprintln!("warning: AT_PAGESZ not available, falling back to sysconf");
+        match sysconf(SysconfVar::PAGE_SIZE) {
+            Ok(Some(v)) => Ok(v as u64),
+            Ok(None) => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "sysconf(_SC_PAGE_SIZE) returned no value",
+            )),
+            Err(e) => Err(io::Error::other(format!(
+                "sysconf(_SC_PAGE_SIZE) failed: {e}"
+            ))),
+        }
+    }
+
     /// Read a NUL-terminated C string from the target process's memory.
     ///
     /// Best-effort: reads from `addr` to the end of its page. If no NUL
     /// terminator is found within that range, returns the partial content.
-    pub(crate) fn read_cstring_at(&self, addr: u64, page_size: u64) -> Option<String> {
+    pub(crate) fn read_cstring_at(&self, addr: u64) -> Option<String> {
         if addr == 0 {
             return None;
         }
-        let page_size = page_size.clamp(1, 64 * 1024);
+        let page_size = match self.page_size() {
+            Ok(v) => v.clamp(1, 64 * 1024),
+            Err(_) => return None,
+        };
         let bytes_to_page_end = (page_size - (addr % page_size)) as usize;
         let mut buf = vec![0u8; bytes_to_page_end];
         if !self.read_memory(addr, &mut buf) {

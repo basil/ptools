@@ -30,10 +30,8 @@ use std::borrow::Cow;
 use std::fmt;
 use std::io;
 
-use nix::unistd::sysconf;
 use nix::unistd::Gid;
 use nix::unistd::Group;
-use nix::unistd::SysconfVar;
 use nix::unistd::Uid;
 use nix::unistd::User;
 
@@ -138,24 +136,11 @@ pub fn print_env_from(handle: &ProcHandle) -> io::Result<()> {
 pub fn print_auxv_from(handle: &ProcHandle) -> io::Result<()> {
     let auxv = handle.auxv()?;
     let hex_width = handle.word_size() * 2;
-    let page_size = auxv
-        .0
-        .iter()
-        .find(|(typ, _)| *typ == AuxvType::PageSz)
-        .map(|(_, value)| *value)
-        .or_else(|| {
-            sysconf(SysconfVar::PAGE_SIZE)
-                .ok()
-                .flatten()
-                .map(|v| v as u64)
-        })
-        .unwrap_or(4096);
-
     print_proc_summary_from(handle);
     for &(typ, value) in &auxv.0 {
         let key = auxv_type_str(&typ);
         if typ.is_string_pointer() {
-            if let Some(s) = handle.read_cstring_at(value, page_size) {
+            if let Some(s) = handle.read_cstring_at(value) {
                 println!("{key:<15} 0x{value:0hex_width$x} {s}");
             } else {
                 println!("{key:<15} 0x{value:0hex_width$x}");
