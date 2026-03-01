@@ -73,6 +73,28 @@ build.rs              Man page generation (roff)
 
 ## Conventions & Patterns
 
+### Rust source file ordering
+
+Within each `.rs` file, items should appear in this order:
+
+1. Module declarations (`mod foo;`)
+2. Imports (`use` statements) — `std` first, then external crates, then
+   `crate`/`super`/`self`, separated by blank lines
+3. Constants and statics
+4. Type definitions (`struct`, `enum`, `type`) — simple/derived-like trait
+   impls (`From`, `Default`, `Drop`, `FromStr`, `Ord`, `PartialOrd`,
+   `PartialEq`, `Eq`, `Borrow`, etc.) should directly follow their type
+   definition rather than being separated into the trait impls section
+5. Trait definitions
+6. Trait impls (`impl Trait for Type`) — for substantial impls with complex
+   parsing or business logic (e.g., `FromBufRead`)
+7. Inherent impls (`impl Type`)
+8. Free functions (public before private)
+9. Tests (`#[cfg(test)] mod tests`)
+
+Within an `impl` block: constructors (`new`, `with_*`, `from_*`) first, then
+public methods, then private helpers. Public items come before private items.
+
 ### Layered architecture
 
 The codebase is organized into four layers with strict dependency rules:
