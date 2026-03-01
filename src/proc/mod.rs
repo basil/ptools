@@ -36,6 +36,7 @@ pub mod fd;
 pub mod net;
 pub mod numa;
 pub mod pidfd;
+pub mod signal;
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;
@@ -220,68 +221,6 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("status", "missing Threads"))
     }
 
-    // -- Signal masks ------------------------------------------------
-
-    /// Parse signal masks (SigIgn/SigCgt/SigBlk/SigPnd/ShdPnd) from status.
-    /// The blocked mask is the intersection across all threads.
-    pub fn signal_masks(&self) -> io::Result<model::status::Status> {
-        let mut status = self.source.read_status()?;
-
-        // Compute blocked mask as intersection across all threads.
-        // Falls back to main thread's SigBlk if /proc/[pid]/task/ is unreadable.
-        status.sig_blk = self
-            .thread_blocked_masks()
-            .map(|masks| intersect_blocked_masks(&masks))
-            .or(status.sig_blk);
-
-        Ok(status)
-    }
-
-    /// Per-thread blocked masks (SigBlk from each thread's status).
-    fn thread_blocked_masks(&self) -> Option<Vec<BTreeSet<usize>>> {
-        let tids = self.source.list_tids().ok()?;
-
-        // Warn if the source reports fewer threads than actually existed.
-        if let Ok(status) = self.source.read_status() {
-            if let Some(n) = status.threads {
-                if n > tids.len() {
-                    eprintln!(
-                        "warning: process had {} threads but only {} available; \
-                         blocked masks may be incomplete",
-                        n,
-                        tids.len()
-                    );
-                }
-            }
-        }
-
-        let tid_count = tids.len();
-        let mut masks = Vec::new();
-        for tid in tids {
-            let Ok(status) = self.source.read_tid_status(tid) else {
-                continue;
-            };
-            if let Some(sig_blk) = status.sig_blk {
-                masks.push(sig_blk);
-            }
-        }
-
-        if !masks.is_empty() && masks.len() < tid_count {
-            eprintln!(
-                "warning: read blocked mask for {} of {} threads; \
-                 blocked-signal intersection may be incomplete",
-                masks.len(),
-                tid_count
-            );
-        }
-
-        if masks.is_empty() {
-            None
-        } else {
-            Some(masks)
-        }
-    }
-
     // -- Thread methods ----------------------------------------------
 
     /// CPU number a thread is currently running on (field 39 of tid/stat).
@@ -454,47 +393,6 @@ pub fn resolve_operand_with_tid(arg: &str) -> io::Result<(ProcHandle, Option<u64
     }
 }
 
-/// Compute the intersection of per-thread blocked masks.
-fn intersect_blocked_masks(masks: &[BTreeSet<usize>]) -> BTreeSet<usize> {
-    let Some(first) = masks.first() else {
-        return BTreeSet::new();
-    };
-    first
-        .iter()
-        .copied()
-        .filter(|s| masks[1..].iter().all(|m| m.contains(s)))
-        .collect()
-}
-
 fn file_parse_error(file: &str, reason: &str) -> io::Error {
     io::Error::other(format!("Error parsing /proc/[pid]/{file}: {reason}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::status::parse_signal_mask;
-
-    #[test]
-    fn intersect_single_mask() {
-        let mask = parse_signal_mask("3").unwrap(); // signals 1,2
-        let result = intersect_blocked_masks(std::slice::from_ref(&mask));
-        assert_eq!(result, mask);
-    }
-
-    #[test]
-    fn intersect_two_masks() {
-        let a = parse_signal_mask("7").unwrap(); // signals 1,2,3
-        let b = parse_signal_mask("5").unwrap(); // signals 1,3
-        let result = intersect_blocked_masks(&[a, b]);
-        assert!(result.contains(&1));
-        assert!(!result.contains(&2));
-        assert!(result.contains(&3));
-    }
-
-    #[test]
-    fn intersect_empty_list() {
-        let result = intersect_blocked_masks(&[]);
-        assert!(result.is_empty());
-    }
 }

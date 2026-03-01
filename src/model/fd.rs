@@ -180,9 +180,11 @@ impl FDTarget {
 
 #[cfg(test)]
 mod tests {
-    use super::FDTarget;
-    use nix::sys::stat::SFlag;
     use std::path::PathBuf;
+
+    use nix::sys::stat::SFlag;
+
+    use super::FDTarget;
 
     #[test]
     fn classify_anon_inode_supports_kernel_formats() {

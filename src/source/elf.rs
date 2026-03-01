@@ -19,7 +19,6 @@
 //! Owns the ELF handle and (optionally decompressed) file descriptor for a
 //! core dump.  Provides memory reading via PT_LOAD segments.
 
-use crate::model::auxv::ByteOrder;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -31,6 +30,8 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
 use nix::libc;
+
+use crate::model::auxv::ByteOrder;
 
 /// RAII wrapper for `*mut Elf`.
 struct OwnedElf(*mut crate::dw_sys::Elf);
