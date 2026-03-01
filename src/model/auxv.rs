@@ -14,7 +14,8 @@
 //   limitations under the License.
 //
 
-use std::io::{self, Read};
+use std::io::Read;
+use std::io::{self};
 
 use nix::libc;
 

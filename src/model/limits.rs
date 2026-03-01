@@ -14,7 +14,8 @@
 //   limitations under the License.
 //
 
-use std::io::{self, BufRead};
+use std::io::BufRead;
+use std::io::{self};
 use std::str::FromStr;
 
 use nix::sys::resource::Resource;

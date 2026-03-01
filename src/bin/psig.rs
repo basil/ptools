@@ -105,18 +105,18 @@ fn print_signal_actions(handle: &ProcHandle) -> std::io::Result<()> {
 
     let max_sig = [rtmax, 64]
         .into_iter()
-        .chain(masks.ignored.as_ref().and_then(|s| s.last().copied()))
-        .chain(masks.caught.as_ref().and_then(|s| s.last().copied()))
+        .chain(masks.sig_ign.as_ref().and_then(|s| s.last().copied()))
+        .chain(masks.sig_cgt.as_ref().and_then(|s| s.last().copied()))
         .max()
         .unwrap_or(64);
 
-    let have_disposition = masks.ignored.is_some() && masks.caught.is_some();
+    let have_disposition = masks.sig_ign.is_some() && masks.sig_cgt.is_some();
     let empty = BTreeSet::new();
-    let ignored = masks.ignored.as_ref().unwrap_or(&empty);
-    let caught = masks.caught.as_ref().unwrap_or(&empty);
-    let blocked_set = masks.blocked.as_ref();
-    let pending_set = masks.pending.as_ref();
-    let shared_pending_set = masks.shared_pending.as_ref();
+    let ignored = masks.sig_ign.as_ref().unwrap_or(&empty);
+    let caught = masks.sig_cgt.as_ref().unwrap_or(&empty);
+    let blocked_set = masks.sig_blk.as_ref();
+    let pending_set = masks.sig_pnd.as_ref();
+    let shared_pending_set = masks.shd_pnd.as_ref();
 
     for sig in 1..=max_sig {
         let name = signal_name(sig, rtmin, rtmax);

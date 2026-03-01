@@ -224,29 +224,17 @@ impl ProcHandle {
 
     /// Parse signal masks (SigIgn/SigCgt/SigBlk/SigPnd/ShdPnd) from status.
     /// The blocked mask is the intersection across all threads.
-    pub fn signal_masks(&self) -> io::Result<SignalMasks> {
-        let status = self.source.read_status()?;
-
-        let ignored = status.sig_ign;
-        let caught = status.sig_cgt;
+    pub fn signal_masks(&self) -> io::Result<model::status::Status> {
+        let mut status = self.source.read_status()?;
 
         // Compute blocked mask as intersection across all threads.
         // Falls back to main thread's SigBlk if /proc/[pid]/task/ is unreadable.
-        let blocked = self
+        status.sig_blk = self
             .thread_blocked_masks()
             .map(|masks| intersect_blocked_masks(&masks))
             .or(status.sig_blk);
 
-        let pending = status.sig_pnd;
-        let shared_pending = status.shd_pnd;
-
-        Ok(SignalMasks {
-            ignored,
-            caught,
-            blocked,
-            pending,
-            shared_pending,
-        })
+        Ok(status)
     }
 
     /// Per-thread blocked masks (SigBlk from each thread's status).
@@ -485,16 +473,6 @@ impl ProcHandle {
             sockprotoname,
         })
     }
-}
-
-/// Signal disposition masks parsed from /proc/[pid]/status.
-pub struct SignalMasks {
-    pub ignored: Option<BTreeSet<usize>>,
-    pub caught: Option<BTreeSet<usize>>,
-    /// Intersection of SigBlk across all threads.
-    pub blocked: Option<BTreeSet<usize>>,
-    pub pending: Option<BTreeSet<usize>>,
-    pub shared_pending: Option<BTreeSet<usize>>,
 }
 
 impl ProcHandle {

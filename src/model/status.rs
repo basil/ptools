@@ -15,7 +15,8 @@
 //
 
 use std::collections::BTreeSet;
-use std::io::{self, BufRead};
+use std::io::BufRead;
+use std::io::{self};
 
 use super::FromBufRead;
 
