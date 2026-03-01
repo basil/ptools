@@ -15,8 +15,10 @@
 //
 
 pub mod auxv;
+pub mod fd;
 pub mod fdinfo;
 pub mod limits;
+pub mod net;
 pub mod schedstat;
 pub mod stat;
 pub mod status;

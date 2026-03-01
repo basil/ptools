@@ -57,7 +57,6 @@ pub(super) struct LiveProcess {
     tid_status: RefCell<HashMap<u64, model::status::Status>>,
     fd_link: RefCell<HashMap<u64, PathBuf>>,
     fdinfo: RefCell<HashMap<u64, model::fdinfo::FdInfo>>,
-    net_file: RefCell<HashMap<String, String>>,
 }
 
 impl LiveProcess {
@@ -80,7 +79,6 @@ impl LiveProcess {
             tid_status: RefCell::new(HashMap::new()),
             fd_link: RefCell::new(HashMap::new()),
             fdinfo: RefCell::new(HashMap::new()),
-            net_file: RefCell::new(HashMap::new()),
         }
     }
 
@@ -268,15 +266,10 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn read_net_file(&self, name: &str) -> io::Result<String> {
-        if let Some(cached) = self.net_file.borrow().get(name) {
-            return Ok(cached.clone());
-        }
-        let val = std::fs::read_to_string(format!("/proc/{}/net/{}", self.pid, name))?;
-        self.net_file
-            .borrow_mut()
-            .insert(name.to_string(), val.clone());
-        Ok(val)
+    fn read_net_file(&self, name: &str) -> io::Result<Box<dyn io::BufRead>> {
+        let path = format!("/proc/{}/net/{}", self.pid, name);
+        let file = std::fs::File::open(&path)?;
+        Ok(Box::new(io::BufReader::new(file)))
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {

@@ -38,6 +38,7 @@ use nix::unistd::Uid;
 use nix::unistd::User;
 
 use crate::model::auxv::AuxvType;
+use crate::model::fd::FDTarget;
 use crate::model::limits::LimitValue;
 use crate::proc::ProcHandle;
 
@@ -46,6 +47,32 @@ impl fmt::Display for LimitValue {
         match self {
             LimitValue::Unlimited => f.write_str("unlimited"),
             LimitValue::Value(v) => write!(f, "{v}"),
+        }
+    }
+}
+
+impl fmt::Display for FDTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Regular(p)
+            | Self::Directory(p)
+            | Self::SymLink(p)
+            | Self::BlockDevice(p)
+            | Self::CharDevice(p)
+            | Self::Fifo(p) => write!(f, "{}", p.display()),
+            Self::Socket(ino) => write!(f, "socket:[{ino}]"),
+            Self::Pipe(ino) => write!(f, "pipe:[{ino}]"),
+            Self::Net(ino) => write!(f, "net:[{ino}]"),
+            Self::Epoll => write!(f, "anon_inode:[eventpoll]"),
+            Self::EventFd => write!(f, "anon_inode:[eventfd]"),
+            Self::SignalFd => write!(f, "anon_inode:[signalfd]"),
+            Self::TimerFd => write!(f, "anon_inode:[timerfd]"),
+            Self::Inotify => write!(f, "anon_inode:[inotify]"),
+            Self::PidFd => write!(f, "anon_inode:[pidfd]"),
+            Self::Memfd(name) => write!(f, "/memfd:{name}"),
+            Self::UnknownAnon(name) => write!(f, "anon_inode:[{name}]"),
+            Self::Other(name, ino) => write!(f, "{name}:[{ino}]"),
+            Self::Unknown => write!(f, "unknown"),
         }
     }
 }

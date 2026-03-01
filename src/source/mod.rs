@@ -73,7 +73,7 @@ pub(crate) trait ProcSource {
     fn read_fdinfo(&self, fd: u64) -> io::Result<model::fdinfo::FdInfo>;
 
     // Network namespace
-    fn read_net_file(&self, name: &str) -> io::Result<String>;
+    fn read_net_file(&self, name: &str) -> io::Result<Box<dyn io::BufRead>>;
 
     // Memory
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool;

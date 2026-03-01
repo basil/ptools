@@ -360,119 +360,6 @@ impl ProcHandle {
     pub fn resource_limits(&self) -> io::Result<model::limits::Limits> {
         self.source.read_limits()
     }
-
-    /// Gather fully-populated [`fd::FileDescriptor`] structs for every open
-    /// file descriptor in the process.
-    ///
-    /// This is the primary entry point for tools that need to enumerate a
-    /// process's open files.  It combines fd path/stat/fdinfo, socket info
-    /// from `/proc/net/*`, socket details via `getsockopt`, and peer process
-    /// resolution into a single call.
-    pub fn file_descriptors(&self) -> io::Result<Vec<fd::FileDescriptor>> {
-        let fds = self.fds()?;
-        let sockets = net::parse_socket_info(&*self.source);
-
-        // Compute TCP peer processes in bulk (system-wide /proc scan).
-        // Skip for coredumps or when no loopback TCP sockets exist.
-        let tcp_peers = if !self.is_core && net::has_loopback_tcp_peers(&sockets) {
-            net::derive_peer_processes(self.pid(), &sockets)
-        } else {
-            std::collections::HashMap::new()
-        };
-
-        let mut result = Vec::with_capacity(fds.len());
-        for fd_num in fds {
-            match self.gather_fd(fd_num, &sockets, &tcp_peers) {
-                Ok(fd_desc) => result.push(fd_desc),
-                Err(e) => {
-                    eprintln!(
-                        "failed to gather info for /proc/{}/fd/{}: {}",
-                        self.pid(),
-                        fd_num,
-                        e
-                    );
-                }
-            }
-        }
-
-        Ok(result)
-    }
-
-    /// Gather all available information for a single file descriptor.
-    #[allow(clippy::unnecessary_cast)]
-    fn gather_fd(
-        &self,
-        fd_num: u64,
-        sockets: &std::collections::HashMap<u64, net::SocketInfo>,
-        tcp_peers: &std::collections::HashMap<u64, (u64, String)>,
-    ) -> io::Result<fd::FileDescriptor> {
-        let path = self.fd_path(fd_num)?;
-        let link_text = path.to_string_lossy();
-        let info = self.fdinfo(fd_num)?;
-
-        // stat() -- live only
-        let stat_result = if !self.is_core {
-            fd::stat_fd(self.pid(), fd_num).ok()
-        } else {
-            None
-        };
-
-        // Classify file type
-        let file_type = if let Some(ref st) = stat_result {
-            fd::file_type_from_stat(st.st_mode, &link_text)
-        } else {
-            fd::file_type_from_link(&link_text)
-        };
-
-        // Socket resolution
-        let is_socket = matches!(file_type, fd::FileType::Posix(fd::PosixFileType::Socket))
-            || link_text.starts_with("socket:[");
-
-        let mut socket = None;
-        let mut sockprotoname = None;
-
-        if is_socket {
-            // Try to find inode -- from stat if available, else from link text
-            let inode = stat_result
-                .as_ref()
-                .map(|st| st.st_ino as u64)
-                .or_else(|| fd::parse_socket_inode(&link_text));
-
-            if let Some(inode) = inode {
-                if let Some(sock_info) = sockets.get(&inode) {
-                    let details = net::query_socket_details(self.pid(), fd_num);
-
-                    // Resolve peer process: TCP peers from bulk map, Unix via SO_PEERCRED
-                    let peer = tcp_peers.get(&inode).cloned().or_else(|| {
-                        if matches!(sock_info.family, nix::sys::socket::AddressFamily::Unix)
-                            && !self.is_core
-                        {
-                            net::unix_peer_process(self.pid(), fd_num)
-                        } else {
-                            None
-                        }
-                    });
-
-                    socket = Some(net::Socket::from_parts(sock_info.clone(), details, peer));
-                }
-            }
-
-            // Fallback: sockprotoname xattr when not found in /proc/net/*
-            if socket.is_none() && !self.is_core {
-                sockprotoname = fd::get_sockprotoname(self.pid(), fd_num);
-            }
-        }
-
-        Ok(fd::FileDescriptor {
-            fd: fd_num,
-            path: path.clone(),
-            file_type,
-            stat: stat_result,
-            fdinfo: info,
-            socket,
-            sockprotoname,
-        })
-    }
 }
 
 impl ProcHandle {
@@ -577,10 +464,6 @@ fn intersect_blocked_masks(masks: &[BTreeSet<usize>]) -> BTreeSet<usize> {
         .copied()
         .filter(|s| masks[1..].iter().all(|m| m.contains(s)))
         .collect()
-}
-
-fn parse_error(item: &str, reason: &str) -> io::Error {
-    io::Error::other(format!("Error parsing {item}: {reason}"))
 }
 
 fn file_parse_error(file: &str, reason: &str) -> io::Error {

@@ -14,13 +14,12 @@
 //   limitations under the License.
 //
 
+//! Socket/network resolution: parsing `/proc/net/*`, querying socket options
+//! via `getsockopt`, and resolving peer processes for TCP and Unix sockets.
+
 use std::collections::HashMap;
 use std::io;
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
 use std::net::SocketAddr;
-use std::num::ParseIntError;
 use std::os::fd::AsRawFd;
 use std::os::fd::FromRawFd;
 use std::os::fd::OwnedFd;
@@ -29,331 +28,35 @@ use nix::sys::socket::getsockopt;
 use nix::sys::socket::sockopt;
 use nix::sys::socket::AddressFamily;
 
-use super::fd::parse_socket_inode;
+use crate::model::fd::parse_socket_inode;
+use crate::model::net::NetEntry;
+use crate::model::net::NetlinkNetEntries;
+use crate::model::net::RawNetEntries;
+use crate::model::net::SockType;
+use crate::model::net::SocketDetails;
+use crate::model::net::SocketOptions;
+use crate::model::net::TcpNetEntries;
+use crate::model::net::UdpNetEntries;
+use crate::model::net::UnixNetEntries;
+use crate::model::FromBufRead;
 use crate::source::ProcSource;
-
-/// Socket type as reported in `/proc/[pid]/net/*`.
-///
-/// We define our own enum rather than using the one from nix so that we can
-/// include additional types defined by the Linux kernel but not by nix.
-#[derive(Debug, Clone, Copy)]
-pub enum SockType {
-    Stream,
-    Datagram,
-    Raw,
-    Rdm,
-    SeqPacket,
-    Dccp,
-    Packet,
-    Unknown(u16),
-}
-
-/// TCP connection state from `/proc/[pid]/net/tcp*`.
-#[derive(Debug, Clone, Copy)]
-pub enum TcpState {
-    Established,
-    SynSent,
-    SynRecv,
-    FinWait1,
-    FinWait2,
-    TimeWait,
-    Close,
-    CloseWait,
-    LastAck,
-    Listen,
-    Closing,
-    NewSynRecv,
-    Unknown(u8),
-}
-
-/// Parsed socket metadata from `/proc/[pid]/net/*`.
-#[derive(Clone)]
-pub(crate) struct SocketInfo {
-    pub family: AddressFamily,
-    pub sock_type: SockType,
-    pub inode: u64,
-    pub local_addr: Option<SocketAddr>,
-    pub peer_addr: Option<SocketAddr>,
-    pub tcp_state: Option<TcpState>,
-    pub tx_queue: Option<u32>,
-    pub rx_queue: Option<u32>,
-}
-
-fn parse_sock_type(type_code: &str) -> Result<SockType, ParseIntError> {
-    Ok(match type_code.parse::<u16>()? {
-        1 => SockType::Stream,
-        2 => SockType::Datagram,
-        3 => SockType::Raw,
-        4 => SockType::Rdm,
-        5 => SockType::SeqPacket,
-        6 => SockType::Dccp,
-        10 => SockType::Packet,
-        n => SockType::Unknown(n),
-    })
-}
-
-fn parse_tcp_state(state_hex: &str) -> Result<TcpState, ParseIntError> {
-    Ok(match u8::from_str_radix(state_hex, 16)? {
-        0x01 => TcpState::Established,
-        0x02 => TcpState::SynSent,
-        0x03 => TcpState::SynRecv,
-        0x04 => TcpState::FinWait1,
-        0x05 => TcpState::FinWait2,
-        0x06 => TcpState::TimeWait,
-        0x07 => TcpState::Close,
-        0x08 => TcpState::CloseWait,
-        0x09 => TcpState::LastAck,
-        0x0A => TcpState::Listen,
-        0x0B => TcpState::Closing,
-        0x0C => TcpState::NewSynRecv,
-        n => TcpState::Unknown(n),
-    })
-}
-
-// Parse a socket address of the form "0100007F:1538" (i.e. 127.0.0.1:5432)
-fn parse_ipv4_sock_addr(s: &str) -> io::Result<SocketAddr> {
-    let mk_err = || {
-        super::parse_error(
-            "IPv4 address",
-            &format!("expected address in form '0100007F:1538', got {s}"),
-        )
-    };
-
-    let fields = s.split(':').collect::<Vec<_>>();
-    if fields.len() != 2 {
-        return Err(mk_err());
-    }
-
-    // Port is always printed with most-significant byte first.
-    let port = u16::from_str_radix(fields[1], 16).map_err(|_| mk_err())?;
-
-    // Address is printed with most-significant byte first on big-endian systems and vice-versa on
-    // little-endian systems.
-    let addr_native_endian = u32::from_str_radix(fields[0], 16).map_err(|_| mk_err())?;
-    let addr = Ipv4Addr::from(addr_native_endian.to_be());
-
-    Ok(SocketAddr::new(IpAddr::V4(addr), port))
-}
-
-// Parse a socket address of the form "00000000000000000000000001000000:1538"
-// (i.e. ::1:5432)
-fn parse_ipv6_sock_addr(s: &str) -> io::Result<SocketAddr> {
-    let mk_err = || {
-        super::parse_error(
-            "IPv6 address",
-            &format!("expected address in form '00000000000000000000000001000000:1538', got {s}"),
-        )
-    };
-
-    let fields = s.split(':').collect::<Vec<_>>();
-    if fields.len() != 2 || fields[0].len() != 32 {
-        return Err(mk_err());
-    }
-
-    let port = u16::from_str_radix(fields[1], 16).map_err(|_| mk_err())?;
-
-    let mut octets = [0u8; 16];
-    for (i, chunk) in fields[0].as_bytes().chunks_exact(8).enumerate() {
-        let chunk = std::str::from_utf8(chunk).map_err(|_| mk_err())?;
-        let native = u32::from_str_radix(chunk, 16).map_err(|_| mk_err())?;
-        octets[i * 4..(i + 1) * 4].copy_from_slice(&native.to_be().to_be_bytes());
-    }
-
-    Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(octets)), port))
-}
-
-fn concrete_peer_addr(addr: SocketAddr) -> Option<SocketAddr> {
-    if addr.ip().is_unspecified() {
-        None
-    } else {
-        Some(addr)
-    }
-}
-
-// Parse "HHHHHHHH:HHHHHHHH" tx_queue:rx_queue from /proc/net/tcp fields[4]
-fn parse_queue_sizes(s: &str) -> (u32, u32) {
-    if let Some((tx, rx)) = s.split_once(':') {
-        let tx = u32::from_str_radix(tx, 16).unwrap_or(0);
-        let rx = u32::from_str_radix(rx, 16).unwrap_or(0);
-        (tx, rx)
-    } else {
-        (0, 0)
-    }
-}
-
-/// Parse socket metadata from all `/proc/[pid]/net/*` files, returning a map
-/// keyed by inode number.
-pub(crate) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, SocketInfo> {
-    let mut sockets = HashMap::new();
-
-    // Socket table data is namespace-scoped in procfs. Always read from
-    // /proc/<target-pid>/net/* so inode->socket metadata resolution is done in
-    // the target process's network namespace instead of our own.
-    if let Ok(content) = source.read_net_file("unix") {
-        let unix_sockets = content
-            .lines()
-            .skip(1) // Header
-            .filter_map(|line| {
-                let fields = line.split_whitespace().collect::<Vec<&str>>();
-                let inode = fields[6].parse().ok()?;
-                let sock_type = parse_sock_type(fields[4]).ok()?;
-                Some((
-                    inode,
-                    SocketInfo {
-                        family: AddressFamily::Unix,
-                        sock_type,
-                        inode,
-                        local_addr: None,
-                        peer_addr: None,
-                        tcp_state: None,
-                        tx_queue: None,
-                        rx_queue: None,
-                    },
-                ))
-            });
-        sockets.extend(unix_sockets);
-    }
-
-    if let Ok(content) = source.read_net_file("netlink") {
-        let netlink_sockets = content
-            .lines()
-            .skip(1) // Header
-            .filter_map(|line| {
-                let fields = line.split_whitespace().collect::<Vec<&str>>();
-                let inode = fields[9].parse().ok()?;
-                Some((
-                    inode,
-                    SocketInfo {
-                        family: AddressFamily::Netlink,
-                        sock_type: SockType::Datagram,
-                        inode,
-                        local_addr: None,
-                        peer_addr: None,
-                        tcp_state: None,
-                        tx_queue: None,
-                        rx_queue: None,
-                    },
-                ))
-            });
-        sockets.extend(netlink_sockets);
-    }
-
-    // procfs entries for tcp/udp/raw sockets (both IPv4 and IPv6) all use same format
-    let mut parse_net_file =
-        |filename: &str, s_type, family, parse_addr: fn(&str) -> io::Result<SocketAddr>| {
-            if let Ok(content) = source.read_net_file(filename) {
-                let is_tcp = filename == "tcp" || filename == "tcp6";
-                let additional_sockets = content
-                    .lines()
-                    .skip(1) // Header
-                    .filter_map(move |line| {
-                        let fields = line.split_whitespace().collect::<Vec<&str>>();
-                        let inode = fields[9].parse().ok()?;
-                        let peer_addr = parse_addr(fields[2]).ok()?;
-                        let (tx_queue, rx_queue) = parse_queue_sizes(fields[4]);
-                        Some((
-                            inode,
-                            SocketInfo {
-                                family,
-                                sock_type: s_type,
-                                local_addr: Some(parse_addr(fields[1]).ok()?),
-                                peer_addr: concrete_peer_addr(peer_addr),
-                                tcp_state: if is_tcp {
-                                    Some(parse_tcp_state(fields[3]).ok()?)
-                                } else {
-                                    None
-                                },
-                                inode,
-                                tx_queue: Some(tx_queue),
-                                rx_queue: Some(rx_queue),
-                            },
-                        ))
-                    });
-                sockets.extend(additional_sockets);
-            }
-        };
-
-    parse_net_file(
-        "tcp",
-        SockType::Stream,
-        AddressFamily::Inet,
-        parse_ipv4_sock_addr,
-    );
-    parse_net_file(
-        "udp",
-        SockType::Datagram,
-        AddressFamily::Inet,
-        parse_ipv4_sock_addr,
-    );
-    parse_net_file(
-        "raw",
-        SockType::Raw,
-        AddressFamily::Inet,
-        parse_ipv4_sock_addr,
-    );
-    parse_net_file(
-        "tcp6",
-        SockType::Stream,
-        AddressFamily::Inet6,
-        parse_ipv6_sock_addr,
-    );
-    parse_net_file(
-        "udp6",
-        SockType::Datagram,
-        AddressFamily::Inet6,
-        parse_ipv6_sock_addr,
-    );
-    parse_net_file(
-        "raw6",
-        SockType::Raw,
-        AddressFamily::Inet6,
-        parse_ipv6_sock_addr,
-    );
-
-    sockets
-}
-
-/// Socket-level options queried via `getsockopt`.
-#[derive(Clone, Default)]
-pub struct SocketOptions {
-    pub reuse_addr: bool,
-    pub keep_alive: bool,
-    pub broadcast: bool,
-    pub accept_conn: bool,
-    pub oob_inline: bool,
-    pub snd_buf: Option<usize>,
-    pub rcv_buf: Option<usize>,
-}
-
-/// Socket details queried via `getsockopt` on a duplicated file descriptor.
-#[derive(Clone)]
-pub(crate) struct SocketDetails {
-    pub options: SocketOptions,
-    pub tcp_info: Option<nix::libc::tcp_info>,
-    pub congestion_control: Option<String>,
-}
 
 /// Unified socket metadata combining `/proc/net/*` info, `getsockopt` details,
 /// and peer process resolution.
 pub struct Socket {
+    pub entry: NetEntry,
     pub family: AddressFamily,
     pub sock_type: SockType,
-    pub inode: u64,
-    pub local_addr: Option<SocketAddr>,
-    pub peer_addr: Option<SocketAddr>,
-    pub tcp_state: Option<TcpState>,
-    pub tx_queue: Option<u32>,
-    pub rx_queue: Option<u32>,
     pub options: SocketOptions,
-    pub tcp_info: Option<libc::tcp_info>,
+    pub tcp_info: Option<nix::libc::tcp_info>,
     pub congestion_control: Option<String>,
     pub peer_pid: Option<u64>,
     pub peer_comm: Option<String>,
 }
 
 impl Socket {
-    pub(crate) fn from_parts(
-        info: SocketInfo,
+    pub(super) fn from_parts(
+        entry: NetEntry,
         details: Option<SocketDetails>,
         peer: Option<(u64, String)>,
     ) -> Self {
@@ -362,19 +65,32 @@ impl Socket {
         } else {
             (None, None, SocketOptions::default())
         };
+
         let (peer_pid, peer_comm) = match peer {
             Some((pid, comm)) => (Some(pid), Some(comm)),
             None => (None, None),
         };
+
+        let family_from_addr = |addr: &SocketAddr| {
+            if addr.is_ipv4() {
+                AddressFamily::Inet
+            } else {
+                AddressFamily::Inet6
+            }
+        };
+
+        let (family, sock_type) = match &entry {
+            NetEntry::Tcp(e) => (family_from_addr(&e.local_address), SockType::Stream),
+            NetEntry::Udp(e) => (family_from_addr(&e.local_address), SockType::Datagram),
+            NetEntry::Unix(e) => (AddressFamily::Unix, e.socket_type),
+            NetEntry::Raw(e) => (family_from_addr(&e.local_address), SockType::Raw),
+            NetEntry::Netlink(_) => (AddressFamily::Netlink, SockType::Datagram),
+        };
+
         Socket {
-            family: info.family,
-            sock_type: info.sock_type,
-            inode: info.inode,
-            local_addr: info.local_addr,
-            peer_addr: info.peer_addr,
-            tcp_state: info.tcp_state,
-            tx_queue: info.tx_queue,
-            rx_queue: info.rx_queue,
+            entry,
+            family,
+            sock_type,
             options,
             tcp_info,
             congestion_control,
@@ -384,7 +100,87 @@ impl Socket {
     }
 }
 
-fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
+/// Parse socket metadata from all `/proc/[pid]/net/*` files, returning a map
+/// keyed by inode number.
+pub(super) fn parse_socket_info(source: &dyn ProcSource) -> HashMap<u64, NetEntry> {
+    use crate::model::auxv::ByteOrder;
+    let mut sockets = HashMap::new();
+    let is_le = source.byte_order() == ByteOrder::Little;
+    let mut warned_permission = false;
+
+    let mut try_read = |result: io::Result<_>| -> Option<_> {
+        match result {
+            Ok(reader) => Some(reader),
+            Err(ref e) if e.kind() == io::ErrorKind::PermissionDenied && !warned_permission => {
+                warned_permission = true;
+                eprintln!("could not read network socket information: permission denied");
+                None
+            }
+            // Other errors (I/O, unexpected formats) are silently ignored.
+            // Network files may not exist in all namespace configurations or
+            // kernel versions, so missing files are expected and non-fatal.
+            Err(_) => None,
+        }
+    };
+
+    // Socket table data is namespace-scoped in procfs. Always read from
+    // /proc/<target-pid>/net/* so inode->socket metadata resolution is done in
+    // the target process's network namespace instead of our own.
+    if let Some(reader) = try_read(source.read_net_file("unix")) {
+        if let Ok(entries) = UnixNetEntries::from_buf_read(reader) {
+            for entry in entries.0 {
+                let inode = entry.inode;
+                sockets.insert(inode, NetEntry::Unix(entry));
+            }
+        }
+    }
+
+    if let Some(reader) = try_read(source.read_net_file("netlink")) {
+        if let Ok(entries) = NetlinkNetEntries::from_buf_read(reader) {
+            for entry in entries.0 {
+                let inode = entry.inode;
+                sockets.insert(inode, NetEntry::Netlink(entry));
+            }
+        }
+    }
+
+    for &(filename, family) in &[("tcp", AddressFamily::Inet), ("tcp6", AddressFamily::Inet6)] {
+        if let Some(reader) = try_read(source.read_net_file(filename)) {
+            if let Ok(entries) = TcpNetEntries::from_buf_read(reader, family, is_le) {
+                for entry in entries.0 {
+                    let inode = entry.inode;
+                    sockets.insert(inode, NetEntry::Tcp(entry));
+                }
+            }
+        }
+    }
+
+    for &(filename, family) in &[("udp", AddressFamily::Inet), ("udp6", AddressFamily::Inet6)] {
+        if let Some(reader) = try_read(source.read_net_file(filename)) {
+            if let Ok(entries) = UdpNetEntries::from_buf_read(reader, family, is_le) {
+                for entry in entries.0 {
+                    let inode = entry.inode;
+                    sockets.insert(inode, NetEntry::Udp(entry));
+                }
+            }
+        }
+    }
+
+    for &(filename, family) in &[("raw", AddressFamily::Inet), ("raw6", AddressFamily::Inet6)] {
+        if let Some(reader) = try_read(source.read_net_file(filename)) {
+            if let Ok(entries) = RawNetEntries::from_buf_read(reader, family, is_le) {
+                for entry in entries.0 {
+                    let inode = entry.inode;
+                    sockets.insert(inode, NetEntry::Raw(entry));
+                }
+            }
+        }
+    }
+
+    sockets
+}
+
+pub(super) fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
     let pid_i32 = i32::try_from(pid).ok()?;
     let fd_i32 = i32::try_from(fd).ok()?;
 
@@ -463,9 +259,9 @@ fn query_tcp_info(sock_fd: &OwnedFd) -> Option<nix::libc::tcp_info> {
 /// socket-level and TCP-level options, and returns the results bundled
 /// in a [`SocketDetails`].
 ///
-/// Returns `None` if the fd cannot be duplicated (e.g., coredumps or
-/// insufficient privileges).
-pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
+/// Returns `None` if the fd cannot be duplicated (e.g., coredumps,
+/// insufficient privileges, or non-Linux platforms).
+pub(super) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
     let sock_fd = duplicate_target_fd(pid, fd)?;
     Some(SocketDetails {
         options: query_socket_options(&sock_fd),
@@ -476,7 +272,7 @@ pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
 
 // -- Peer process resolution --------------------------------------------------
 
-pub(crate) fn read_comm(pid: u64) -> Option<String> {
+fn read_comm(pid: u64) -> Option<String> {
     std::fs::read_to_string(format!("/proc/{pid}/comm"))
         .ok()
         .map(|comm| comm.trim_end().to_string())
@@ -516,62 +312,58 @@ fn list_socket_owners() -> HashMap<u64, std::collections::HashSet<u64>> {
     owners
 }
 
-fn local_tcp_peer_inodes(sockets: &HashMap<u64, SocketInfo>) -> HashMap<u64, u64> {
-    let mut by_tuple = HashMap::<(AddressFamily, SocketAddr, SocketAddr), Vec<u64>>::new();
-    for sock in sockets.values() {
-        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
-            || !matches!(sock.sock_type, SockType::Stream)
-        {
+fn local_tcp_peer_inodes(sockets: &HashMap<u64, NetEntry>) -> HashMap<u64, u64> {
+    let tcp_entries: Vec<&crate::model::net::TcpNetEntry> = sockets
+        .values()
+        .filter_map(|entry| match entry {
+            NetEntry::Tcp(e) => Some(e),
+            _ => None,
+        })
+        .collect();
+
+    let mut by_tuple = HashMap::<(SocketAddr, SocketAddr), Vec<u64>>::new();
+    for e in &tcp_entries {
+        if e.remote_address.ip().is_unspecified() {
             continue;
         }
-        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
-            continue;
-        };
         by_tuple
-            .entry((sock.family, local_addr, peer_addr))
+            .entry((e.local_address, e.remote_address))
             .or_default()
-            .push(sock.inode);
+            .push(e.inode);
     }
 
     let mut peers = HashMap::new();
-    for sock in sockets.values() {
-        if !matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
-            || !matches!(sock.sock_type, SockType::Stream)
-        {
+    for e in &tcp_entries {
+        if e.remote_address.ip().is_unspecified() {
             continue;
         }
-        let (Some(local_addr), Some(peer_addr)) = (sock.local_addr, sock.peer_addr) else {
-            continue;
-        };
-        if !(local_addr.ip().is_loopback() && peer_addr.ip().is_loopback()) {
+        if !(e.local_address.ip().is_loopback() && e.remote_address.ip().is_loopback()) {
             continue;
         }
 
-        if let Some(candidates) = by_tuple.get(&(sock.family, peer_addr, local_addr)) {
-            if let Some(peer_inode) = candidates
-                .iter()
-                .copied()
-                .find(|inode| *inode != sock.inode)
-            {
-                peers.insert(sock.inode, peer_inode);
+        if let Some(candidates) = by_tuple.get(&(e.remote_address, e.local_address)) {
+            if let Some(peer_inode) = candidates.iter().copied().find(|inode| *inode != e.inode) {
+                peers.insert(e.inode, peer_inode);
             }
         }
     }
     peers
 }
 
-pub(crate) fn has_loopback_tcp_peers(sockets: &HashMap<u64, SocketInfo>) -> bool {
-    sockets.values().any(|sock| {
-        matches!(sock.family, AddressFamily::Inet | AddressFamily::Inet6)
-            && matches!(sock.sock_type, SockType::Stream)
-            && sock.local_addr.is_some_and(|a| a.ip().is_loopback())
-            && sock.peer_addr.is_some_and(|a| a.ip().is_loopback())
+pub(super) fn has_loopback_tcp_peers(sockets: &HashMap<u64, NetEntry>) -> bool {
+    sockets.values().any(|entry| {
+        matches!(
+            entry,
+            NetEntry::Tcp(e)
+                if e.local_address.ip().is_loopback()
+                    && e.remote_address.ip().is_loopback()
+        )
     })
 }
 
-pub(crate) fn derive_peer_processes(
+pub(super) fn derive_peer_processes(
     target_pid: u64,
-    sockets: &HashMap<u64, SocketInfo>,
+    sockets: &HashMap<u64, NetEntry>,
 ) -> HashMap<u64, (u64, String)> {
     let mut peers = HashMap::new();
     let owners = list_socket_owners();
@@ -607,7 +399,7 @@ pub(crate) fn derive_peer_processes(
     peers
 }
 
-pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<(u64, String)> {
+pub(super) fn unix_peer_process(pid: u64, fd: u64) -> Option<(u64, String)> {
     let sock_fd = duplicate_target_fd(pid, fd)?;
     let creds = getsockopt(&sock_fd, sockopt::PeerCredentials).ok()?;
     let peer_pid = creds.pid() as u64;
@@ -615,49 +407,51 @@ pub(crate) fn unix_peer_process(pid: u64, fd: u64) -> Option<(u64, String)> {
     Some((peer_pid, comm))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Read `system.sockprotoname` xattr from `/proc/[pid]/fd/[fd]`.
+pub(super) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
+    let path = std::ffi::CString::new(format!("/proc/{pid}/fd/{fd}")).ok()?;
+    let name = std::ffi::CString::new("system.sockprotoname").ok()?;
 
-    #[test]
-    fn test_parse_ipv4_sock_addr() {
-        // The address format in /proc/net/tcp is native-endian, so the hex
-        // representation differs between little-endian and big-endian systems.
-        #[cfg(target_endian = "little")]
-        const LOCALHOST: &str = "0100007F:1538";
-        #[cfg(target_endian = "big")]
-        const LOCALHOST: &str = "7F000001:1538";
+    let size =
+        unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
 
-        assert_eq!(
-            parse_ipv4_sock_addr(LOCALHOST).unwrap(),
-            "127.0.0.1:5432".parse::<SocketAddr>().unwrap()
-        );
-        assert_eq!(
-            parse_ipv4_sock_addr("00000000:0000").unwrap(),
-            "0.0.0.0:0".parse::<SocketAddr>().unwrap()
-        );
-
-        assert!(parse_ipv4_sock_addr("0100007F 1538").is_err());
-        assert!(parse_ipv4_sock_addr("0100007F:1538:00").is_err());
-        assert!(parse_ipv4_sock_addr("010000YY:1538").is_err());
-        assert!(parse_ipv4_sock_addr("0100007F:15YY").is_err());
-        assert!(parse_ipv4_sock_addr(":1538").is_err());
+    if size < 0 {
+        handle_sockprotoname_xattr_error(pid, fd);
+        return None;
     }
 
-    #[test]
-    fn test_parse_sock_type() {
-        assert!(matches!(parse_sock_type("1").unwrap(), SockType::Stream));
-        assert!(matches!(parse_sock_type("2").unwrap(), SockType::Datagram));
-        assert!(matches!(parse_sock_type("3").unwrap(), SockType::Raw));
-        assert!(matches!(parse_sock_type("4").unwrap(), SockType::Rdm));
-        assert!(matches!(parse_sock_type("5").unwrap(), SockType::SeqPacket));
-        assert!(matches!(parse_sock_type("6").unwrap(), SockType::Dccp));
-        assert!(matches!(parse_sock_type("10").unwrap(), SockType::Packet));
+    let mut buf = vec![0u8; size as usize];
+    let filled = unsafe {
+        nix::libc::getxattr(
+            path.as_ptr(),
+            name.as_ptr(),
+            buf.as_mut_ptr().cast::<nix::libc::c_void>(),
+            buf.len(),
+        )
+    };
+    if filled < 0 {
+        handle_sockprotoname_xattr_error(pid, fd);
+        return None;
+    }
 
-        assert!(matches!(
-            parse_sock_type("999").unwrap(),
-            SockType::Unknown(999)
-        ));
-        assert!(parse_sock_type("abc").is_err());
+    buf.truncate(filled as usize);
+    if buf.last() == Some(&0) {
+        buf.pop();
+    }
+
+    if buf.is_empty() {
+        return None;
+    }
+
+    String::from_utf8(buf).ok()
+}
+
+fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
+    use nix::errno::Errno;
+    match Errno::last() {
+        Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => {}
+        errno => {
+            eprintln!("failed to read system.sockprotoname xattr for /proc/{pid}/fd/{fd}: {errno}");
+        }
     }
 }

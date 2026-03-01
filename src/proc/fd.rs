@@ -14,349 +14,137 @@
 //   limitations under the License.
 //
 
-use std::path::PathBuf;
+//! File descriptor enumeration: gathering fully-populated [`FileDescriptor`]
+//! structs for every open fd in a process.
 
-use nix::errno::Errno;
-use nix::sys::socket::AddressFamily;
-use nix::sys::stat::stat;
+use std::collections::HashMap;
+use std::io;
+
 use nix::sys::stat::FileStat;
-use nix::sys::stat::SFlag;
 
+use super::net::derive_peer_processes;
+use super::net::get_sockprotoname;
+use super::net::has_loopback_tcp_peers;
+use super::net::parse_socket_info;
+use super::net::query_socket_details;
+use super::net::unix_peer_process;
 use super::net::Socket;
+use super::ProcHandle;
+use crate::model::fd::FDTarget;
 use crate::model::fdinfo::FdInfo;
-
-/// POSIX file type as identified by the `st_mode` bits from `stat(2)`.
-#[derive(Debug, PartialEq)]
-pub enum PosixFileType {
-    Regular,
-    Directory,
-    Socket,
-    SymLink,
-    BlockDevice,
-    CharDevice,
-    Fifo,
-    Unknown(u32),
-}
-
-/// Anonymous inode type parsed from `/proc/[pid]/fd/<fd>` symlink text.
-#[derive(Debug, PartialEq)]
-pub enum AnonFileType {
-    Epoll,
-    EventFd,
-    SignalFd,
-    TimerFd,
-    Inotify,
-    PidFd,
-    Unknown(String),
-}
-
-/// Unified file type combining POSIX stat-derived types and Linux anonymous
-/// inode types.
-#[derive(Debug, PartialEq)]
-pub enum FileType {
-    Posix(PosixFileType),
-    Anon(AnonFileType),
-    Unknown,
-}
+use crate::model::net::NetEntry;
 
 /// Fully-populated file descriptor information gathered from the library.
 ///
-/// Produced by [`ProcHandle::file_descriptors()`](super::ProcHandle::file_descriptors).
+/// Produced by [`ProcHandle::file_descriptors()`].
 pub struct FileDescriptor {
     pub fd: u64,
-    pub path: PathBuf,
-    pub file_type: FileType,
+    pub target: FDTarget,
     pub stat: Option<FileStat>,
     pub fdinfo: FdInfo,
     pub socket: Option<Socket>,
     pub sockprotoname: Option<String>,
 }
 
-/// Classify a file from its `stat(2)` mode bits and the symlink text from
-/// `/proc/[pid]/fd/<fd>`.
-///
-/// When the mode bits identify a concrete POSIX type, that is returned.
-/// When the mode bits are zero (as for anonymous inodes), the link text
-/// is examined for `anon_inode:` patterns.
-pub(crate) fn file_type_from_stat(mode: u32, link_text: &str) -> FileType {
-    let masked = mode & SFlag::S_IFMT.bits();
-    if masked != 0 {
-        let posix = match SFlag::from_bits_truncate(masked) {
-            SFlag::S_IFSOCK => PosixFileType::Socket,
-            SFlag::S_IFLNK => PosixFileType::SymLink,
-            SFlag::S_IFREG => PosixFileType::Regular,
-            SFlag::S_IFBLK => PosixFileType::BlockDevice,
-            SFlag::S_IFDIR => PosixFileType::Directory,
-            SFlag::S_IFCHR => PosixFileType::CharDevice,
-            SFlag::S_IFIFO => PosixFileType::Fifo,
-            _ => PosixFileType::Unknown(masked),
+impl ProcHandle {
+    /// Gather fully-populated [`FileDescriptor`] structs for every open
+    /// file descriptor in the process.
+    ///
+    /// This is the primary entry point for tools that need to enumerate a
+    /// process's open files.  It combines fd path/stat/fdinfo, socket info
+    /// from `/proc/net/*`, socket details via `getsockopt`, and peer process
+    /// resolution into a single call.
+    pub fn file_descriptors(&self) -> io::Result<Vec<FileDescriptor>> {
+        let fds = self.fds()?;
+        let sockets = parse_socket_info(&*self.source);
+
+        // Compute TCP peer processes in bulk (system-wide /proc scan).
+        // Skip for coredumps or when no loopback TCP sockets exist.
+        let tcp_peers = if !self.is_core && has_loopback_tcp_peers(&sockets) {
+            derive_peer_processes(self.pid(), &sockets)
+        } else {
+            HashMap::new()
         };
-        FileType::Posix(posix)
-    } else {
-        file_type_from_link(link_text)
-    }
-}
 
-/// Classify a file from the symlink text alone (used when `stat()` is
-/// unavailable, e.g. coredumps).
-pub(crate) fn file_type_from_link(link_text: &str) -> FileType {
-    if link_text.starts_with("anon_inode:") {
-        let fd_type_str = link_text
-            .trim_start_matches("anon_inode:")
-            .trim_start_matches('[')
-            .trim_end_matches(']');
-        let anon = match fd_type_str {
-            "eventpoll" => AnonFileType::Epoll,
-            "eventfd" => AnonFileType::EventFd,
-            "signalfd" => AnonFileType::SignalFd,
-            "timerfd" => AnonFileType::TimerFd,
-            "inotify" => AnonFileType::Inotify,
-            "pidfd" => AnonFileType::PidFd,
-            x => AnonFileType::Unknown(x.to_string()),
-        };
-        FileType::Anon(anon)
-    } else {
-        FileType::Unknown
-    }
-}
-
-/// Extract the inode number from a `"socket:[12345]"` link text.
-pub(crate) fn parse_socket_inode(link_text: &str) -> Option<u64> {
-    let inner = link_text.strip_prefix("socket:[")?;
-    let inner = inner.strip_suffix(']')?;
-    inner.parse::<u64>().ok()
-}
-
-/// Read `system.sockprotoname` xattr from `/proc/[pid]/fd/[fd]`.
-pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
-    let path = std::ffi::CString::new(format!("/proc/{pid}/fd/{fd}")).ok()?;
-    let name = std::ffi::CString::new("system.sockprotoname").ok()?;
-
-    let size =
-        unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
-
-    if size < 0 {
-        handle_sockprotoname_xattr_error(pid, fd);
-        return None;
-    }
-
-    let mut buf = vec![0u8; size as usize];
-    let filled = unsafe {
-        nix::libc::getxattr(
-            path.as_ptr(),
-            name.as_ptr(),
-            buf.as_mut_ptr().cast::<nix::libc::c_void>(),
-            buf.len(),
-        )
-    };
-    if filled < 0 {
-        handle_sockprotoname_xattr_error(pid, fd);
-        return None;
-    }
-
-    buf.truncate(filled as usize);
-    if buf.last() == Some(&0) {
-        buf.pop();
-    }
-
-    if buf.is_empty() {
-        return None;
-    }
-
-    String::from_utf8(buf).ok()
-}
-
-fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
-    match Errno::last() {
-        Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => {}
-        errno => {
-            eprintln!("failed to read system.sockprotoname xattr for /proc/{pid}/fd/{fd}: {errno}");
+        let mut result = Vec::with_capacity(fds.len());
+        for fd_num in fds {
+            match self.gather_fd(fd_num, &sockets, &tcp_peers) {
+                Ok(fd_desc) => result.push(fd_desc),
+                Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    eprintln!("fd {fd_num}: permission denied");
+                }
+                Err(e) => {
+                    eprintln!("fd {fd_num}: {e}");
+                }
+            }
         }
-    }
-}
 
-/// Map a `system.sockprotoname` value to an `AddressFamily`.
-pub fn address_family_from_sockprotoname(
-    sockprotoname: &str,
-) -> Option<nix::sys::socket::AddressFamily> {
-    let name = sockprotoname.strip_prefix("AF_").unwrap_or(sockprotoname);
-    Some(match name {
-        "UNIX" | "UNIX-STREAM" => AddressFamily::Unix,
-        "TCP" | "UDP" | "RAW" | "PING" | "MPTCP" | "L2TP/IP" => AddressFamily::Inet,
-        "TCPv6" | "UDPv6" | "RAWv6" | "SCTPv6" | "SMC6" | "L2TP/IPv6" => AddressFamily::Inet6,
-        "SCTP" | "SMC" => AddressFamily::Inet,
-        "NETLINK" => AddressFamily::Netlink,
-        "PACKET" => AddressFamily::Packet,
-        "ALG" => AddressFamily::Alg,
-        "XDP" => AddressFamily::Packet,
-        "ROSE" => AddressFamily::Rose,
-        _ => return None,
-    })
-}
-
-/// Call `stat(2)` on `/proc/[pid]/fd/[fd]`.
-pub(crate) fn stat_fd(pid: u64, fd: u64) -> std::io::Result<FileStat> {
-    let path = format!("/proc/{pid}/fd/{fd}");
-    stat(path.as_str()).map_err(Into::into)
-}
-
-#[cfg(test)]
-mod tests {
-    use nix::sys::stat::SFlag;
-
-    use super::*;
-
-    #[test]
-    fn test_file_type_from_stat_regular() {
-        let ft = file_type_from_stat(SFlag::S_IFREG.bits(), "/dev/null");
-        assert_eq!(ft, FileType::Posix(PosixFileType::Regular));
+        Ok(result)
     }
 
-    #[test]
-    fn test_file_type_from_stat_socket() {
-        let ft = file_type_from_stat(SFlag::S_IFSOCK.bits(), "socket:[123]");
-        assert_eq!(ft, FileType::Posix(PosixFileType::Socket));
-    }
+    /// Gather all available information for a single file descriptor.
+    #[allow(clippy::unnecessary_cast)]
+    fn gather_fd(
+        &self,
+        fd_num: u64,
+        sockets: &HashMap<u64, NetEntry>,
+        tcp_peers: &HashMap<u64, (u64, String)>,
+    ) -> io::Result<FileDescriptor> {
+        let link_path = self.fd_path(fd_num)?;
+        let link_text = link_path.to_string_lossy();
+        let info = self.fdinfo(fd_num)?;
 
-    #[test]
-    fn test_file_type_from_stat_block_device() {
-        let ft = file_type_from_stat(SFlag::S_IFBLK.bits(), "/dev/sda");
-        assert_eq!(ft, FileType::Posix(PosixFileType::BlockDevice));
-    }
+        // stat() -- live only
+        let stat_result = if !self.is_core {
+            nix::sys::stat::stat(format!("/proc/{}/fd/{}", self.pid(), fd_num).as_str()).ok()
+        } else {
+            None
+        };
 
-    #[test]
-    fn test_file_type_from_stat_char_device() {
-        let ft = file_type_from_stat(SFlag::S_IFCHR.bits(), "/dev/null");
-        assert_eq!(ft, FileType::Posix(PosixFileType::CharDevice));
-    }
+        // Classify file type
+        let target = if let Some(ref st) = stat_result {
+            FDTarget::from_stat(st.st_mode, st.st_ino as u64, &link_text)
+        } else {
+            FDTarget::from_link(&link_text)
+        };
 
-    #[test]
-    fn test_file_type_from_stat_directory() {
-        let ft = file_type_from_stat(SFlag::S_IFDIR.bits(), "/tmp");
-        assert_eq!(ft, FileType::Posix(PosixFileType::Directory));
-    }
+        // Socket resolution
+        let mut socket = None;
+        let mut sockprotoname = None;
 
-    #[test]
-    fn test_file_type_from_stat_symlink() {
-        let ft = file_type_from_stat(SFlag::S_IFLNK.bits(), "/some/link");
-        assert_eq!(ft, FileType::Posix(PosixFileType::SymLink));
-    }
+        if matches!(target, FDTarget::Socket(_)) {
+            let inode = target.inode();
 
-    #[test]
-    fn test_file_type_from_stat_fifo() {
-        let ft = file_type_from_stat(SFlag::S_IFIFO.bits(), "/tmp/pipe");
-        assert_eq!(ft, FileType::Posix(PosixFileType::Fifo));
-    }
+            if let Some(inode) = inode {
+                if let Some(sock_info) = sockets.get(&inode) {
+                    let details = query_socket_details(self.pid(), fd_num);
 
-    #[test]
-    fn test_file_type_from_stat_anon_inode_fallback() {
-        let ft = file_type_from_stat(0, "anon_inode:[eventpoll]");
-        assert_eq!(ft, FileType::Anon(AnonFileType::Epoll));
-    }
+                    // Resolve peer process: TCP peers from bulk map, Unix via SO_PEERCRED
+                    let peer = tcp_peers.get(&inode).cloned().or_else(|| {
+                        if matches!(sock_info, NetEntry::Unix(_)) && !self.is_core {
+                            unix_peer_process(self.pid(), fd_num)
+                        } else {
+                            None
+                        }
+                    });
 
-    #[test]
-    fn test_file_type_from_link_eventpoll() {
-        let ft = file_type_from_link("anon_inode:[eventpoll]");
-        assert_eq!(ft, FileType::Anon(AnonFileType::Epoll));
-    }
+                    socket = Some(Socket::from_parts(sock_info.clone(), details, peer));
+                }
+            }
 
-    #[test]
-    fn test_file_type_from_link_inotify_no_brackets() {
-        let ft = file_type_from_link("anon_inode:inotify");
-        assert_eq!(ft, FileType::Anon(AnonFileType::Inotify));
-    }
+            // Fallback: sockprotoname xattr when not found in /proc/net/*
+            if socket.is_none() && !self.is_core {
+                sockprotoname = get_sockprotoname(self.pid(), fd_num);
+            }
+        }
 
-    #[test]
-    fn test_file_type_from_link_eventfd() {
-        let ft = file_type_from_link("anon_inode:[eventfd]");
-        assert_eq!(ft, FileType::Anon(AnonFileType::EventFd));
-    }
-
-    #[test]
-    fn test_file_type_from_link_signalfd() {
-        let ft = file_type_from_link("anon_inode:[signalfd]");
-        assert_eq!(ft, FileType::Anon(AnonFileType::SignalFd));
-    }
-
-    #[test]
-    fn test_file_type_from_link_timerfd() {
-        let ft = file_type_from_link("anon_inode:[timerfd]");
-        assert_eq!(ft, FileType::Anon(AnonFileType::TimerFd));
-    }
-
-    #[test]
-    fn test_file_type_from_link_pidfd() {
-        let ft = file_type_from_link("anon_inode:[pidfd]");
-        assert_eq!(ft, FileType::Anon(AnonFileType::PidFd));
-    }
-
-    #[test]
-    fn test_file_type_from_link_unknown_anon() {
-        let ft = file_type_from_link("anon_inode:[io_uring]");
-        assert_eq!(
-            ft,
-            FileType::Anon(AnonFileType::Unknown("io_uring".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_file_type_from_link_socket() {
-        let ft = file_type_from_link("socket:[123]");
-        assert_eq!(ft, FileType::Unknown);
-    }
-
-    #[test]
-    fn test_file_type_from_link_regular_path() {
-        let ft = file_type_from_link("/dev/null");
-        assert_eq!(ft, FileType::Unknown);
-    }
-
-    #[test]
-    fn test_parse_socket_inode_valid() {
-        assert_eq!(parse_socket_inode("socket:[12345]"), Some(12345));
-    }
-
-    #[test]
-    fn test_parse_socket_inode_not_socket() {
-        assert_eq!(parse_socket_inode("/dev/null"), None);
-    }
-
-    #[test]
-    fn test_parse_socket_inode_anon() {
-        assert_eq!(parse_socket_inode("anon_inode:[eventpoll]"), None);
-    }
-
-    #[test]
-    fn test_address_family_from_sockprotoname_known() {
-        use nix::sys::socket::AddressFamily;
-        assert_eq!(
-            address_family_from_sockprotoname("TCP"),
-            Some(AddressFamily::Inet)
-        );
-        assert_eq!(
-            address_family_from_sockprotoname("TCPv6"),
-            Some(AddressFamily::Inet6)
-        );
-        assert_eq!(
-            address_family_from_sockprotoname("UNIX"),
-            Some(AddressFamily::Unix)
-        );
-        assert_eq!(
-            address_family_from_sockprotoname("NETLINK"),
-            Some(AddressFamily::Netlink)
-        );
-        assert_eq!(
-            address_family_from_sockprotoname("ALG"),
-            Some(AddressFamily::Alg)
-        );
-        assert_eq!(
-            address_family_from_sockprotoname("AF_ALG"),
-            Some(AddressFamily::Alg)
-        );
-    }
-
-    #[test]
-    fn test_address_family_from_sockprotoname_unknown() {
-        assert_eq!(address_family_from_sockprotoname("SOMETHING_UNKNOWN"), None);
+        Ok(FileDescriptor {
+            fd: fd_num,
+            target,
+            stat: stat_result,
+            fdinfo: info,
+            socket,
+            sockprotoname,
+        })
     }
 }

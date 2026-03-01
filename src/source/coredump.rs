@@ -392,7 +392,7 @@ impl ProcSource for CoredumpSource {
         model::fdinfo::FdInfo::from_buf_read(entry.fdinfo.as_bytes())
     }
 
-    fn read_net_file(&self, _name: &str) -> io::Result<String> {
+    fn read_net_file(&self, _name: &str) -> io::Result<Box<dyn io::BufRead>> {
         Err(unsupported("network info"))
     }
 
