@@ -44,6 +44,25 @@ pub struct Status {
     pub cpus_allowed: Option<BTreeSet<usize>>,
 }
 
+/// Build a `BTreeSet<usize>` of 1-indexed signal numbers from an iterator of
+/// nibbles (4-bit values) ordered from least-significant to most-significant.
+fn nibbles_to_signal_set(nibbles: impl Iterator<Item = u8>) -> BTreeSet<usize> {
+    let mut set = BTreeSet::new();
+    for (nibble_idx, nibble) in nibbles.enumerate() {
+        for bit in 0..4u8 {
+            if (nibble & (1 << bit)) != 0 {
+                set.insert(nibble_idx * 4 + bit as usize + 1);
+            }
+        }
+    }
+    set
+}
+
+/// Convert a raw u64 bitmask to a `BTreeSet<usize>` of 1-indexed signal numbers.
+pub fn signal_bitmask_to_set(val: u64) -> BTreeSet<usize> {
+    nibbles_to_signal_set((0..16).map(|i| ((val >> (i * 4)) & 0xf) as u8))
+}
+
 /// Parse a hex signal mask (e.g. from `SigIgn`) into a set of 1-indexed signal numbers.
 pub fn parse_signal_mask(s: &str) -> io::Result<BTreeSet<usize>> {
     let trimmed = s.trim();
@@ -53,33 +72,23 @@ pub fn parse_signal_mask(s: &str) -> io::Result<BTreeSet<usize>> {
             "empty signal mask",
         ));
     }
-
-    let mut set = BTreeSet::new();
-    for (nibble_idx, ch) in trimmed.bytes().rev().enumerate() {
-        let nibble = match ch {
-            b'0'..=b'9' => ch - b'0',
-            b'a'..=b'f' => ch - b'a' + 10,
-            b'A'..=b'F' => ch - b'A' + 10,
-            _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "invalid hex character '{}' in mask '{}'",
-                        ch as char, trimmed
-                    ),
-                ));
-            }
-        };
-
-        for bit in 0..4 {
-            if (nibble & (1 << bit)) != 0 {
-                let sig = nibble_idx * 4 + bit as usize + 1;
-                set.insert(sig);
-            }
-        }
-    }
-
-    Ok(set)
+    let nibbles: Vec<u8> = trimmed
+        .bytes()
+        .rev()
+        .map(|ch| match ch {
+            b'0'..=b'9' => Ok(ch - b'0'),
+            b'a'..=b'f' => Ok(ch - b'a' + 10),
+            b'A'..=b'F' => Ok(ch - b'A' + 10),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "invalid hex character '{}' in mask '{}'",
+                    ch as char, trimmed
+                ),
+            )),
+        })
+        .collect::<io::Result<_>>()?;
+    Ok(nibbles_to_signal_set(nibbles.into_iter()))
 }
 
 /// Parse a kernel list-format string like `"0-3,5,7-8"` into a `BTreeSet<usize>`.
