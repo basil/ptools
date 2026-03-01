@@ -243,10 +243,6 @@ impl ProcHandle {
 
     // -- Parsed from /proc/[pid]/status ------------------------------
 
-    pub fn status(&self) -> io::Result<model::status::Status> {
-        self.source.read_status()
-    }
-
     pub fn ppid(&self) -> io::Result<u64> {
         self.source
             .read_status()?
@@ -254,11 +250,67 @@ impl ProcHandle {
             .ok_or_else(|| unsupported("status", "PPid"))
     }
 
+    pub fn ruid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .ruid
+            .ok_or_else(|| unsupported("status", "Uid"))
+    }
+
     pub fn euid(&self) -> io::Result<u32> {
         self.source
             .read_status()?
             .euid
             .ok_or_else(|| unsupported("status", "Uid"))
+    }
+
+    pub fn suid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .suid
+            .ok_or_else(|| unsupported("status", "Uid"))
+    }
+
+    pub fn fsuid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .fsuid
+            .ok_or_else(|| unsupported("status", "Uid"))
+    }
+
+    pub fn rgid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .rgid
+            .ok_or_else(|| unsupported("status", "Gid"))
+    }
+
+    pub fn egid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .egid
+            .ok_or_else(|| unsupported("status", "Gid"))
+    }
+
+    pub fn sgid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .sgid
+            .ok_or_else(|| unsupported("status", "Gid"))
+    }
+
+    pub fn fsgid(&self) -> io::Result<u32> {
+        self.source
+            .read_status()?
+            .fsgid
+            .ok_or_else(|| unsupported("status", "Gid"))
+    }
+
+    pub fn groups(&self) -> io::Result<Vec<u32>> {
+        self.source
+            .read_status()?
+            .groups
+            .ok_or_else(|| unsupported("status", "Groups"))
     }
 
     pub fn umask(&self) -> io::Result<u32> {

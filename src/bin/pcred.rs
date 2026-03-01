@@ -103,29 +103,40 @@ fn fmt_gid(gid: u32) -> String {
 
 fn print_cred(handle: &ProcHandle, all: bool) -> std::io::Result<()> {
     let pid = handle.pid();
-    let status = handle.status().map_err(|e| {
+
+    let euid = handle.euid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
+    let ruid = handle.ruid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
+    let suid = handle.suid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
+    let fsuid = handle.fsuid().map_err(|e| {
         eprintln!("pcred: {pid}: {e}");
         e
     })?;
 
-    // The status parser requires exactly 4 values when the Uid/Gid line is
-    // present, so these are always all-Some or all-None.
-    let (euid, ruid, suid, fsuid) = match (status.euid, status.ruid, status.suid, status.fsuid) {
-        (Some(e), Some(r), Some(s), Some(f)) => (e, r, s, f),
-        _ => {
-            let e = std::io::Error::other("missing Uid in /proc/[pid]/status");
-            eprintln!("pcred: {pid}: {e}");
-            return Err(e);
-        }
-    };
-    let (egid, rgid, sgid, fsgid) = match (status.egid, status.rgid, status.sgid, status.fsgid) {
-        (Some(e), Some(r), Some(s), Some(f)) => (e, r, s, f),
-        _ => {
-            let e = std::io::Error::other("missing Gid in /proc/[pid]/status");
-            eprintln!("pcred: {pid}: {e}");
-            return Err(e);
-        }
-    };
+    let egid = handle.egid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
+    let rgid = handle.rgid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
+    let sgid = handle.sgid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
+    let fsgid = handle.fsgid().map_err(|e| {
+        eprintln!("pcred: {pid}: {e}");
+        e
+    })?;
 
     if !all && euid == ruid && ruid == suid && suid == fsuid {
         print!("{}:\te/r/s/fsuid={}  ", pid, fmt_uid(euid));
@@ -152,7 +163,7 @@ fn print_cred(handle: &ProcHandle, all: bool) -> std::io::Result<()> {
         );
     }
 
-    let groups = status.groups.unwrap_or_default();
+    let groups = handle.groups().unwrap_or_default();
     if !groups.is_empty() && (all || groups.len() != 1 || groups[0] != rgid) {
         print!("\tgroups:");
         for gid in &groups {
