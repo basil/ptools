@@ -274,15 +274,6 @@ impl CoredumpSource {
     }
 }
 
-/// Convert a timeval (sec, usec) to approximate clock ticks.
-fn timeval_to_ticks(sec: u64, usec: u64) -> u64 {
-    // sysconf(_SC_CLK_TCK) is typically 100 on Linux.
-    let hz = unsafe { nix::libc::sysconf(nix::libc::_SC_CLK_TCK) };
-    let hz = if hz > 0 { hz as u64 } else { 100 };
-    sec.saturating_mul(hz)
-        .saturating_add(usec.saturating_mul(hz) / 1_000_000)
-}
-
 /// Build a [`model::stat::Stat`] from prpsinfo and/or prstatus notes.
 fn prstatus_to_stat(prpsinfo: Option<&Prpsinfo>, prstatus: Option<&Prstatus>) -> model::stat::Stat {
     model::stat::Stat {
@@ -296,10 +287,6 @@ fn prstatus_to_stat(prpsinfo: Option<&Prpsinfo>, prstatus: Option<&Prstatus>) ->
         sid: prstatus
             .map(|p| p.pr_sid as u64)
             .or_else(|| prpsinfo.map(|p| p.pr_sid as u64)),
-        utime: prstatus.map(|p| timeval_to_ticks(p.pr_utime_sec, p.pr_utime_usec)),
-        stime: prstatus.map(|p| timeval_to_ticks(p.pr_stime_sec, p.pr_stime_usec)),
-        cutime: prstatus.map(|p| timeval_to_ticks(p.pr_cutime_sec, p.pr_cutime_usec)),
-        cstime: prstatus.map(|p| timeval_to_ticks(p.pr_cstime_sec, p.pr_cstime_usec)),
         nice: prpsinfo.map(|p| p.pr_nice as i32),
         ..model::stat::Stat::default()
     }
