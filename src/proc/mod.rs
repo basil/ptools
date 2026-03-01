@@ -77,12 +77,6 @@ impl ProcHandle {
         self.source.trace_thread(tid, options)
     }
 
-    /// Read memory from the process -- core dump PT_LOAD segments or live
-    /// `process_vm_readv(2)`.
-    pub(crate) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
-        self.source.read_memory(addr, buf)
-    }
-
     /// Return the page size for the target process.
     ///
     /// Prefers `AT_PAGESZ` from the auxiliary vector, falls back to
@@ -124,7 +118,7 @@ impl ProcHandle {
         };
         let bytes_to_page_end = (page_size - (addr % page_size)) as usize;
         let mut buf = vec![0u8; bytes_to_page_end];
-        if !self.read_memory(addr, &mut buf) {
+        if !self.source.read_memory(addr, &mut buf) {
             return None;
         }
         let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
