@@ -40,8 +40,8 @@ pub(super) struct LiveProcess {
     // Lazy dwfl session (only created when trace_thread is called).
     dwfl: OnceCell<Option<RefCell<Dwfl<'static>>>>,
 
-    // Cached ELF identity (word size + byte order) from /proc/[pid]/exe.
-    elf_ident: OnceCell<(usize, model::auxv::ByteOrder)>,
+    // Cached word size from /proc/[pid]/exe ELF header.
+    word_size: OnceCell<usize>,
 
     // Per-process caches (no parameters).
     stat: OnceCell<model::stat::Stat>,
@@ -68,7 +68,7 @@ impl LiveProcess {
         LiveProcess {
             pid,
             dwfl: OnceCell::new(),
-            elf_ident: OnceCell::new(),
+            word_size: OnceCell::new(),
             stat: OnceCell::new(),
             status: OnceCell::new(),
             comm: OnceCell::new(),
@@ -87,18 +87,16 @@ impl LiveProcess {
         }
     }
 
-    /// Return the target process's word size and byte order, read from the
-    /// ELF header of `/proc/[pid]/exe`.  Falls back to local values with a
-    /// warning if the header cannot be read (e.g., permission denied).
-    fn elf_ident(&self) -> (usize, model::auxv::ByteOrder) {
+    /// Return the target process's word size, read from the ELF header of
+    /// `/proc/[pid]/exe`.  Falls back to the local word size with a warning
+    /// if the header cannot be read (e.g., permission denied).
+    fn elf_word_size(&self) -> usize {
         const ELFCLASS32: libc::c_int = 1;
         const ELFCLASS64: libc::c_int = 2;
-        const EI_DATA: usize = 5;
-        const ELFDATA2MSB: u8 = 2;
 
-        *self.elf_ident.get_or_init(|| {
+        *self.word_size.get_or_init(|| {
             let path = format!("/proc/{}/exe", self.pid);
-            let result = (|| -> Option<(usize, model::auxv::ByteOrder)> {
+            let result = (|| -> Option<usize> {
                 let file = std::fs::File::open(&path).ok()?;
                 unsafe {
                     crate::dw_sys::elf_version(1); // EV_CURRENT
@@ -110,39 +108,21 @@ impl LiveProcess {
                     if elf.is_null() {
                         return None;
                     }
-                    let word_size = match crate::dw_sys::gelf_getclass(elf) {
-                        ELFCLASS32 => 4,
-                        ELFCLASS64 => 8,
-                        _ => {
-                            crate::dw_sys::elf_end(elf);
-                            return None;
-                        }
-                    };
-                    let mut ehdr = std::mem::zeroed::<crate::dw_sys::GElf_Ehdr>();
-                    let byte_order = if crate::dw_sys::gelf_getehdr(elf, &mut ehdr).is_null() {
-                        crate::dw_sys::elf_end(elf);
-                        return None;
-                    } else if ehdr.e_ident[EI_DATA] == ELFDATA2MSB {
-                        model::auxv::ByteOrder::Big
-                    } else {
-                        model::auxv::ByteOrder::Little
-                    };
+                    let class = crate::dw_sys::gelf_getclass(elf);
                     crate::dw_sys::elf_end(elf);
-                    Some((word_size, byte_order))
+                    match class {
+                        ELFCLASS32 => Some(4),
+                        ELFCLASS64 => Some(8),
+                        _ => None,
+                    }
                 }
             })();
             result.unwrap_or_else(|| {
                 eprintln!(
                     "warning: failed to read ELF header from {path}; \
-                     falling back to local word size and byte order"
+                     falling back to local word size"
                 );
-                let ws = std::mem::size_of::<usize>();
-                let bo = if cfg!(target_endian = "big") {
-                    model::auxv::ByteOrder::Big
-                } else {
-                    model::auxv::ByteOrder::Little
-                };
-                (ws, bo)
+                std::mem::size_of::<usize>()
             })
         })
     }
@@ -351,11 +331,15 @@ impl ProcSource for LiveProcess {
     }
 
     fn word_size(&self) -> usize {
-        self.elf_ident().0
+        self.elf_word_size()
     }
 
     fn byte_order(&self) -> model::auxv::ByteOrder {
-        self.elf_ident().1
+        if cfg!(target_endian = "big") {
+            model::auxv::ByteOrder::Big
+        } else {
+            model::auxv::ByteOrder::Little
+        }
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
