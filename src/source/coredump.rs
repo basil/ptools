@@ -15,7 +15,6 @@
 //
 
 use std::cell::OnceCell;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::os::raw::c_int;
@@ -121,7 +120,6 @@ pub(super) struct CoredumpSource {
     pid: OnceCell<u64>,
     tids: OnceCell<Vec<u64>>,
     fields: HashMap<String, Vec<u8>>,
-    warnings: RefCell<Vec<String>>,
 }
 
 /// A parsed entry from `COREDUMP_OPEN_FDS`.
@@ -168,7 +166,6 @@ impl CoredumpSource {
         // Look up the matching journal entry and merge in all
         // COREDUMP_* fields not already present from xattrs.
         let journal_fields = lookup_journal_fields(path, &fields);
-        let mut warnings = Vec::new();
         if journal_fields.is_empty() {
             if core_elf.is_none() {
                 return Err(io::Error::new(
@@ -179,17 +176,17 @@ impl CoredumpSource {
                     ),
                 ));
             }
-            warnings.push(format!(
+            eprintln!(
                 "warning: no matching journal entry found for {}; \
                  output will be limited to core file metadata",
                 path.display()
-            ));
+            );
         } else if core_elf.is_none() {
-            warnings.push(format!(
+            eprintln!(
                 "warning: core file {} no longer exists; \
                  using journal entry only",
                 path.display()
-            ));
+            );
         }
         for (key, value) in journal_fields {
             fields.entry(key).or_insert(value);
@@ -201,7 +198,6 @@ impl CoredumpSource {
             pid: OnceCell::new(),
             tids: OnceCell::new(),
             fields,
-            warnings: RefCell::new(warnings),
         })
     }
 
@@ -218,9 +214,7 @@ impl CoredumpSource {
                 match CoreDwfl::new(Arc::clone(core_elf)) {
                     Ok(d) => Some(d),
                     Err(e) => {
-                        self.warnings
-                            .borrow_mut()
-                            .push(format!("warning: failed to create dwfl session: {e}"));
+                        eprintln!("warning: failed to create dwfl session: {e}");
                         None
                     }
                 }
@@ -281,9 +275,7 @@ impl ProcSource for CoredumpSource {
             match extract_pid(&self.fields) {
                 Ok(pid) => pid,
                 Err(_) => {
-                    self.warnings
-                        .borrow_mut()
-                        .push("warning: could not determine PID from core file".to_string());
+                    eprintln!("warning: could not determine PID from core file");
                     0
                 }
             }
@@ -338,9 +330,7 @@ impl ProcSource for CoredumpSource {
                     match core_dwfl.collect_tids() {
                         Ok(tids) => return tids,
                         Err(e) => {
-                            self.warnings.borrow_mut().push(format!(
-                                "warning: could not enumerate threads from core: {e}"
-                            ));
+                            eprintln!("warning: could not enumerate threads from core: {e}");
                         }
                     }
                 }
@@ -393,7 +383,7 @@ impl ProcSource for CoredumpSource {
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
         match self.core_elf.as_ref() {
-            Some(elf) => elf.read_memory(addr, buf, &self.warnings),
+            Some(elf) => elf.read_memory(addr, buf),
             None => false,
         }
     }
@@ -405,16 +395,18 @@ impl ProcSource for CoredumpSource {
     ) -> Vec<crate::stack::Frame> {
         let core_dwfl = match self.ensure_core_dwfl() {
             Some(d) => d,
-            None => return super::trace_warn(&self.warnings, tid, "no dwfl session"),
+            None => {
+                eprintln!("warning: error tracing thread {tid}: no dwfl session");
+                return Vec::new();
+            }
         };
         match core_dwfl.walk_thread_frames(tid, options) {
             Ok(frames) => frames,
-            Err(e) => super::trace_warn(&self.warnings, tid, e),
+            Err(e) => {
+                eprintln!("warning: error tracing thread {tid}: {e}");
+                Vec::new()
+            }
         }
-    }
-
-    fn drain_warnings(&self) -> Vec<String> {
-        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 }
 

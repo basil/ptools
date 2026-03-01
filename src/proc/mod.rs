@@ -27,9 +27,7 @@
 //! data.
 //!
 //! **Contract:**
-//! - This module must **never** write to stdout or stderr.  All warnings
-//!   and non-fatal diagnostics must be returned via the `warnings` vector
-//!   on [`ProcHandle`].
+//! - This module must **never** write to stdout.
 //! - Types defined here should **not** implement `Display`.
 //! - This module provides structured data to the presentation layer for
 //!   formatting; it should never make presentation decisions itself.
@@ -42,7 +40,6 @@ pub mod numa;
 pub mod pidfd;
 pub mod signal;
 
-use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::io;
@@ -182,23 +179,10 @@ pub struct SchedStat {
 /// through typed accessor methods rather than reading /proc files directly.
 pub struct ProcHandle {
     source: Box<dyn ProcSource>,
-    warnings: RefCell<Vec<String>>,
     is_core: bool,
 }
 
 impl ProcHandle {
-    /// Drain and return all accumulated warnings.
-    pub fn drain_warnings(&self) -> Vec<String> {
-        let mut w = std::mem::take(&mut *self.warnings.borrow_mut());
-        w.extend(self.source.drain_warnings());
-        w
-    }
-
-    /// Append a warning to the handle's warning list.
-    pub(crate) fn push_warning(&self, msg: String) {
-        self.warnings.borrow_mut().push(msg);
-    }
-
     /// Whether the handle was opened from a coredump (as opposed to a live
     /// process).
     pub fn is_core(&self) -> bool {
@@ -562,12 +546,12 @@ impl ProcHandle {
                 .and_then(|v| v.trim().parse::<usize>().ok())
             {
                 if n > tids.len() {
-                    self.warnings.borrow_mut().push(format!(
+                    eprintln!(
                         "warning: process had {} threads but only {} available; \
                          blocked masks may be incomplete",
                         n,
                         tids.len()
-                    ));
+                    );
                 }
             }
         }
@@ -589,12 +573,12 @@ impl ProcHandle {
         }
 
         if !masks.is_empty() && masks.len() < tid_count {
-            self.warnings.borrow_mut().push(format!(
+            eprintln!(
                 "warning: read blocked mask for {} of {} threads; \
                  blocked-signal intersection may be incomplete",
                 masks.len(),
                 tid_count
-            ));
+            );
         }
 
         if masks.is_empty() {
@@ -666,10 +650,10 @@ impl ProcHandle {
                     let value = OsString::from(std::ffi::OsStr::from_bytes(&chunk[pos + 1..]));
                     vars.push((key, value));
                 } else {
-                    self.warnings.borrow_mut().push(format!(
+                    eprintln!(
                         "warning: skipping environ entry with empty key for pid {}",
                         self.pid()
-                    ));
+                    );
                 }
             }
         }
@@ -726,32 +710,29 @@ impl ProcHandle {
         let fds = self.fds()?;
         let sockets = net::parse_socket_info(&*self.source);
 
-        let mut warnings = Vec::new();
-
         // Compute TCP peer processes in bulk (system-wide /proc scan).
         // Skip for coredumps or when no loopback TCP sockets exist.
         let tcp_peers = if !self.is_core && net::has_loopback_tcp_peers(&sockets) {
-            net::derive_peer_processes(self.pid(), &sockets, &mut warnings)
+            net::derive_peer_processes(self.pid(), &sockets)
         } else {
             std::collections::HashMap::new()
         };
 
         let mut result = Vec::with_capacity(fds.len());
         for fd_num in fds {
-            match self.gather_fd(fd_num, &sockets, &tcp_peers, &mut warnings) {
+            match self.gather_fd(fd_num, &sockets, &tcp_peers) {
                 Ok(fd_desc) => result.push(fd_desc),
                 Err(e) => {
-                    warnings.push(format!(
+                    eprintln!(
                         "failed to gather info for /proc/{}/fd/{}: {}",
                         self.pid(),
                         fd_num,
                         e
-                    ));
+                    );
                 }
             }
         }
 
-        self.warnings.borrow_mut().extend(warnings);
         Ok(result)
     }
 
@@ -762,7 +743,6 @@ impl ProcHandle {
         fd_num: u64,
         sockets: &std::collections::HashMap<u64, net::SocketInfo>,
         tcp_peers: &std::collections::HashMap<u64, (u64, String)>,
-        warnings: &mut Vec<String>,
     ) -> io::Result<fd::FileDescriptor> {
         let path = self.fd_path(fd_num)?;
         let link_text = path.to_string_lossy();
@@ -817,7 +797,7 @@ impl ProcHandle {
 
             // Fallback: sockprotoname xattr when not found in /proc/net/*
             if socket.is_none() && !self.is_core {
-                sockprotoname = fd::get_sockprotoname(self.pid(), fd_num, warnings);
+                sockprotoname = fd::get_sockprotoname(self.pid(), fd_num);
             }
         }
 
@@ -887,7 +867,6 @@ impl ProcHandle {
     pub fn from_pid(pid: u64) -> Self {
         ProcHandle {
             source: crate::source::open_live(pid),
-            warnings: RefCell::new(Vec::new()),
             is_core: false,
         }
     }
@@ -927,10 +906,9 @@ fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
 
 /// Grab a process from a coredump
 fn grab_core(path: &Path) -> io::Result<ProcHandle> {
-    let (source, warnings) = crate::source::open_coredump(path)?;
+    let source = crate::source::open_coredump(path)?;
     Ok(ProcHandle {
         source,
-        warnings: RefCell::new(warnings),
         is_core: true,
     })
 }

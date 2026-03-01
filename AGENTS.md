@@ -82,25 +82,19 @@ The codebase is organized into four layers with strict dependency rules:
    `/proc/[pid]/...` while `CoredumpSource` reads from journal entries and ELF
    notes. Each source owns a lazily-initialized dwfl session and exposes
    `trace_thread(tid, options)` for stack unwinding -- no dwfl types or raw ELF
-   pointers leak outside this layer. This layer must never write to
-   stdout/stderr. Only the process handle layer consumes it.
+   pointers leak outside this layer. Only the process handle layer consumes it.
 
 2. **Process handle layer** (`src/proc/`): Parses raw data from the source
-   layer into typed Rust structures. The central type is `ProcHandle`, an
-   opaque handle through which all process queries flow. This layer must never
-   write to stdout/stderr; non-fatal diagnostics are accumulated in a warnings
-   vector via `ProcHandle::push_warning()`. Types here should not implement
-   `Display` (except `Error`). Never format output in this layer -- it
+   layer into typed Rust structures. The central type is `ProcHandle`, an opaque
+   handle through which all process queries flow. Types here should not
+   implement `Display` (except `Error`). Never format output in this layer -- it
    provides structured data only. All output formatting belongs in the
    presentation/display layer.
 
 3. **Stack layer** (`src/stack/`): Orchestrates thread enumeration, ptrace
    attachment, and snapshot/rolling tracing strategies. Delegates actual frame
-   walking to the source layer via `ProcHandle::trace_thread()`. Like the
-   process handle layer, this layer must never write to stdout/stderr or
-   implement `Display` (except `Error`). Non-fatal diagnostics (attachment
-   failures, tracing errors) are pushed to `ProcHandle::push_warning()` and
-   drained by the presentation layer.
+   walking to the source layer via `ProcHandle::trace_thread()`. This layer must
+   not implement `Display` (except `Error`).
 
 4. **Presentation/display layer** (`src/display.rs` and `src/bin/*.rs`):
    Formats structured data from the proc-handle layer for terminal output.
@@ -112,7 +106,6 @@ The codebase is organized into four layers with strict dependency rules:
 Tools should recover from errors and continue producing useful output.
 Debugging tools are expected to run on systems in unusual states, so do not
 panic on procfs inconsistencies. Assert only on purely internal invariants.
-Warnings are accumulated in `ProcHandle` and drained by binaries to stderr.
 
 ### Command-line parsing
 

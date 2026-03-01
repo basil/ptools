@@ -86,15 +86,9 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.drain_warnings() {
-            eprintln!("penv: {w}");
-        }
         if let Err(e) = ptools::display::print_env_from(&handle) {
             eprintln!("penv: {}: {e}", handle.pid());
             error = true;
-        }
-        for w in handle.drain_warnings() {
-            eprintln!("penv: {w}");
         }
     }
     if error {

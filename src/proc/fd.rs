@@ -131,7 +131,7 @@ pub(crate) fn parse_socket_inode(link_text: &str) -> Option<u64> {
 }
 
 /// Read `system.sockprotoname` xattr from `/proc/[pid]/fd/[fd]`.
-pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -> Option<String> {
+pub(crate) fn get_sockprotoname(pid: u64, fd: u64) -> Option<String> {
     let path = std::ffi::CString::new(format!("/proc/{pid}/fd/{fd}")).ok()?;
     let name = std::ffi::CString::new("system.sockprotoname").ok()?;
 
@@ -139,7 +139,7 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -
         unsafe { nix::libc::getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0) };
 
     if size < 0 {
-        warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
+        handle_sockprotoname_xattr_error(pid, fd);
         return None;
     }
 
@@ -153,7 +153,7 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -
         )
     };
     if filled < 0 {
-        warnings.extend(handle_sockprotoname_xattr_error(pid, fd));
+        handle_sockprotoname_xattr_error(pid, fd);
         return None;
     }
 
@@ -169,12 +169,12 @@ pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -
     String::from_utf8(buf).ok()
 }
 
-fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) -> Option<String> {
+fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) {
     match Errno::last() {
-        Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => None,
-        errno => Some(format!(
-            "failed to read system.sockprotoname xattr for /proc/{pid}/fd/{fd}: {errno}"
-        )),
+        Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => {}
+        errno => {
+            eprintln!("failed to read system.sockprotoname xattr for /proc/{pid}/fd/{fd}: {errno}");
+        }
     }
 }
 

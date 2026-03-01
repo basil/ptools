@@ -19,7 +19,6 @@
 //! Owns the ELF handle and (optionally decompressed) file descriptor for a
 //! core dump.  Provides memory reading via PT_LOAD segments.
 
-use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
 use std::io::Seek;
@@ -126,12 +125,7 @@ impl CoreElf {
     }
 
     /// Read memory from the core file's PT_LOAD segments.
-    pub(super) fn read_memory(
-        &self,
-        addr: u64,
-        buf: &mut [u8],
-        warnings: &RefCell<Vec<String>>,
-    ) -> bool {
+    pub(super) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
         unsafe {
             let mut phnum: libc::size_t = 0;
             if crate::dw_sys::elf_getphdrnum(self.elf.0, &mut phnum) != 0 {
@@ -148,32 +142,32 @@ impl CoreElf {
                 let end = match addr.checked_add(buf.len() as u64) {
                     Some(e) => e,
                     None => {
-                        warnings.borrow_mut().push(format!(
+                        eprintln!(
                             "core: arithmetic overflow computing read end \
                              (addr {addr:#x}, len {:#x})",
                             buf.len(),
-                        ));
+                        );
                         continue;
                     }
                 };
                 let seg_end = match phdr.p_vaddr.checked_add(phdr.p_filesz) {
                     Some(e) => e,
                     None => {
-                        warnings.borrow_mut().push(format!(
+                        eprintln!(
                             "core: arithmetic overflow computing PT_LOAD segment {i} end \
                              (p_vaddr {:#x}, p_filesz {:#x})",
                             phdr.p_vaddr, phdr.p_filesz,
-                        ));
+                        );
                         continue;
                     }
                 };
                 if addr >= phdr.p_vaddr && end <= seg_end {
                     let Some(offset) = (addr - phdr.p_vaddr).checked_add(phdr.p_offset) else {
-                        warnings.borrow_mut().push(format!(
+                        eprintln!(
                             "core: arithmetic overflow computing PT_LOAD segment {i} offset \
                              (addr {addr:#x}, p_vaddr {:#x}, p_offset {:#x})",
                             phdr.p_vaddr, phdr.p_offset,
-                        ));
+                        );
                         continue;
                     };
                     let offset = offset as i64;

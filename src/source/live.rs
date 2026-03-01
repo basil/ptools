@@ -35,7 +35,6 @@ pub(super) struct LiveProcess {
 
     // Lazy dwfl session (only created when trace_thread is called).
     dwfl: OnceCell<Option<RefCell<Dwfl<'static>>>>,
-    warnings: RefCell<Vec<String>>,
 
     // Per-process caches (no parameters).
     stat: OnceCell<String>,
@@ -63,7 +62,6 @@ impl LiveProcess {
         LiveProcess {
             pid,
             dwfl: OnceCell::new(),
-            warnings: RefCell::new(Vec::new()),
             stat: OnceCell::new(),
             status: OnceCell::new(),
             comm: OnceCell::new(),
@@ -89,9 +87,7 @@ impl LiveProcess {
             .get_or_init(|| match dw::create_dwfl_live(self.pid as u32) {
                 Ok(d) => Some(RefCell::new(d)),
                 Err(e) => {
-                    self.warnings
-                        .borrow_mut()
-                        .push(format!("warning: failed to create dwfl session: {e}"));
+                    eprintln!("warning: failed to create dwfl session: {e}");
                     None
                 }
             })
@@ -281,16 +277,18 @@ impl ProcSource for LiveProcess {
     ) -> Vec<crate::stack::Frame> {
         let dwfl_cell = match self.ensure_dwfl() {
             Some(d) => d,
-            None => return super::trace_warn(&self.warnings, tid, "no dwfl session"),
+            None => {
+                eprintln!("warning: error tracing thread {tid}: no dwfl session");
+                return Vec::new();
+            }
         };
         let mut dwfl_ref = dwfl_cell.borrow_mut();
         match dw::walk_thread_frames(&mut dwfl_ref, tid, options) {
             Ok(frames) => frames,
-            Err(e) => super::trace_warn(&self.warnings, tid, e),
+            Err(e) => {
+                eprintln!("warning: error tracing thread {tid}: {e}");
+                Vec::new()
+            }
         }
-    }
-
-    fn drain_warnings(&self) -> Vec<String> {
-        std::mem::take(&mut *self.warnings.borrow_mut())
     }
 }

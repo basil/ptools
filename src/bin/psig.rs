@@ -162,14 +162,8 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.drain_warnings() {
-            eprintln!("psig: {w}");
-        }
         if print_signal_actions(&handle).is_err() {
             error = true;
-        }
-        for w in handle.drain_warnings() {
-            eprintln!("psig: {w}");
         }
     }
     if error {

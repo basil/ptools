@@ -349,7 +349,7 @@ impl TraceOptions {
         let pid = handle.pid() as u32;
 
         if let Some(tid) = self.tid {
-            if let Some(thread) = open_thread_or_warn(tid, self.ptrace_attach, handle)? {
+            if let Some(thread) = open_thread_or_warn(tid, self.ptrace_attach)? {
                 each(thread.info(pid, self, handle));
             }
             return Ok(());
@@ -432,7 +432,7 @@ impl TraceOptions {
     where
         F: FnMut(Thread),
     {
-        for t in snapshot_threads(pid, self.ptrace_attach, handle)?.iter() {
+        for t in snapshot_threads(pid, self.ptrace_attach)?.iter() {
             each(t.info(pid, self, handle));
         }
         Ok(())
@@ -448,7 +448,7 @@ impl TraceOptions {
         F: FnMut(Thread),
     {
         each_thread(pid, |tid| {
-            if let Some(thread) = open_thread_or_warn(tid, self.ptrace_attach, handle)? {
+            if let Some(thread) = open_thread_or_warn(tid, self.ptrace_attach)? {
                 each(thread.info(pid, self, handle));
             }
             Ok(())
@@ -456,11 +456,7 @@ impl TraceOptions {
     }
 }
 
-fn open_thread_or_warn(
-    tid: u32,
-    ptrace_attach: bool,
-    handle: &crate::proc::ProcHandle,
-) -> io::Result<Option<TracedThread>> {
+fn open_thread_or_warn(tid: u32, ptrace_attach: bool) -> io::Result<Option<TracedThread>> {
     let thread = if ptrace_attach {
         TracedThread::attach(tid)
     } else {
@@ -469,25 +465,21 @@ fn open_thread_or_warn(
     match thread {
         Ok(thread) => Ok(Some(thread)),
         Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
-            handle.push_warning(format!("error attaching to thread {tid}: {e}"));
+            eprintln!("warning: error attaching to thread {tid}: {e}");
             Ok(None)
         }
         Err(e) => Err(e),
     }
 }
 
-fn snapshot_threads(
-    pid: u32,
-    ptrace_attach: bool,
-    handle: &crate::proc::ProcHandle,
-) -> io::Result<BTreeSet<TracedThread>> {
+fn snapshot_threads(pid: u32, ptrace_attach: bool) -> io::Result<BTreeSet<TracedThread>> {
     let mut threads = BTreeSet::new();
 
     // new threads may be created while we're in the process of stopping them all, so loop a couple
     // of times to hopefully converge
     for _ in 0..5 {
         let prev = threads.len();
-        add_threads(&mut threads, pid, ptrace_attach, handle)?;
+        add_threads(&mut threads, pid, ptrace_attach)?;
         if prev == threads.len() {
             break;
         }
@@ -500,11 +492,10 @@ fn add_threads(
     threads: &mut BTreeSet<TracedThread>,
     pid: u32,
     ptrace_attach: bool,
-    handle: &crate::proc::ProcHandle,
 ) -> io::Result<()> {
     each_thread(pid, |tid| {
         if !threads.contains(&tid) {
-            if let Some(thread) = open_thread_or_warn(tid, ptrace_attach, handle)? {
+            if let Some(thread) = open_thread_or_warn(tid, ptrace_attach)? {
                 threads.insert(thread);
             }
         }
@@ -692,7 +683,7 @@ impl TracedThread {
 
     fn info(&self, pid: u32, options: &TraceOptions, handle: &crate::proc::ProcHandle) -> Thread {
         let name = if options.thread_names {
-            self.name(pid, handle)
+            self.name(pid)
         } else {
             None
         };
@@ -706,13 +697,13 @@ impl TracedThread {
         }
     }
 
-    fn name(&self, pid: u32, handle: &crate::proc::ProcHandle) -> Option<String> {
+    fn name(&self, pid: u32) -> Option<String> {
         let path = format!("/proc/{}/task/{}/comm", pid, self.id);
         let mut name = vec![];
         match File::open(path).and_then(|mut f| f.read_to_end(&mut name)) {
             Ok(_) => Some(String::from_utf8_lossy(&name).trim().to_string()),
             Err(e) => {
-                handle.push_warning(format!("error getting name for thread {}: {}", self.id, e));
+                eprintln!("warning: error getting name for thread {}: {}", self.id, e);
                 None
             }
         }

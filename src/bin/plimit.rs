@@ -209,14 +209,8 @@ fn main() {
                 continue;
             }
         };
-        for w in handle.drain_warnings() {
-            eprintln!("plimit: {w}");
-        }
         if print_limits(&handle, args.unit_mode).is_err() {
             error = true;
-        }
-        for w in handle.drain_warnings() {
-            eprintln!("plimit: {w}");
         }
     }
     if error {

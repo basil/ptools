@@ -26,9 +26,7 @@
 //! outside `proc` should depend on this module directly.
 //!
 //! **Contract:**
-//! - This module must **never** write to stdout or stderr.
-//! - Warnings and non-fatal diagnostics must be returned in a `Vec<String>`
-//!   (see [`open_coredump`]).
+//! - This module must **never** write to stdout.
 //! - Types defined here should **not** implement `Display`; formatting is
 //!   the responsibility of the presentation layer.
 
@@ -82,28 +80,13 @@ pub(crate) trait ProcSource {
         tid: u32,
         options: &crate::stack::TraceOptions,
     ) -> Vec<crate::stack::Frame>;
-
-    /// Drain accumulated warnings.
-    fn drain_warnings(&self) -> Vec<String>;
-}
-
-/// Push a warning for a thread-tracing failure and return an empty frame list.
-fn trace_warn(
-    warnings: &std::cell::RefCell<Vec<String>>,
-    tid: u32,
-    msg: impl std::fmt::Display,
-) -> Vec<crate::stack::Frame> {
-    warnings
-        .borrow_mut()
-        .push(format!("error tracing thread {tid}: {msg}"));
-    Vec::new()
 }
 
 pub(crate) fn open_live(pid: u64) -> Box<dyn ProcSource> {
     Box::new(live::LiveProcess::new(pid))
 }
 
-pub(crate) fn open_coredump(path: &Path) -> io::Result<(Box<dyn ProcSource>, Vec<String>)> {
+pub(crate) fn open_coredump(path: &Path) -> io::Result<Box<dyn ProcSource>> {
     let core_elf = match elf::CoreElf::open(path) {
         Ok(e) => Some(Arc::new(e)),
         Err(e) if e.kind() == io::ErrorKind::NotFound => None,
@@ -115,6 +98,5 @@ pub(crate) fn open_coredump(path: &Path) -> io::Result<(Box<dyn ProcSource>, Vec
         }
     };
     let source = coredump::CoredumpSource::from_corefile(path, core_elf.as_ref())?;
-    let warnings = source.drain_warnings();
-    Ok((Box::new(source), warnings))
+    Ok(Box::new(source))
 }
