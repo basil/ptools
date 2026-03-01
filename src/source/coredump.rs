@@ -20,6 +20,7 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use nix::libc;
 
@@ -43,7 +44,8 @@ use crate::model::FromBufRead;
 pub(super) struct CoredumpSource {
     fields: HashMap<String, Vec<u8>>,
     core_dwfl: OnceCell<Option<CoreDwfl>>,
-    core_elf: Option<Arc<CoreElf>>,
+    core_elf: OnceLock<Option<Arc<CoreElf>>>,
+    crash_path: Option<PathBuf>,
     pid: OnceCell<u64>,
     tids: OnceCell<Vec<u64>>,
     notes: OnceCell<ParsedNotes>,
@@ -136,11 +138,62 @@ impl CoredumpSource {
         Ok(CoredumpSource {
             fields,
             core_dwfl: OnceCell::new(),
-            core_elf: core_elf.map(Arc::clone),
+            core_elf: OnceLock::from(core_elf.map(Arc::clone)),
+            crash_path: None,
             pid: OnceCell::new(),
             tids: OnceCell::new(),
             notes: OnceCell::new(),
         })
+    }
+
+    /// Create from an apport `.crash` file.
+    ///
+    /// Parses text fields from the crash file into `COREDUMP_*` fields.
+    /// The core dump itself is extracted lazily on first access.
+    pub(super) fn from_apport(path: &Path) -> io::Result<Self> {
+        let fields = super::apport::parse_crash_fields(path)?;
+
+        Ok(CoredumpSource {
+            fields,
+            core_dwfl: OnceCell::new(),
+            core_elf: OnceLock::new(),
+            crash_path: Some(path.to_path_buf()),
+            pid: OnceCell::new(),
+            tids: OnceCell::new(),
+            notes: OnceCell::new(),
+        })
+    }
+
+    /// Lazily extract and cache the core ELF from an apport crash file.
+    ///
+    /// For the systemd path, this is eagerly initialized in `from_corefile()`
+    /// and the closure never runs. For apport, this extracts the CoreDump
+    /// field on first access.
+    fn ensure_core_elf(&self) -> Option<&Arc<CoreElf>> {
+        self.core_elf
+            .get_or_init(|| {
+                let crash_path = self.crash_path.as_ref()?;
+                match super::apport::extract_core_dump(crash_path) {
+                    Ok(memfd) => match CoreElf::from_fd(memfd) {
+                        Ok(elf) => Some(Arc::new(elf)),
+                        Err(e) => {
+                            eprintln!(
+                                "warning: failed to parse core dump from {}: {e}",
+                                crash_path.display()
+                            );
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!(
+                            "warning: failed to extract core dump from {}: {e}",
+                            crash_path.display()
+                        );
+                        None
+                    }
+                }
+            })
+            .as_ref()
     }
 
     /// Lazily create and cache the dwfl session.
@@ -149,7 +202,7 @@ impl CoredumpSource {
     fn ensure_core_dwfl(&self) -> Option<&CoreDwfl> {
         self.core_dwfl
             .get_or_init(|| {
-                let core_elf = match self.core_elf.as_ref() {
+                let core_elf = match self.ensure_core_elf() {
                     Some(e) => e,
                     None => return None,
                 };
@@ -201,7 +254,7 @@ impl CoredumpSource {
     /// Lazily parse all ELF notes and convert to high-level model types.
     fn notes(&self) -> &ParsedNotes {
         self.notes.get_or_init(|| {
-            let (prstatus_map, prpsinfo, auxv_bytes) = match self.core_elf.as_ref() {
+            let (prstatus_map, prpsinfo, auxv_bytes) = match self.ensure_core_elf() {
                 Some(elf) => elf.parse_notes(),
                 None => (HashMap::new(), None, None),
             };
@@ -528,15 +581,13 @@ impl ProcSource for CoredumpSource {
     }
 
     fn word_size(&self) -> usize {
-        self.core_elf
-            .as_ref()
+        self.ensure_core_elf()
             .and_then(|elf| elf.word_size())
             .unwrap_or(std::mem::size_of::<usize>())
     }
 
     fn byte_order(&self) -> ByteOrder {
-        self.core_elf
-            .as_ref()
+        self.ensure_core_elf()
             .and_then(|elf| elf.byte_order())
             .unwrap_or(if cfg!(target_endian = "big") {
                 ByteOrder::Big
@@ -546,7 +597,7 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
-        match self.core_elf.as_ref() {
+        match self.ensure_core_elf() {
             Some(elf) => elf.read_memory(addr, buf),
             None => false,
         }

@@ -30,6 +30,7 @@
 //! - Types defined here should **not** implement `Display`; formatting is
 //!   the responsibility of the presentation layer.
 
+mod apport;
 mod coredump;
 mod dw;
 mod elf;
@@ -100,6 +101,11 @@ pub(crate) fn open_coredump(path: &Path) -> io::Result<Box<dyn ProcSource>> {
         Ok(e) => Some(Arc::new(e)),
         Err(e) if e.kind() == io::ErrorKind::NotFound => None,
         Err(e) => {
+            // Not a valid ELF file — check if it's an apport crash file.
+            if apport::is_apport_crash(path) {
+                let source = coredump::CoredumpSource::from_apport(path)?;
+                return Ok(Box::new(source));
+            }
             return Err(io::Error::new(
                 e.kind(),
                 format!("{}: {}", path.display(), e),
