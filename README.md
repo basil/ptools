@@ -307,6 +307,12 @@ retrieved from the `systemd-coredump(8)` journal entry; use
 `coredumpctl list <name> -F COREDUMP_FILENAME` to find the path and pass it to
 any of these tools.
 
+Ubuntu/Debian apport `.crash` files are also supported. These files use Debian
+control syntax with base64-encoded gzip core dumps. Text fields from the crash
+file are mapped to the corresponding `COREDUMP_*` fields and the core dump is
+extracted lazily on first access. Pass the `.crash` file path as the core
+operand to any of the tools listed above.
+
 ## Current State
 
 The following table lists all Solaris/illumos ptools and their status in this
