@@ -145,124 +145,52 @@ impl ProcHandle {
     // -- Parsed from /proc/[pid]/stat --------------------------------
 
     /// Process state parsed from `/proc/[pid]/stat`.
-    pub fn state(&self) -> io::Result<ProcState> {
+    pub fn state(&self) -> io::Result<model::stat::ProcState> {
         let stat = self.source.read_stat()?;
-        // Use rfind to handle comm fields containing parentheses.
-        let after_comm = stat
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?
-            + 1;
-        let rest = stat[after_comm..].trim_start();
-        rest.chars()
-            .next()
-            .map(ProcState::from_char)
+        stat.state
             .ok_or_else(|| file_parse_error("stat", "empty state field"))
     }
 
     /// User CPU time in clock ticks (field 14 of /proc/[pid]/stat).
     pub fn utime(&self) -> io::Result<u64> {
-        let data = self.source.read_stat()?;
-        let close_paren = data
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
-        let after_comm = &data[close_paren + 2..];
-        // Fields after comm: state(0) ppid(1) pgrp(2) session(3) tty_nr(4)
-        //   tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10)
-        //   utime(11) stime(12) ...
-        let field = after_comm
-            .split_whitespace()
-            .nth(11)
-            .ok_or_else(|| file_parse_error("stat", "missing utime field"))?;
-        field
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid utime: {e}")))
+        let stat = self.source.read_stat()?;
+        stat.utime
+            .ok_or_else(|| file_parse_error("stat", "missing utime field"))
     }
 
     /// System CPU time in clock ticks (field 15 of /proc/[pid]/stat).
     pub fn stime(&self) -> io::Result<u64> {
-        let data = self.source.read_stat()?;
-        let close_paren = data
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
-        let after_comm = &data[close_paren + 2..];
-        // Fields after comm: state(0) ... utime(11) stime(12) ...
-        let field = after_comm
-            .split_whitespace()
-            .nth(12)
-            .ok_or_else(|| file_parse_error("stat", "missing stime field"))?;
-        field
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid stime: {e}")))
+        let stat = self.source.read_stat()?;
+        stat.stime
+            .ok_or_else(|| file_parse_error("stat", "missing stime field"))
     }
 
     /// Process group ID (field 5 of /proc/[pid]/stat).
     pub fn pgrp(&self) -> io::Result<u64> {
-        let data = self.source.read_stat()?;
-        let close_paren = data
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
-        let after_comm = &data[close_paren + 2..];
-        // Fields after comm: state(0) ppid(1) pgrp(2) ...
-        let field = after_comm
-            .split_whitespace()
-            .nth(2)
-            .ok_or_else(|| file_parse_error("stat", "missing pgrp field"))?;
-        field
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid pgrp: {e}")))
+        let stat = self.source.read_stat()?;
+        stat.pgrp
+            .ok_or_else(|| file_parse_error("stat", "missing pgrp field"))
     }
 
     /// Session ID (field 6 of /proc/[pid]/stat).
     pub fn sid(&self) -> io::Result<u64> {
-        let data = self.source.read_stat()?;
-        let close_paren = data
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
-        let after_comm = &data[close_paren + 2..];
-        // Fields after comm: state(0) ppid(1) pgrp(2) session(3) ...
-        let field = after_comm
-            .split_whitespace()
-            .nth(3)
-            .ok_or_else(|| file_parse_error("stat", "missing session field"))?;
-        field
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid session: {e}")))
+        let stat = self.source.read_stat()?;
+        stat.sid
+            .ok_or_else(|| file_parse_error("stat", "missing session field"))
     }
 
     /// Nice value (field 19 of /proc/[pid]/stat).
     pub fn nice(&self) -> io::Result<i32> {
-        let data = self.source.read_stat()?;
-        let close_paren = data
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
-        let after_comm = &data[close_paren + 2..];
-        // Fields after comm: state(0) ppid(1) pgrp(2) session(3) tty_nr(4)
-        //   tpgid(5) flags(6) minflt(7) cminflt(8) majflt(9) cmajflt(10)
-        //   utime(11) stime(12) cutime(13) cstime(14) priority(15) nice(16) ...
-        let field = after_comm
-            .split_whitespace()
-            .nth(16)
-            .ok_or_else(|| file_parse_error("stat", "missing nice field"))?;
-        field
-            .parse::<i32>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid nice: {e}")))
+        let stat = self.source.read_stat()?;
+        stat.nice
+            .ok_or_else(|| file_parse_error("stat", "missing nice field"))
     }
 
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
     pub fn starttime(&self) -> io::Result<u64> {
-        let data = self.source.read_stat()?;
-        let close_paren = data
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("stat", "missing ')' in comm field"))?;
-        let after_comm = &data[close_paren + 2..];
-        // Fields after comm: state(0) ppid(1) ... starttime(19)
-        let field = after_comm
-            .split_whitespace()
-            .nth(19)
-            .ok_or_else(|| file_parse_error("stat", "missing starttime field"))?;
-        field
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid starttime: {e}")))
+        let stat = self.source.read_stat()?;
+        stat.starttime
+            .ok_or_else(|| file_parse_error("stat", "missing starttime field"))
     }
 
     // -- Parsed from /proc/[pid]/status ------------------------------
@@ -444,17 +372,8 @@ impl ProcHandle {
     /// CPU number a thread is currently running on (field 39 of tid/stat).
     pub fn thread_cpu(&self, tid: u64) -> io::Result<u32> {
         let stat = self.source.read_tid_stat(tid)?;
-        let after_comm = stat
-            .rfind(')')
-            .ok_or_else(|| file_parse_error("task/stat", "missing ')' in comm field"))?
-            + 1;
-        let fields: Vec<&str> = stat[after_comm..].split_whitespace().collect();
-        // processor is at index 36 after the comm field
-        let val = fields
-            .get(36)
-            .ok_or_else(|| file_parse_error("task/stat", "missing processor field"))?;
-        val.parse::<u32>()
-            .map_err(|e| file_parse_error("task/stat", &format!("invalid processor: {e}")))
+        stat.processor
+            .ok_or_else(|| file_parse_error("task/stat", "missing processor field"))
     }
 
     /// Cpus_allowed_list from a thread's status, as a `BTreeSet<u32>`.
@@ -640,43 +559,6 @@ impl ProcHandle {
             socket,
             sockprotoname,
         })
-    }
-}
-
-/// Process state from `/proc/[pid]/stat`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProcState {
-    Running,
-    Sleeping,
-    Waiting,
-    Zombie,
-    Stopped,
-    Tracing,
-    Dead,
-    Wakekill,
-    Waking,
-    Parked,
-    Idle,
-    /// A state character not covered by the known variants.
-    Other(char),
-}
-
-impl ProcState {
-    fn from_char(c: char) -> Self {
-        match c {
-            'R' => Self::Running,
-            'S' => Self::Sleeping,
-            'D' => Self::Waiting,
-            'Z' => Self::Zombie,
-            'T' => Self::Stopped,
-            't' => Self::Tracing,
-            'X' | 'x' => Self::Dead,
-            'K' => Self::Wakekill,
-            'W' => Self::Waking,
-            'P' => Self::Parked,
-            'I' => Self::Idle,
-            other => Self::Other(other),
-        }
     }
 }
 

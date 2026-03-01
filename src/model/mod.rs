@@ -18,6 +18,7 @@ pub mod auxv;
 pub mod fdinfo;
 pub mod limits;
 pub mod schedstat;
+pub mod stat;
 
 use std::fs::File;
 use std::io::BufRead;

@@ -296,7 +296,7 @@ impl ProcSource for CoredumpSource {
         }
     }
 
-    fn read_stat(&self) -> io::Result<String> {
+    fn read_stat(&self) -> io::Result<model::stat::Stat> {
         Err(unsupported("stat"))
     }
 
@@ -355,7 +355,7 @@ impl ProcSource for CoredumpSource {
             .clone())
     }
 
-    fn read_tid_stat(&self, tid: u64) -> io::Result<String> {
+    fn read_tid_stat(&self, tid: u64) -> io::Result<model::stat::Stat> {
         if tid == self.pid() {
             self.read_stat()
         } else {

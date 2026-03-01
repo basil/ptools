@@ -181,7 +181,7 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
         }
         Ok(_) => {
             // Empty cmdline -- fall back to comm name.
-            let is_zombie = matches!(handle.state(), Ok(crate::proc::ProcState::Zombie));
+            let is_zombie = matches!(handle.state(), Ok(crate::model::stat::ProcState::Zombie));
             match handle.comm() {
                 Ok(ref comm) if !comm.is_empty() => {
                     print!("{comm}");

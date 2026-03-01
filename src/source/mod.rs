@@ -52,7 +52,7 @@ pub(crate) trait ProcSource {
     fn byte_order(&self) -> model::auxv::ByteOrder;
 
     // Per-process files
-    fn read_stat(&self) -> io::Result<String>;
+    fn read_stat(&self) -> io::Result<model::stat::Stat>;
     fn read_status(&self) -> io::Result<String>;
     fn read_comm(&self) -> io::Result<String>;
     fn read_cmdline(&self) -> io::Result<Vec<u8>>;
@@ -64,7 +64,7 @@ pub(crate) trait ProcSource {
 
     // Per-thread
     fn list_tids(&self) -> io::Result<Vec<u64>>;
-    fn read_tid_stat(&self, tid: u64) -> io::Result<String>;
+    fn read_tid_stat(&self, tid: u64) -> io::Result<model::stat::Stat>;
     fn read_tid_status(&self, tid: u64) -> io::Result<String>;
 
     // Per-fd

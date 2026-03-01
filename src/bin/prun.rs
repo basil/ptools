@@ -19,7 +19,7 @@ use std::process;
 use nix::sys::signal::Signal;
 use nix::sys::signal::{self};
 use nix::unistd::Pid;
-use ptools::proc::ProcState;
+use ptools::model::stat::ProcState;
 
 fn process_state_str(state: &ProcState) -> &'static str {
     match state {

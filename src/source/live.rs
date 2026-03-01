@@ -40,7 +40,7 @@ pub(super) struct LiveProcess {
     dwfl: OnceCell<Option<RefCell<Dwfl<'static>>>>,
 
     // Per-process caches (no parameters).
-    stat: OnceCell<String>,
+    stat: OnceCell<model::stat::Stat>,
     status: OnceCell<String>,
     comm: OnceCell<String>,
     cmdline: OnceCell<Vec<u8>>,
@@ -53,7 +53,7 @@ pub(super) struct LiveProcess {
     fds: OnceCell<Vec<u64>>,
 
     // Parameterized caches.
-    tid_stat: RefCell<HashMap<u64, String>>,
+    tid_stat: RefCell<HashMap<u64, model::stat::Stat>>,
     tid_status: RefCell<HashMap<u64, String>>,
     fd_link: RefCell<HashMap<u64, PathBuf>>,
     fdinfo: RefCell<HashMap<u64, model::fdinfo::FdInfo>>,
@@ -115,11 +115,12 @@ impl ProcSource for LiveProcess {
         }
     }
 
-    fn read_stat(&self) -> io::Result<String> {
+    fn read_stat(&self) -> io::Result<model::stat::Stat> {
         if let Some(val) = self.stat.get() {
             return Ok(val.clone());
         }
-        let val = std::fs::read_to_string(format!("/proc/{}/stat", self.pid))?;
+        let path = format!("/proc/{}/stat", self.pid);
+        let val = model::stat::Stat::from_file(&path)?;
         let _ = self.stat.set(val.clone());
         Ok(val)
     }
@@ -214,11 +215,12 @@ impl ProcSource for LiveProcess {
         Ok(tids)
     }
 
-    fn read_tid_stat(&self, tid: u64) -> io::Result<String> {
+    fn read_tid_stat(&self, tid: u64) -> io::Result<model::stat::Stat> {
         if let Some(cached) = self.tid_stat.borrow().get(&tid) {
             return Ok(cached.clone());
         }
-        let val = std::fs::read_to_string(format!("/proc/{}/task/{}/stat", self.pid, tid))?;
+        let path = format!("/proc/{}/task/{}/stat", self.pid, tid);
+        let val = model::stat::Stat::from_file(&path)?;
         self.tid_stat.borrow_mut().insert(tid, val.clone());
         Ok(val)
     }

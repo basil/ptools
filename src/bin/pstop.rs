@@ -21,7 +21,7 @@ use std::time::Duration;
 use nix::sys::signal::Signal;
 use nix::sys::signal::{self};
 use nix::unistd::Pid;
-use ptools::proc::ProcState;
+use ptools::model::stat::ProcState;
 
 /// Poll until the process reaches stopped state or no longer exists.
 /// Uses exponential backoff starting at 10ms, capped at 100ms.
