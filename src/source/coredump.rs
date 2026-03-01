@@ -384,13 +384,14 @@ impl ProcSource for CoredumpSource {
             .get()
             .expect("ensure_notes initialized")
             .as_ref();
-        let prstatus = self
-            .prstatus_map
-            .get()
-            .expect("ensure_notes initialized")
-            .get(&pid);
+        let prstatus_map = self.prstatus_map.get().expect("ensure_notes initialized");
+        let prstatus = prstatus_map.get(&pid);
         if prstatus.is_some() || prpsinfo.is_some() {
-            return Ok(prstatus_to_stat(prpsinfo, prstatus));
+            let mut stat = prstatus_to_stat(prpsinfo, prstatus);
+            if !prstatus_map.is_empty() {
+                stat.num_threads = Some(prstatus_map.len() as u64);
+            }
+            return Ok(stat);
         }
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
@@ -411,13 +412,14 @@ impl ProcSource for CoredumpSource {
             .get()
             .expect("ensure_notes initialized")
             .as_ref();
-        let prstatus = self
-            .prstatus_map
-            .get()
-            .expect("ensure_notes initialized")
-            .get(&pid);
+        let prstatus_map = self.prstatus_map.get().expect("ensure_notes initialized");
+        let prstatus = prstatus_map.get(&pid);
         if prstatus.is_some() || prpsinfo.is_some() {
-            return Ok(prstatus_to_status(prpsinfo, prstatus));
+            let mut status = prstatus_to_status(prpsinfo, prstatus);
+            if !prstatus_map.is_empty() {
+                status.threads = Some(prstatus_map.len());
+            }
+            return Ok(status);
         }
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
