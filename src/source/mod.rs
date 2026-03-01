@@ -34,6 +34,7 @@ mod coredump;
 mod dw;
 mod elf;
 mod live;
+mod systemd;
 
 use std::io;
 use std::path::Path;
