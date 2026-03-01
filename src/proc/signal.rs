@@ -111,7 +111,7 @@ pub fn signal_name(sig: usize, rtmin: usize, rtmax: usize) -> String {
         Ok(Signal::SIGIO) => "POLL".to_string(),
         Ok(Signal::SIGPWR) => "PWR".to_string(),
         Ok(Signal::SIGSYS) => "SYS".to_string(),
-        _ => format!("SIG{}", sig),
+        _ => format!("SIG{sig}"),
     }
 }
 

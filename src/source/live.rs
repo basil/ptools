@@ -91,7 +91,7 @@ impl LiveProcess {
                 Err(e) => {
                     self.warnings
                         .borrow_mut()
-                        .push(format!("warning: failed to create dwfl session: {}", e));
+                        .push(format!("warning: failed to create dwfl session: {e}"));
                     None
                 }
             })

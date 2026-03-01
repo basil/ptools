@@ -64,7 +64,7 @@ fn parent_main() {
     let ready_file = Path::new(&ready_path);
     while !ready_file.exists() {
         if let Some(status) = child.try_wait().expect("wait child") {
-            panic!("child exited early: {}", status);
+            panic!("child exited early: {status}");
         }
         thread::sleep(Duration::from_millis(100));
     }

@@ -54,7 +54,7 @@ fn print_signal_actions(handle: &ProcHandle) -> std::io::Result<()> {
     ptools::display::print_proc_summary_from(handle);
 
     let masks = handle.signal_masks().map_err(|e| {
-        eprintln!("psig: {}", e);
+        eprintln!("psig: {e}");
         e
     })?;
 

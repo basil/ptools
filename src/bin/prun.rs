@@ -48,14 +48,11 @@ fn run_process(pid: u64) -> bool {
     // silently ignored. The diagnostics here are best-effort.
     match handle.state() {
         Err(_) => {
-            eprintln!("prun: process {} does not exist", pid);
+            eprintln!("prun: process {pid} does not exist");
             return false;
         }
         Ok(ProcState::Tracing) => {
-            eprintln!(
-                "prun: process {} is ptrace-stopped by a debugger; SIGCONT has no effect",
-                pid
-            );
+            eprintln!("prun: process {pid} is ptrace-stopped by a debugger; SIGCONT has no effect");
             return false;
         }
         Ok(ProcState::Stopped) => {} // stopped -- this is the expected case
@@ -70,7 +67,7 @@ fn run_process(pid: u64) -> bool {
     }
 
     if let Err(e) = signal::kill(nix_pid, Signal::SIGCONT) {
-        eprintln!("prun: cannot resume {}: {}", pid, e);
+        eprintln!("prun: cannot resume {pid}: {e}");
         return false;
     }
 

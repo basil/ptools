@@ -34,22 +34,18 @@ fn verify_stopped(pid: u64) -> bool {
         match handle.state() {
             Ok(ProcState::Stopped) => return true,
             Ok(ProcState::Tracing) => {
-                eprintln!(
-                    "pstop: process {} is stopped under a debugger, not by us",
-                    pid
-                );
+                eprintln!("pstop: process {pid} is stopped under a debugger, not by us");
                 return false;
             }
             Err(_) => {
-                eprintln!("pstop: process {} has exited", pid);
+                eprintln!("pstop: process {pid} has exited");
                 return false;
             }
             Ok(ProcState::Waiting) => {
                 if !warned_d {
                     eprintln!(
-                        "pstop: process {} is in uninterruptible sleep; \
-                         SIGSTOP is pending but may take time to take effect",
-                        pid
+                        "pstop: process {pid} is in uninterruptible sleep; \
+                         SIGSTOP is pending but may take time to take effect"
                     );
                     warned_d = true;
                 }
@@ -67,7 +63,7 @@ fn verify_stopped(pid: u64) -> bool {
 fn stop_process(pid: u64) -> bool {
     let nix_pid = Pid::from_raw(pid as i32);
     if let Err(e) = signal::kill(nix_pid, Signal::SIGSTOP) {
-        eprintln!("pstop: cannot stop {}: {}", pid, e);
+        eprintln!("pstop: cannot stop {pid}: {e}");
         return false;
     }
     verify_stopped(pid)

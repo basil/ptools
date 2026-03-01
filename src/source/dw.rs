@@ -184,7 +184,7 @@ fn demangle(name: &str) -> Option<String> {
     // Try Rust symbol demangling (_R prefix for v0, _ZN...E for legacy).
     let demangled = rustc_demangle::try_demangle(name).ok()?;
     // Alternate format omits the hash suffix.
-    Some(format!("{:#}", demangled))
+    Some(format!("{demangled:#}"))
 }
 
 /// Get the linkage name or plain name of a DWARF DIE, matching elfutils die_name().

@@ -30,16 +30,16 @@ fn set_rlimit(resource: Resource, soft_var: &str, hard_var: &str) {
         (Some(soft), Some(hard)) => {
             let soft = soft
                 .parse::<rlim_t>()
-                .unwrap_or_else(|_| panic!("invalid {} override", soft_var));
+                .unwrap_or_else(|_| panic!("invalid {soft_var} override"));
             let hard = hard
                 .parse::<rlim_t>()
-                .unwrap_or_else(|_| panic!("invalid {} override", hard_var));
+                .unwrap_or_else(|_| panic!("invalid {hard_var} override"));
             setrlimit(resource, soft, hard).unwrap_or_else(|e| {
                 panic!("setrlimit({resource:?}) failed: {e}");
             });
         }
         (None, None) => {}
-        _ => panic!("both {} and {} must be set together", soft_var, hard_var),
+        _ => panic!("both {soft_var} and {hard_var} must be set together"),
     }
 }
 

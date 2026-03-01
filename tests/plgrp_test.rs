@@ -26,8 +26,7 @@ fn plgrp_shows_home_node_for_all_threads() {
     let header = lines.next().expect("expected header line");
     assert!(
         header.contains("NODE"),
-        "Expected header to contain NODE:\n{}",
-        stdout
+        "Expected header to contain NODE:\n{stdout}"
     );
 
     // Should have at least two data lines (main thread + spawned thread).
@@ -41,7 +40,7 @@ fn plgrp_shows_home_node_for_all_threads() {
 
     // Each data line should contain a PID/TID pair.
     for line in &data_lines {
-        assert!(line.contains('/'), "Expected PID/TID in line: {}", line);
+        assert!(line.contains('/'), "Expected PID/TID in line: {line}");
     }
 }
 
@@ -64,7 +63,7 @@ fn plgrp_shows_single_thread_with_tid() {
     ready.wait_for_readiness(&mut child);
 
     let pid = child.id();
-    let pid_tid = format!("{}/{}", pid, pid);
+    let pid_tid = format!("{pid}/{pid}");
     let output = Command::new(common::find_exec("plgrp"))
         .arg(&pid_tid)
         .stdin(Stdio::null())
@@ -80,8 +79,7 @@ fn plgrp_shows_single_thread_with_tid() {
     assert_eq!(
         data_lines.len(),
         1,
-        "Expected exactly 1 thread line for specific tid:\n{}",
-        stdout
+        "Expected exactly 1 thread line for specific tid:\n{stdout}"
     );
 }
 
@@ -100,16 +98,14 @@ fn plgrp_affinity_flag_shows_affinity_column() {
     let header = stdout.lines().next().expect("expected header line");
     assert!(
         header.contains("AFFINITY"),
-        "Expected AFFINITY in header:\n{}",
-        stdout
+        "Expected AFFINITY in header:\n{stdout}"
     );
 
     // Each data line should contain all, some, or none.
     for line in stdout.lines().skip(1) {
         assert!(
             line.contains("/all") || line.contains("/some") || line.contains("/none"),
-            "Expected all, some, or none in affinity line: {}",
-            line
+            "Expected all, some, or none in affinity line: {line}"
         );
     }
 }
@@ -131,7 +127,6 @@ fn plgrp_error_for_nonexistent_pid() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("999999999"),
-        "Expected error message to mention the PID:\n{}",
-        stderr
+        "Expected error message to mention the PID:\n{stderr}"
     );
 }

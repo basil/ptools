@@ -24,18 +24,16 @@ fn pcred_reports_condensed_credentials() {
     let mut lines = stdout.lines();
     let first = lines
         .next()
-        .unwrap_or_else(|| panic!("Expected credential line in pcred output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Expected credential line in pcred output:\n{stdout}"));
 
     // A regular process has equal real/effective/saved UIDs and GIDs.
     assert!(
         first.contains("e/r/s/fsuid="),
-        "Expected condensed UID format:\n{}",
-        stdout
+        "Expected condensed UID format:\n{stdout}"
     );
     assert!(
         first.contains("e/r/s/fsgid="),
-        "Expected condensed GID format:\n{}",
-        stdout
+        "Expected condensed GID format:\n{stdout}"
     );
 }
 
@@ -47,37 +45,31 @@ fn pcred_all_flag_shows_separate_credentials() {
     let mut lines = stdout.lines();
     let first = lines
         .next()
-        .unwrap_or_else(|| panic!("Expected credential line in pcred output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Expected credential line in pcred output:\n{stdout}"));
 
     assert!(
         first.contains("euid="),
-        "Expected separate euid with -a flag:\n{}",
-        stdout
+        "Expected separate euid with -a flag:\n{stdout}"
     );
     assert!(
         first.contains("ruid="),
-        "Expected separate ruid with -a flag:\n{}",
-        stdout
+        "Expected separate ruid with -a flag:\n{stdout}"
     );
     assert!(
         first.contains("suid="),
-        "Expected separate suid with -a flag:\n{}",
-        stdout
+        "Expected separate suid with -a flag:\n{stdout}"
     );
     assert!(
         first.contains("egid="),
-        "Expected separate egid with -a flag:\n{}",
-        stdout
+        "Expected separate egid with -a flag:\n{stdout}"
     );
     assert!(
         first.contains("rgid="),
-        "Expected separate rgid with -a flag:\n{}",
-        stdout
+        "Expected separate rgid with -a flag:\n{stdout}"
     );
     assert!(
         first.contains("sgid="),
-        "Expected separate sgid with -a flag:\n{}",
-        stdout
+        "Expected separate sgid with -a flag:\n{stdout}"
     );
 }
 
@@ -103,7 +95,6 @@ fn pcred_reports_groups_when_supplementary_groups_exist() {
 
     assert!(
         stdout.contains("groups:"),
-        "Expected groups line with -a flag:\n{}",
-        stdout
+        "Expected groups line with -a flag:\n{stdout}"
     );
 }

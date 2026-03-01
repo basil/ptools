@@ -10,6 +10,9 @@ license = "Apache-2.0"
 keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 
+[lints.clippy]
+uninlined_format_args = "warn"
+
 [dependencies]
 cpp_demangle = "0.5"
 foreign-types = "0.5"

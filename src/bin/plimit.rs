@@ -184,7 +184,7 @@ fn print_limits(handle: &ProcHandle, mode: UnitMode) -> std::io::Result<()> {
         "RESOURCE", "CURRENT", "MAXIMUM"
     );
     for (label, soft, hard) in &rows {
-        println!("{:<res_w$}  {:>cur_w$}  {:>max_w$}", label, soft, hard);
+        println!("{label:<res_w$}  {soft:>cur_w$}  {hard:>max_w$}");
     }
 
     Ok(())

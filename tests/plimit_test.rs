@@ -23,18 +23,15 @@ fn plimit_displays_resource_limits() {
 
     assert!(
         stdout.contains("RESOURCE"),
-        "Expected RESOURCE header:\n{}",
-        stdout
+        "Expected RESOURCE header:\n{stdout}"
     );
     assert!(
         stdout.contains("CURRENT"),
-        "Expected CURRENT header:\n{}",
-        stdout
+        "Expected CURRENT header:\n{stdout}"
     );
     assert!(
         stdout.contains("MAXIMUM"),
-        "Expected MAXIMUM header:\n{}",
-        stdout
+        "Expected MAXIMUM header:\n{stdout}"
     );
 
     for name in &[
@@ -42,17 +39,14 @@ fn plimit_displays_resource_limits() {
     ] {
         assert!(
             stdout.contains(name),
-            "Expected limit '{}' in output:\n{}",
-            name,
-            stdout
+            "Expected limit '{name}' in output:\n{stdout}"
         );
     }
 
     // Default mode shows bytes for file/memory sizes.
     assert!(
         stdout.contains("file (bytes)"),
-        "Expected bytes unit for file in default mode:\n{}",
-        stdout
+        "Expected bytes unit for file in default mode:\n{stdout}"
     );
 }
 
@@ -74,17 +68,15 @@ fn plimit_reports_known_nofile_limit() {
     let nofile_line = stdout
         .lines()
         .find(|l| l.contains("nofiles"))
-        .unwrap_or_else(|| panic!("Expected nofiles line in output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Expected nofiles line in output:\n{stdout}"));
 
     assert!(
         nofile_line.contains("123"),
-        "Expected soft limit 123 in nofiles line:\n{}",
-        nofile_line
+        "Expected soft limit 123 in nofiles line:\n{nofile_line}"
     );
     assert!(
         nofile_line.contains("456"),
-        "Expected hard limit 456 in nofiles line:\n{}",
-        nofile_line
+        "Expected hard limit 456 in nofiles line:\n{nofile_line}"
     );
 }
 
@@ -103,21 +95,19 @@ fn plimit_k_flag_shows_kilobytes() {
     let file_line = stdout
         .lines()
         .find(|l| l.contains("file ("))
-        .unwrap_or_else(|| panic!("Expected file line in output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Expected file line in output:\n{stdout}"));
     assert!(
         file_line.contains("kilobytes"),
-        "Expected kilobytes unit for file with -k:\n{}",
-        file_line
+        "Expected kilobytes unit for file with -k:\n{file_line}"
     );
 
     let coredump_line = stdout
         .lines()
         .find(|l| l.contains("coredump ("))
-        .unwrap_or_else(|| panic!("Expected coredump line in output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Expected coredump line in output:\n{stdout}"));
     assert!(
         coredump_line.contains("kilobytes"),
-        "Expected kilobytes unit for coredump with -k:\n{}",
-        coredump_line
+        "Expected kilobytes unit for coredump with -k:\n{coredump_line}"
     );
 }
 
@@ -137,12 +127,10 @@ fn plimit_m_flag_shows_megabytes() {
         let line = stdout
             .lines()
             .find(|l| l.contains(&format!("{name} (")))
-            .unwrap_or_else(|| panic!("Expected {name} line in output:\n{}", stdout));
+            .unwrap_or_else(|| panic!("Expected {name} line in output:\n{stdout}"));
         assert!(
             line.contains("megabytes"),
-            "Expected megabytes unit for {} with -m:\n{}",
-            name,
-            line
+            "Expected megabytes unit for {name} with -m:\n{line}"
         );
     }
 }
@@ -165,13 +153,12 @@ fn plimit_k_flag_converts_stack_bytes_to_kilobytes() {
     let stack_line = stdout
         .lines()
         .find(|l| l.contains("stack"))
-        .unwrap_or_else(|| panic!("Expected stack line in output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Expected stack line in output:\n{stdout}"));
 
     // 10485760 bytes / 1024 = 10240 kilobytes
     assert!(
         stack_line.contains("10240"),
-        "Expected 10240 kilobytes for 10485760 byte stack with -k:\n{}",
-        stack_line
+        "Expected 10240 kilobytes for 10485760 byte stack with -k:\n{stack_line}"
     );
 }
 
@@ -192,8 +179,7 @@ fn plimit_rejects_missing_pid() {
     );
     assert!(
         stderr.contains("at least one PID"),
-        "Expected usage error:\n{}",
-        stderr
+        "Expected usage error:\n{stderr}"
     );
 }
 

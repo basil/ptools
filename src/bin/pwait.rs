@@ -105,7 +105,7 @@ fn main() {
 
     for pid in &pids {
         if *pid == my_pid {
-            eprintln!("pwait: skipping self PID {}", pid);
+            eprintln!("pwait: skipping self PID {pid}");
             failed = true;
             continue;
         }
@@ -114,7 +114,7 @@ fn main() {
                 entries.insert(fd.as_raw_fd(), (fd, *pid));
             }
             Err(e) => {
-                eprintln!("pwait: failed to open pidfd for {}: {}", pid, e);
+                eprintln!("pwait: failed to open pidfd for {pid}: {e}");
                 failed = true;
             }
         }
@@ -139,7 +139,7 @@ fn main() {
         match poll::poll(&mut pollfds, PollTimeout::NONE) {
             Err(Errno::EINTR) => continue,
             Err(e) => {
-                eprintln!("pwait: poll: {}", e);
+                eprintln!("pwait: poll: {e}");
                 process::exit(1);
             }
             Ok(_) => {}
@@ -166,14 +166,14 @@ fn main() {
                 // wait status in that case.
                 match pidfd.wait_status() {
                     Ok(status) => {
-                        println!("{}: terminated, wait status {:#06x}", pid, status);
+                        println!("{pid}: terminated, wait status {status:#06x}");
                     }
                     Err(Errno::ECHILD) => {
-                        println!("{}: terminated", pid);
+                        println!("{pid}: terminated");
                     }
                     Err(e) => {
-                        eprintln!("pwait: waitid for {}: {}", pid, e);
-                        println!("{}: terminated", pid);
+                        eprintln!("pwait: waitid for {pid}: {e}");
+                        println!("{pid}: terminated");
                     }
                 }
             }

@@ -26,7 +26,7 @@ use common::ReadySignal;
 
 /// Read the state character from /proc/[pid]/stat.
 fn proc_state(pid: u32) -> Option<char> {
-    let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after_comm = stat.rfind(')')? + 1;
     let rest = stat[after_comm..].trim_start();
     rest.chars().next()
@@ -72,8 +72,7 @@ fn pstop_stops_a_running_process() {
     let state = wait_for_state(pid, &['R', 'S'], 2000);
     assert!(
         state == 'R' || state == 'S',
-        "Expected running/sleeping before pstop, got '{}'",
-        state
+        "Expected running/sleeping before pstop, got '{state}'"
     );
 
     // Run pstop
@@ -84,15 +83,11 @@ fn pstop_stops_a_running_process() {
         .expect("failed to run pstop");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "pstop failed: {}", stderr);
+    assert!(output.status.success(), "pstop failed: {stderr}");
 
     // Process should now be stopped (T)
     let state = wait_for_state(pid, &['T'], 2000);
-    assert!(
-        state == 'T',
-        "Expected stopped after pstop, got '{}'",
-        state
-    );
+    assert!(state == 'T', "Expected stopped after pstop, got '{state}'");
 
     let _ = child.kill();
     let _ = child.wait();
@@ -133,14 +128,13 @@ fn prun_resumes_a_stopped_process() {
         .expect("failed to run prun");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "prun failed: {}", stderr);
+    assert!(output.status.success(), "prun failed: {stderr}");
 
     // Process should be running or sleeping again
     let state = wait_for_state(pid, &['R', 'S'], 2000);
     assert!(
         state == 'R' || state == 'S',
-        "Expected running/sleeping after prun, got '{}'",
-        state
+        "Expected running/sleeping after prun, got '{state}'"
     );
 
     let _ = child.kill();

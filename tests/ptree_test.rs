@@ -27,10 +27,7 @@ fn leading_spaces(line: &str) -> usize {
 fn assert_contains(output: &str, needle: &str, context: &str) {
     assert!(
         output.contains(needle),
-        "{}: expected to find {:?} in output:\n{}",
-        context,
-        needle,
-        output
+        "{context}: expected to find {needle:?} in output:\n{output}"
     );
 }
 
@@ -53,14 +50,14 @@ fn current_username() -> Option<String> {
 }
 
 fn output_has_pid_line(output: &str, pid: u64) -> bool {
-    let prefix = format!("{}  ", pid);
+    let prefix = format!("{pid}  ");
     output
         .lines()
         .any(|line| line.trim_start().starts_with(&prefix))
 }
 
 fn line_for_pid(output: &str, pid: u64) -> Option<&str> {
-    let prefix = format!("{}  ", pid);
+    let prefix = format!("{pid}  ");
     output
         .lines()
         .find(|line| line.trim_start().starts_with(&prefix))
@@ -78,7 +75,7 @@ fn find_non_init_child_of_pid_zero() -> Option<u64> {
             continue;
         }
 
-        let status_path = format!("/proc/{}/status", pid);
+        let status_path = format!("/proc/{pid}/status");
         let Ok(status) = fs::read_to_string(status_path) else {
             continue;
         };
@@ -111,17 +108,16 @@ fn ptree_shows_parent_and_child_with_arguments() {
     let parent_index = lines
         .iter()
         .position(|line| line.contains(parent_arg))
-        .unwrap_or_else(|| panic!("Did not find parent process line in output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Did not find parent process line in output:\n{stdout}"));
 
     let child_index = lines
         .iter()
         .position(|line| line.contains("--ch"))
-        .unwrap_or_else(|| panic!("Did not find child process line in output:\n{}", stdout));
+        .unwrap_or_else(|| panic!("Did not find child process line in output:\n{stdout}"));
 
     assert!(
         parent_index < child_index,
-        "Expected parent line to be printed before child line:\n{}",
-        stdout
+        "Expected parent line to be printed before child line:\n{stdout}"
     );
 
     let parent_indent = leading_spaces(lines[parent_index]);
@@ -129,8 +125,7 @@ fn ptree_shows_parent_and_child_with_arguments() {
 
     assert!(
         child_indent > parent_indent,
-        "Expected child line to be more indented than parent line:\n{}",
-        stdout
+        "Expected child line to be more indented than parent line:\n{stdout}"
     );
 }
 
@@ -160,34 +155,26 @@ fn ptree_a_includes_children_of_process_zero() {
     // -a mode prints children of PID 0 which includes PID 1.
     assert!(
         !output_has_pid_line(&default_stdout, 1),
-        "Expected default ptree output to exclude PID 1:\n{}",
-        default_stdout
+        "Expected default ptree output to exclude PID 1:\n{default_stdout}"
     );
     assert!(
         output_has_pid_line(&all_stdout, 1),
-        "Expected ptree -a output to include PID 1:\n{}",
-        all_stdout
+        "Expected ptree -a output to include PID 1:\n{all_stdout}"
     );
     assert!(
         !output_has_pid_line(&default_stdout, kernel_root_pid),
-        "Expected default ptree output to exclude PID {}:\n{}",
-        kernel_root_pid,
-        default_stdout
+        "Expected default ptree output to exclude PID {kernel_root_pid}:\n{default_stdout}"
     );
     assert!(
         output_has_pid_line(&all_stdout, kernel_root_pid),
-        "Expected ptree -a output to include PID {}:\n{}",
-        kernel_root_pid,
-        all_stdout
+        "Expected ptree -a output to include PID {kernel_root_pid}:\n{all_stdout}"
     );
 
     let kernel_line = line_for_pid(&all_stdout, kernel_root_pid).unwrap();
     let (_, rest) = kernel_line.trim_start().split_once("  ").unwrap();
     assert!(
         !rest.trim().is_empty(),
-        "Expected ptree -a to print a process name for PID {}:\n{}",
-        kernel_root_pid,
-        all_stdout
+        "Expected ptree -a to print a process name for PID {kernel_root_pid}:\n{all_stdout}"
     );
 }
 

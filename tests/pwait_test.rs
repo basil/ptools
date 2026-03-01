@@ -61,8 +61,7 @@ fn pwait_waits_for_process_to_exit() {
     // Should have actually waited (not returned immediately).
     assert!(
         elapsed >= Duration::from_millis(100),
-        "pwait returned too quickly ({:?}), should have waited for process",
-        elapsed
+        "pwait returned too quickly ({elapsed:?}), should have waited for process"
     );
     // stdout should be empty in non-verbose mode.
     assert!(
@@ -89,10 +88,8 @@ fn pwait_verbose_reports_termination() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Should contain the PID and "terminated".
     assert!(
-        stdout.contains(&format!("{}: terminated", pid)),
-        "Expected termination message for pid {}, got: {}",
-        pid,
-        stdout
+        stdout.contains(&format!("{pid}: terminated")),
+        "Expected termination message for pid {pid}, got: {stdout}"
     );
 }
 
@@ -111,8 +108,7 @@ fn pwait_invalid_pid_exits_nonzero() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("999999999"),
-        "Error message should mention the PID: {}",
-        stderr
+        "Error message should mention the PID: {stderr}"
     );
 }
 
@@ -140,22 +136,17 @@ fn pwait_waits_for_multiple_processes() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Both PIDs should be reported.
     assert!(
-        stdout.contains(&format!("{}: terminated", pid1)),
-        "Missing termination for pid {}: {}",
-        pid1,
-        stdout
+        stdout.contains(&format!("{pid1}: terminated")),
+        "Missing termination for pid {pid1}: {stdout}"
     );
     assert!(
-        stdout.contains(&format!("{}: terminated", pid2)),
-        "Missing termination for pid {}: {}",
-        pid2,
-        stdout
+        stdout.contains(&format!("{pid2}: terminated")),
+        "Missing termination for pid {pid2}: {stdout}"
     );
     // Should have waited for the slower process.
     assert!(
         elapsed >= Duration::from_millis(200),
-        "pwait returned too quickly ({:?}), should have waited for both processes",
-        elapsed
+        "pwait returned too quickly ({elapsed:?}), should have waited for both processes"
     );
 }
 
@@ -179,8 +170,7 @@ fn pwait_duplicate_pids_reported_once() {
     let count = stdout.matches("terminated").count();
     assert_eq!(
         count, 1,
-        "Duplicate PID should be reported only once, got {} termination messages: {}",
-        count, stdout
+        "Duplicate PID should be reported only once, got {count} termination messages: {stdout}"
     );
 }
 
@@ -206,9 +196,8 @@ fn pwait_mixed_valid_and_invalid_exits_nonzero() {
     // But should still have waited for and reported the valid one.
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains(&format!("{}: terminated", pid)),
-        "Should still report valid PID termination: {}",
-        stdout
+        stdout.contains(&format!("{pid}: terminated")),
+        "Should still report valid PID termination: {stdout}"
     );
 }
 

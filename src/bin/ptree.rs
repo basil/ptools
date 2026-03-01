@@ -87,7 +87,7 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
             let euid = match handle.euid() {
                 Ok(euid) => euid,
                 Err(e) => {
-                    eprintln!("ptree: {}", e);
+                    eprintln!("ptree: {e}");
                     continue;
                 }
             };
@@ -118,7 +118,7 @@ fn print_tree(
     printed: &mut HashSet<u64>,
 ) -> bool {
     if !parent_map.contains_key(&pid) {
-        eprintln!("ptree: no such pid {}", pid);
+        eprintln!("ptree: no such pid {pid}");
         return false;
     }
     let mut cont = Vec::new();
@@ -231,7 +231,7 @@ fn print_ptree_line(
             }
         }
     }
-    print!("{}  ", pid);
+    print!("{pid}  ");
     let handle = ptools::proc::ProcHandle::from_pid(pid);
     ptools::display::print_cmd_summary_from(&handle);
 }
@@ -241,8 +241,7 @@ fn pids_for_user(username: &str, uid_map: &HashMap<u64, u32>) -> Result<Vec<u64>
         Some(uid) => uid,
         None => {
             return Err(From::from(std::io::Error::other(format!(
-                "Error parsing username: No such user '{}'",
-                username,
+                "Error parsing username: No such user '{username}'",
             ))))
         }
     };
@@ -317,7 +316,7 @@ fn main() {
     let (parent_map, child_map, uid_map) = match build_proc_maps() {
         Ok(maps) => maps,
         Err(e) => {
-            eprintln!("ptree: error building parent/child maps: {}", e);
+            eprintln!("ptree: error building parent/child maps: {e}");
             exit(1);
         }
     };
@@ -334,7 +333,7 @@ fn main() {
         for target in &args.target {
             if let Ok(pid) = target.parse::<u64>() {
                 if pid == 0 {
-                    eprintln!("ptree: PID must be > 0: {}", pid);
+                    eprintln!("ptree: PID must be > 0: {pid}");
                     error = true;
                     continue;
                 }
@@ -357,7 +356,7 @@ fn main() {
                     }
                 }
                 Err(e) => {
-                    eprintln!("ptree: {}", e);
+                    eprintln!("ptree: {e}");
                     error = true;
                 }
             }

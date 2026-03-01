@@ -68,7 +68,7 @@ fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
         AuxvType::MinSigStkSz => "AT_MINSIGSTKSZ".into(),
         AuxvType::RseqFeatureSize => "AT_RSEQ_FEATURE_SIZE".into(),
         AuxvType::RseqAlign => "AT_RSEQ_ALIGN".into(),
-        AuxvType::Unknown(v) => format!("AT_{}", v).into(),
+        AuxvType::Unknown(v) => format!("AT_{v}").into(),
     }
 }
 
@@ -193,7 +193,7 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
             let is_zombie = matches!(handle.state(), Ok(crate::proc::ProcState::Zombie));
             match handle.comm() {
                 Ok(ref comm) if !comm.is_empty() => {
-                    print!("{}", comm);
+                    print!("{comm}");
                     if is_zombie {
                         print!(" <defunct>");
                     }
@@ -211,7 +211,7 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
         }
         Err(e) => {
             println!("<error reading cmdline>");
-            eprintln!("{}", e);
+            eprintln!("{e}");
         }
     }
 }

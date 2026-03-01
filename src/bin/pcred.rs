@@ -85,7 +85,7 @@ fn fmt_uid(uid: u32) -> String {
         .flatten()
         .map(|u| u.name)
     {
-        Some(name) => format!("{}({})", uid, name),
+        Some(name) => format!("{uid}({name})"),
         None => uid.to_string(),
     }
 }
@@ -96,7 +96,7 @@ fn fmt_gid(gid: u32) -> String {
         .flatten()
         .map(|g| g.name)
     {
-        Some(name) => format!("{}({})", gid, name),
+        Some(name) => format!("{gid}({name})"),
         None => gid.to_string(),
     }
 }
@@ -104,7 +104,7 @@ fn fmt_gid(gid: u32) -> String {
 fn print_cred(handle: &ProcHandle, all: bool) -> std::io::Result<()> {
     let pid = handle.pid();
     let cred = handle.cred().map_err(|e| {
-        eprintln!("pcred: {}: {}", pid, e);
+        eprintln!("pcred: {pid}: {e}");
         e
     })?;
 

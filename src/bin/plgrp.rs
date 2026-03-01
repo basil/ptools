@@ -41,11 +41,11 @@ fn format_node_list(nodes: &[u32]) -> String {
             end = n;
         } else {
             if end > start + 1 {
-                parts.push(format!("{}-{}", start, end));
+                parts.push(format!("{start}-{end}"));
             } else if end > start {
-                parts.push(format!("{},{}", start, end));
+                parts.push(format!("{start},{end}"));
             } else {
-                parts.push(format!("{}", start));
+                parts.push(format!("{start}"));
             }
             start = n;
             end = n;
@@ -53,11 +53,11 @@ fn format_node_list(nodes: &[u32]) -> String {
     }
 
     if end > start + 1 {
-        parts.push(format!("{}-{}", start, end));
+        parts.push(format!("{start}-{end}"));
     } else if end > start {
-        parts.push(format!("{},{}", start, end));
+        parts.push(format!("{start},{end}"));
     } else {
-        parts.push(format!("{}", start));
+        parts.push(format!("{start}"));
     }
 
     parts.join(",")
@@ -83,7 +83,7 @@ fn format_affinity(nodes: &[u32], affinity: &Option<BTreeSet<u32>>) -> String {
         return if list.is_empty() {
             String::new()
         } else {
-            format!("{}/?", list)
+            format!("{list}/?")
         };
     };
 
@@ -152,26 +152,25 @@ fn parse_node_list(s: &str) -> std::io::Result<NodeList> {
                     })?;
                     if start > end {
                         return Err(std::io::Error::other(format!(
-                            "Error parsing range {}-{}: start > end",
-                            start, end,
+                            "Error parsing range {start}-{end}: start > end",
                         )));
                     }
                     for n in start..=end {
                         if online.contains(&n) {
                             result.push(n);
                         } else {
-                            eprintln!("plgrp: bad node {}", n);
+                            eprintln!("plgrp: bad node {n}");
                             had_bad_nodes = true;
                         }
                     }
                 } else {
                     let n: u32 = part.parse().map_err(|e| {
-                        std::io::Error::other(format!("Error parsing node '{}': {}", part, e))
+                        std::io::Error::other(format!("Error parsing node '{part}': {e}"))
                     })?;
                     if online.contains(&n) {
                         result.push(n);
                     } else {
-                        eprintln!("plgrp: bad node {}", n);
+                        eprintln!("plgrp: bad node {n}");
                         had_bad_nodes = true;
                     }
                 }
@@ -274,13 +273,13 @@ fn print_thread(
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| "?".to_string()),
             Err(e) => {
-                eprintln!("plgrp: cannot read CPU for {}/{}", pid, tid);
+                eprintln!("plgrp: cannot read CPU for {pid}/{tid}");
                 return Err(e);
             }
         }
     };
 
-    let pid_tid = format!("{}/{}", pid, tid);
+    let pid_tid = format!("{pid}/{tid}");
     if let Some(nodes) = affinity_nodes {
         let affinity = if handle.is_core() {
             handle.thread_affinity(tid).ok()
@@ -288,9 +287,9 @@ fn print_thread(
             get_thread_affinity(tid)
         };
         let aff_str = format_affinity(nodes, &affinity);
-        println!("{:>14}  {:>4}  {}", pid_tid, node, aff_str);
+        println!("{pid_tid:>14}  {node:>4}  {aff_str}");
     } else {
-        println!("{:>14}  {:>4}", pid_tid, node);
+        println!("{pid_tid:>14}  {node:>4}");
     }
     Ok(())
 }

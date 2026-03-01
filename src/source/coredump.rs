@@ -220,7 +220,7 @@ impl CoredumpSource {
                     Err(e) => {
                         self.warnings
                             .borrow_mut()
-                            .push(format!("warning: failed to create dwfl session: {}", e));
+                            .push(format!("warning: failed to create dwfl session: {e}"));
                         None
                     }
                 }
@@ -232,7 +232,7 @@ impl CoredumpSource {
         self.fields.get(key).map(|v| v.as_slice()).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("field {} not available", key),
+                format!("field {key} not available"),
             )
         })
     }
@@ -242,7 +242,7 @@ impl CoredumpSource {
         std::str::from_utf8(bytes).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("field {} is not valid UTF-8: {}", key, e),
+                format!("field {key} is not valid UTF-8: {e}"),
             )
         })
     }
@@ -257,7 +257,7 @@ impl CoredumpSource {
         entries.into_iter().find(|e| e.fd == fd).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("fd {} not found in COREDUMP_OPEN_FDS", fd),
+                format!("fd {fd} not found in COREDUMP_OPEN_FDS"),
             )
         })
     }
@@ -266,7 +266,7 @@ impl CoredumpSource {
 fn unsupported(what: &str) -> io::Error {
     io::Error::new(
         io::ErrorKind::Unsupported,
-        format!("{} not available from coredump", what),
+        format!("{what} not available from coredump"),
     )
 }
 
@@ -339,8 +339,7 @@ impl ProcSource for CoredumpSource {
                         Ok(tids) => return tids,
                         Err(e) => {
                             self.warnings.borrow_mut().push(format!(
-                                "warning: could not enumerate threads from core: {}",
-                                e
+                                "warning: could not enumerate threads from core: {e}"
                             ));
                         }
                     }
@@ -357,7 +356,7 @@ impl ProcSource for CoredumpSource {
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("thread {} not available from coredump", tid),
+                format!("thread {tid} not available from coredump"),
             ))
         }
     }
@@ -368,7 +367,7 @@ impl ProcSource for CoredumpSource {
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("thread {} not available from coredump", tid),
+                format!("thread {tid} not available from coredump"),
             ))
         }
     }
@@ -433,7 +432,7 @@ fn lookup_journal_fields(
     existing: &HashMap<String, Vec<u8>>,
 ) -> HashMap<String, Vec<u8>> {
     let empty = HashMap::new();
-    let msg_match = format!("MESSAGE_ID={}", SD_MESSAGE_COREDUMP);
+    let msg_match = format!("MESSAGE_ID={SD_MESSAGE_COREDUMP}");
 
     // Primary match: by canonical filename.  The journal stores the path
     // with a compression suffix, but the user may pass either the compressed
@@ -589,13 +588,13 @@ fn extract_pid(fields: &HashMap<String, Vec<u8>>) -> io::Result<u64> {
     let s = std::str::from_utf8(bytes).map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("COREDUMP_PID is not valid UTF-8: {}", e),
+            format!("COREDUMP_PID is not valid UTF-8: {e}"),
         )
     })?;
     s.parse::<u64>().map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("COREDUMP_PID '{}' is not a valid integer: {}", s, e),
+            format!("COREDUMP_PID '{s}' is not a valid integer: {e}"),
         )
     })
 }
@@ -639,7 +638,7 @@ fn parse_fd_entries(text: &str) -> Vec<FdEntry> {
         let fdinfo: String = lines
             .map(|l| {
                 // Convert "key:\tvalue" to "key:\tvalue\n" (matching /proc fdinfo format)
-                format!("{}\n", l)
+                format!("{l}\n")
             })
             .collect();
 

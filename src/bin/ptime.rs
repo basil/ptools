@@ -254,16 +254,9 @@ fn print_timings(col: usize, lines: &[TimingLine]) -> bool {
         let time = format!("{:>w$}{}", "", line.time_str, w = max_int_w - dot);
         let prefix = format!("{:indent$}{}", "", line.label, indent = line.indent);
         if let Some(p) = line.pct {
-            eprintln!(
-                "{:<col$} {:<time_col$}  {:>5.1}%",
-                prefix,
-                time,
-                p,
-                col = col,
-                time_col = max_time_w
-            );
+            eprintln!("{prefix:<col$} {time:<max_time_w$}  {p:>5.1}%");
         } else {
-            eprintln!("{:<col$} {}", prefix, time, col = col);
+            eprintln!("{prefix:<col$} {time}");
         }
     }
 
@@ -332,7 +325,7 @@ fn run_command(command: String, argv: Vec<CString>) {
             }
             let _ = execvp(&argv[0], &argv);
             let err = Errno::last();
-            eprintln!("ptime: cannot execute {}: {err}", command);
+            eprintln!("ptime: cannot execute {command}: {err}");
             unsafe { libc::_exit(if err == Errno::ENOENT { 127 } else { 126 }) };
         }
         Ok(ForkResult::Parent { child }) => child,

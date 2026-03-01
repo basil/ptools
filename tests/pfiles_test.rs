@@ -29,9 +29,7 @@ use std::time::UNIX_EPOCH;
 fn assert_contains(output: &str, needle: &str) {
     assert!(
         output.contains(needle),
-        "Expected to find {:?} in output:\n{}",
-        needle,
-        output
+        "Expected to find {needle:?} in output:\n{output}"
     );
 }
 
@@ -355,7 +353,7 @@ fn replace_tuple_value(line: &str, marker: &str, replacement: &str) -> String {
         .chars()
         .take_while(|c| c.is_ascii_whitespace())
         .collect::<String>();
-    format!("{}{}{}", prefix, leading_ws, replacement)
+    format!("{prefix}{leading_ws}{replacement}")
 }
 
 fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
@@ -364,10 +362,9 @@ fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
         if line.starts_with(' ') && line.contains(path) {
             assert!(
                 idx + 1 < lines.len(),
-                "Found path line without following output: {}",
-                line
+                "Found path line without following output: {line}"
             );
-            let expected = format!("offset: {}", expected_offset);
+            let expected = format!("offset: {expected_offset}");
             assert!(
                 lines[idx + 1].contains(&expected),
                 "Expected line after {:?} to contain {:?}, got {:?}. Full output:\n{}",
@@ -380,7 +377,7 @@ fn assert_offset_for_path(output: &str, path: &str, expected_offset: u64) {
         }
     }
 
-    panic!("Path {:?} not found in output:\n{}", path, output);
+    panic!("Path {path:?} not found in output:\n{output}");
 }
 
 fn find_block_device_path() -> Option<String> {
@@ -442,7 +439,7 @@ where
     fd_map
         .iter()
         .find_map(|(fd, block)| predicate(block).then_some(*fd))
-        .unwrap_or_else(|| panic!("Expected at least one fd matching {}", context))
+        .unwrap_or_else(|| panic!("Expected at least one fd matching {context}"))
 }
 
 fn count_normalized_exact_blocks(fd_map: &BTreeMap<u32, String>, expected: &str) -> usize {
@@ -515,7 +512,7 @@ fn pfiles_prints_header_lines() {
         .expect("missing Current rlimit line");
     assert_eq!(
         rlimit_line.trim(),
-        format!("Current rlimit: {} file descriptors", EXPECTED_SOFT)
+        format!("Current rlimit: {EXPECTED_SOFT} file descriptors")
     );
 
     let umask_line = stdout
@@ -524,7 +521,7 @@ fn pfiles_prints_header_lines() {
         .expect("missing Current umask line");
     assert_eq!(
         umask_line.trim(),
-        format!("Current umask: {:03o}", EXPECTED_UMASK)
+        format!("Current umask: {EXPECTED_UMASK:03o}")
     );
 }
 
@@ -560,23 +557,19 @@ fn pfiles_non_verbose_mode_prints_fstat_only_descriptor_lines() {
     for block in fd_map.values() {
         assert!(
             !block.contains('\n'),
-            "expected single-line fd block in -n mode, got:\n{}",
-            block
+            "expected single-line fd block in -n mode, got:\n{block}"
         );
         assert!(
             !block.contains("offset:"),
-            "unexpected verbose offset in -n mode:\n{}",
-            block
+            "unexpected verbose offset in -n mode:\n{block}"
         );
         assert!(
             !block.contains("sockname:"),
-            "unexpected socket details in -n mode:\n{}",
-            block
+            "unexpected socket details in -n mode:\n{block}"
         );
         assert!(
             !block.contains("anon_inode:["),
-            "unexpected path/details in -n mode:\n{}",
-            block
+            "unexpected path/details in -n mode:\n{block}"
         );
     }
 }
@@ -600,7 +593,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
             eprintln!("Skipping net namespace e2e test: unshare not installed");
             return;
         }
-        Err(e) => panic!("failed to launch unshare for pfiles_netlink: {}", e),
+        Err(e) => panic!("failed to launch unshare for pfiles_netlink: {e}"),
     };
 
     while !Path::new(ready.ready_path()).exists() {
@@ -625,8 +618,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
                 return;
             }
             panic!(
-                "unshare child exited before readiness signal, status: {}, stderr: {}",
-                status, stderr
+                "unshare child exited before readiness signal, status: {status}, stderr: {stderr}"
             );
         }
     }
@@ -640,14 +632,13 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
     examined_proc.kill().expect("failed to kill unshare child");
     ready.cleanup();
 
-    assert!(output.status.success(), "pfiles failed: {:?}", output);
+    assert!(output.status.success(), "pfiles failed: {output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(
         !stdout.contains("ERROR: failed to find info for socket with inode num"),
         "socket metadata lookup failed unexpectedly in target net namespace:
-{}",
-        stdout
+{stdout}"
     );
     assert_contains(&stdout, "sockname: AF_NETLINK");
 }
@@ -671,8 +662,7 @@ fn pfiles_reports_netlink_socket() {
     let expected_without_sockopts = drop_sockopts_line(expected_with_sockopts);
     assert!(
         normalized == expected_with_sockopts || normalized == expected_without_sockopts,
-        "netlink fd did not match expected with/without sockopts:\n{}",
-        normalized
+        "netlink fd did not match expected with/without sockopts:\n{normalized}"
     );
 }
 
@@ -684,7 +674,7 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
         .as_nanos();
     let test_pid = std::process::id();
 
-    let status_path = format!("/tmp/ptools-afalg-status-{}-{}", test_pid, unique);
+    let status_path = format!("/tmp/ptools-afalg-status-{test_pid}-{unique}");
     let status_file = Path::new(&status_path);
 
     if let Err(e) = fs::remove_file(status_file) {
@@ -708,7 +698,7 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
         output.status
     );
     let helper_status = fs::read_to_string(status_file)
-        .unwrap_or_else(|e| panic!("failed to read helper status file {:?}: {}", status_file, e));
+        .unwrap_or_else(|e| panic!("failed to read helper status file {status_file:?}: {e}"));
     if helper_status.trim() == "unsupported" {
         remove_if_exists(status_file);
         eprintln!("skipping test: AF_ALG sockets are not supported by this kernel");
@@ -750,8 +740,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     assert_eq!(
         normalize_dynamic_fields(fd_map.get(&dir_fd).expect("expected cwd directory fd")),
         format!(
-            "S_IFDIR mode:0755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDONLY|O_DIRECTORY\n      {}\n      offset: 0",
-            cwd
+            "S_IFDIR mode:0755 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDONLY|O_DIRECTORY\n      {cwd}\n      offset: 0"
         )
     );
 
@@ -763,17 +752,12 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
             .collect();
         assert!(
             !block_devices.is_empty(),
-            "expected at least one S_IFBLK fd block, output:\n{}",
-            stdout
+            "expected at least one S_IFBLK fd block, output:\n{stdout}"
         );
 
         let block_device = normalize_dynamic_fields(block_devices[0]);
         let lines: Vec<&str> = block_device.lines().collect();
-        assert!(
-            lines.len() >= 4,
-            "Unexpected S_IFBLK block: {}",
-            block_device
-        );
+        assert!(lines.len() >= 4, "Unexpected S_IFBLK block: {block_device}");
         assert_eq!(lines[1], "      O_RDONLY|O_CLOEXEC|O_PATH");
         assert!(lines[2].trim_start().starts_with("/dev/"));
         assert_eq!(lines[3], "      offset: 0");
@@ -849,8 +833,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
     let inotify_lines: Vec<&str> = inotify_block.lines().collect();
     assert!(
         inotify_lines.len() >= 5,
-        "unexpected inotify block:\n{}",
-        inotify_block
+        "unexpected inotify block:\n{inotify_block}"
     );
     assert_eq!(
         inotify_lines[0],
@@ -947,10 +930,10 @@ fn pfiles_matrix_file_and_symlink_paths() {
         .as_nanos();
     let test_pid = std::process::id();
 
-    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-file-{}-{}", test_pid, unique);
+    let matrix_file_path = format!("/tmp/ptools-pfiles-matrix-file-{test_pid}-{unique}");
     let matrix_file_file = Path::new(&matrix_file_path);
 
-    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-link-{}-{}", test_pid, unique);
+    let matrix_link_path = format!("/tmp/ptools-pfiles-matrix-link-{test_pid}-{unique}");
     let matrix_link_file = Path::new(&matrix_link_path);
 
     remove_if_exists(matrix_file_file);
@@ -1023,8 +1006,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
 
     assert!(
         output.status.success(),
-        "socket options harness failed: {:?}",
-        output
+        "socket options harness failed: {output:?}"
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1049,8 +1031,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
             || listen_normalized == listen_without_sockopts
             || listen_normalized == listen_without_congestion
             || listen_normalized == listen_minimal,
-        "listen socket did not match expected with/without sockopts/congestion-control:\n{}",
-        listen_normalized
+        "listen socket did not match expected with/without sockopts/congestion-control:\n{listen_normalized}"
     );
 
     let dgram_fd = find_first_fd_matching(
@@ -1064,8 +1045,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
     let dgram_without_sockopts = drop_sockopts_line(dgram_with_sockopts);
     assert!(
         dgram_normalized == dgram_with_sockopts || dgram_normalized == dgram_without_sockopts,
-        "dgram socket did not match expected with/without sockopts:\n{}",
-        dgram_normalized
+        "dgram socket did not match expected with/without sockopts:\n{dgram_normalized}"
     );
 }
 

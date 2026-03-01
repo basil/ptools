@@ -41,7 +41,7 @@ fn main() {
     ) {
         Ok(fd) => Some(fd),
         Err(Errno::EAFNOSUPPORT | Errno::EPROTONOSUPPORT) => None,
-        Err(e) => panic!("failed to create AF_ALG socket: {}", e),
+        Err(e) => panic!("failed to create AF_ALG socket: {e}"),
     };
     let alg_supported = alg_socket.is_some();
     let _alg_socket = alg_socket;

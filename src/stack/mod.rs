@@ -469,7 +469,7 @@ fn open_thread_or_warn(
     match thread {
         Ok(thread) => Ok(Some(thread)),
         Err(ref e) if e.raw_os_error() == Some(ESRCH) => {
-            handle.push_warning(format!("error attaching to thread {}: {}", tid, e));
+            handle.push_warning(format!("error attaching to thread {tid}: {e}"));
             Ok(None)
         }
         Err(e) => Err(e),
@@ -516,7 +516,7 @@ fn each_thread<F>(pid: u32, mut f: F) -> io::Result<()>
 where
     F: FnMut(u32) -> io::Result<()>,
 {
-    let dir = format!("/proc/{}/task", pid);
+    let dir = format!("/proc/{pid}/task");
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
 
@@ -623,10 +623,7 @@ impl TracedThread {
             }
 
             if !WIFSTOPPED(status) {
-                return Err(io::Error::other(format!(
-                    "unexpected wait status {}",
-                    status
-                )));
+                return Err(io::Error::other(format!("unexpected wait status {status}")));
             }
 
             Ok(thread)
@@ -672,10 +669,7 @@ impl TracedThread {
                 }
 
                 if !WIFSTOPPED(status) {
-                    return Err(io::Error::other(format!(
-                        "unexpected wait status {}",
-                        status
-                    )));
+                    return Err(io::Error::other(format!("unexpected wait status {status}")));
                 }
 
                 let sig = WSTOPSIG(status);

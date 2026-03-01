@@ -43,7 +43,7 @@ fn print_matching_fdinfo_lines(extra_lines: &[String], prefixes: &[&str]) {
         } else {
             line.to_string()
         };
-        println!("      {}", normalized);
+        println!("      {normalized}");
     }
 }
 
@@ -64,14 +64,14 @@ fn file_type_str(ft: &FileType) -> Cow<'static, str> {
         FileType::Posix(PosixFileType::BlockDevice) => "S_IFBLK".into(),
         FileType::Posix(PosixFileType::CharDevice) => "S_IFCHR".into(),
         FileType::Posix(PosixFileType::Fifo) => "S_IFIFO".into(),
-        FileType::Posix(PosixFileType::Unknown(x)) => format!("UNKNOWN_TYPE(mode={})", x).into(),
+        FileType::Posix(PosixFileType::Unknown(x)) => format!("UNKNOWN_TYPE(mode={x})").into(),
         FileType::Anon(AnonFileType::Epoll) => "anon_inode(epoll)".into(),
         FileType::Anon(AnonFileType::EventFd) => "anon_inode(eventfd)".into(),
         FileType::Anon(AnonFileType::SignalFd) => "anon_inode(signalfd)".into(),
         FileType::Anon(AnonFileType::TimerFd) => "anon_inode(timerfd)".into(),
         FileType::Anon(AnonFileType::Inotify) => "anon_inode(inotify)".into(),
         FileType::Anon(AnonFileType::PidFd) => "anon_inode(pidfd)".into(),
-        FileType::Anon(AnonFileType::Unknown(s)) => format!("anon_inode({})", s).into(),
+        FileType::Anon(AnonFileType::Unknown(s)) => format!("anon_inode({s})").into(),
         FileType::Unknown => "UNKNOWN_TYPE".into(),
     }
 }
@@ -121,7 +121,7 @@ fn sock_type_str(st: &SockType) -> Cow<'static, str> {
         SockType::SeqPacket => "SOCK_SEQPACKET".into(),
         SockType::Dccp => "SOCK_DCCP".into(),
         SockType::Packet => "SOCK_PACKET".into(),
-        SockType::Unknown(n) => format!("SOCK_TYPE_UNKNOWN_{}", n).into(),
+        SockType::Unknown(n) => format!("SOCK_TYPE_UNKNOWN_{n}").into(),
     }
 }
 
@@ -139,7 +139,7 @@ fn tcp_state_str(state: &TcpState) -> Cow<'static, str> {
         TcpState::Listen => "TCP_LISTEN".into(),
         TcpState::Closing => "TCP_CLOSING".into(),
         TcpState::NewSynRecv => "TCP_NEW_SYN_RECV".into(),
-        TcpState::Unknown(n) => format!("TCP_UNKNOWN_{:02X}", n).into(),
+        TcpState::Unknown(n) => format!("TCP_UNKNOWN_{n:02X}").into(),
     }
 }
 
@@ -228,14 +228,11 @@ fn print_tcp_info(info: &libc::tcp_info) {
     } else {
         info.tcpi_snd_rcv_wscale & 0x0f
     };
-    println!(
-        "        snd_wscale: {}  rcv_wscale: {}",
-        snd_wscale, rcv_wscale,
-    );
+    println!("        snd_wscale: {snd_wscale}  rcv_wscale: {rcv_wscale}",);
 
     let rtt_ms = info.tcpi_rtt as f64 / 1000.0;
     let rttvar_ms = info.tcpi_rttvar as f64 / 1000.0;
-    println!("        rtt: {:.3}ms  rttvar: {:.3}ms", rtt_ms, rttvar_ms,);
+    println!("        rtt: {rtt_ms:.3}ms  rttvar: {rttvar_ms:.3}ms",);
 
     println!(
         "        snd_mss: {}  rcv_mss: {}  advmss: {}  pmtu: {}",
@@ -266,10 +263,10 @@ fn format_socket_options(opts: &SocketOptions) -> String {
         parts.push("SO_OOBINLINE".to_string());
     }
     if let Some(sndbuf) = opts.snd_buf {
-        parts.push(format!("SO_SNDBUF({})", sndbuf));
+        parts.push(format!("SO_SNDBUF({sndbuf})"));
     }
     if let Some(rcvbuf) = opts.rcv_buf {
-        parts.push(format!("SO_RCVBUF({})", rcvbuf));
+        parts.push(format!("SO_RCVBUF({rcvbuf})"));
     }
     parts.join(",")
 }
@@ -289,7 +286,7 @@ fn print_peername(sock: &Socket) {
 
 fn print_tcp_details(sock: &Socket) {
     if let Some(ref cc) = sock.congestion_control {
-        println!("        congestion control: {}", cc);
+        println!("        congestion control: {cc}");
     }
 
     if let Some(ref state) = sock.tcp_state {
@@ -298,7 +295,7 @@ fn print_tcp_details(sock: &Socket) {
 
     if let (Some(tx), Some(rx)) = (sock.tx_queue, sock.rx_queue) {
         if tx > 0 || rx > 0 {
-            println!("        tx_queue: {}  rx_queue: {}", tx, rx);
+            println!("        tx_queue: {tx}  rx_queue: {rx}");
         }
     }
 
@@ -365,7 +362,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
                     println!("        {}", sock_type_str(&sock.sock_type));
                     let opts = format_socket_options(&sock.options);
                     if !opts.is_empty() {
-                        println!("        {}", opts);
+                        println!("        {opts}");
                     }
                     print_sockname(sock);
                     print_peername(sock);
@@ -437,16 +434,16 @@ fn print_epoll_fdinfo(extra_lines: &[String]) {
 
         print!("      epoll");
         if let Some(tfd) = tfd {
-            print!(" tfd: {}", tfd);
+            print!(" tfd: {tfd}");
         }
         if let Some(events) = events {
-            print!(" events: {}", events);
+            print!(" events: {events}");
         }
         if let Some(data) = data {
-            print!(" data: {}", data);
+            print!(" data: {data}");
         }
         if let Some(ino) = ino {
-            print!(" ino: {}", ino);
+            print!(" ino: {ino}");
         }
         println!();
     }
@@ -464,15 +461,15 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> std::io::Result<()> {
             };
             println!("  Current rlimit: {} file descriptors", fmt(limit.soft));
         }
-        Err(e) => eprintln!("pfiles: failed to read RLIMIT_NOFILE for {}: {}", pid, e),
+        Err(e) => eprintln!("pfiles: failed to read RLIMIT_NOFILE for {pid}: {e}"),
     }
     match handle.umask() {
-        Ok(umask) => println!("  Current umask: {:03o}", umask),
-        Err(e) => eprintln!("pfiles: failed to read umask for {}: {}", pid, e),
+        Ok(umask) => println!("  Current umask: {umask:03o}"),
+        Err(e) => eprintln!("pfiles: failed to read umask for {pid}: {e}"),
     }
 
     let file_descs = handle.file_descriptors().map_err(|e| {
-        eprintln!("pfiles: unable to read /proc/{}/fd/: {}", pid, e);
+        eprintln!("pfiles: unable to read /proc/{pid}/fd/: {e}");
         e
     })?;
 

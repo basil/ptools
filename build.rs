@@ -121,7 +121,7 @@ fn render_man_page(page: &ManPage, out_dir: &Path) {
     roff.text([bold(page.name), roman(format!(" {}", synopses[0]))]);
     for syn in &synopses[1..] {
         roff.control("br", [] as [&str; 0]);
-        roff.text([bold(page.name), roman(format!(" {}", syn))]);
+        roff.text([bold(page.name), roman(format!(" {syn}"))]);
     }
     roff.control("SH", ["DESCRIPTION"]);
     roff.text([roman(page.description)]);

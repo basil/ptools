@@ -147,7 +147,7 @@ fn parse_word(chunk: &[u8], word_size: usize) -> io::Result<u64> {
         }
         n => Err(super::parse_error(
             "auxv",
-            &format!("unsupported word size {}", n),
+            &format!("unsupported word size {n}"),
         )),
     }
 }

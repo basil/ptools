@@ -63,7 +63,7 @@ impl Error {
             let s = crate::dw_sys::dwfl_errmsg(self.code);
             if s.is_null() {
                 if let Some(ref os_error) = self.os_error {
-                    return format!("{}", os_error).into();
+                    return format!("{os_error}").into();
                 }
                 "unknown error".into()
             } else {

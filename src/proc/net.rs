@@ -115,7 +115,7 @@ fn parse_ipv4_sock_addr(s: &str) -> io::Result<SocketAddr> {
     let mk_err = || {
         super::parse_error(
             "IPv4 address",
-            &format!("expected address in form '0100007F:1538', got {}", s),
+            &format!("expected address in form '0100007F:1538', got {s}"),
         )
     };
 
@@ -141,10 +141,7 @@ fn parse_ipv6_sock_addr(s: &str) -> io::Result<SocketAddr> {
     let mk_err = || {
         super::parse_error(
             "IPv6 address",
-            &format!(
-                "expected address in form '00000000000000000000000001000000:1538', got {}",
-                s
-            ),
+            &format!("expected address in form '00000000000000000000000001000000:1538', got {s}"),
         )
     };
 
@@ -480,7 +477,7 @@ pub(crate) fn query_socket_details(pid: u64, fd: u64) -> Option<SocketDetails> {
 // -- Peer process resolution --------------------------------------------------
 
 pub(crate) fn read_comm(pid: u64) -> Option<String> {
-    std::fs::read_to_string(format!("/proc/{}/comm", pid))
+    std::fs::read_to_string(format!("/proc/{pid}/comm"))
         .ok()
         .map(|comm| comm.trim_end().to_string())
 }
@@ -491,8 +488,7 @@ fn list_socket_owners(warnings: &mut Vec<String>) -> HashMap<u64, std::collectio
         Ok(entries) => entries,
         Err(e) => {
             warnings.push(format!(
-                "failed to read /proc for socket ownership lookup: {}",
-                e
+                "failed to read /proc for socket ownership lookup: {e}"
             ));
             return owners;
         }
@@ -504,7 +500,7 @@ fn list_socket_owners(warnings: &mut Vec<String>) -> HashMap<u64, std::collectio
             Err(_) => continue,
         };
 
-        let fd_dir = format!("/proc/{}/fd", pid);
+        let fd_dir = format!("/proc/{pid}/fd");
         let Ok(fd_entries) = std::fs::read_dir(fd_dir) else {
             continue;
         };

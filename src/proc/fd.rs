@@ -132,7 +132,7 @@ pub(crate) fn parse_socket_inode(link_text: &str) -> Option<u64> {
 
 /// Read `system.sockprotoname` xattr from `/proc/[pid]/fd/[fd]`.
 pub(crate) fn get_sockprotoname(pid: u64, fd: u64, warnings: &mut Vec<String>) -> Option<String> {
-    let path = std::ffi::CString::new(format!("/proc/{}/fd/{}", pid, fd)).ok()?;
+    let path = std::ffi::CString::new(format!("/proc/{pid}/fd/{fd}")).ok()?;
     let name = std::ffi::CString::new("system.sockprotoname").ok()?;
 
     let size =
@@ -173,8 +173,7 @@ fn handle_sockprotoname_xattr_error(pid: u64, fd: u64) -> Option<String> {
     match Errno::last() {
         Errno::ENODATA | Errno::EOPNOTSUPP | Errno::ENOENT | Errno::EPERM | Errno::EACCES => None,
         errno => Some(format!(
-            "failed to read system.sockprotoname xattr for /proc/{}/fd/{}: {}",
-            pid, fd, errno
+            "failed to read system.sockprotoname xattr for /proc/{pid}/fd/{fd}: {errno}"
         )),
     }
 }
@@ -200,7 +199,7 @@ pub fn address_family_from_sockprotoname(
 
 /// Call `stat(2)` on `/proc/[pid]/fd/[fd]`.
 pub(crate) fn stat_fd(pid: u64, fd: u64) -> std::io::Result<FileStat> {
-    let path = format!("/proc/{}/fd/{}", pid, fd);
+    let path = format!("/proc/{pid}/fd/{fd}");
     stat(path.as_str()).map_err(Into::into)
 }
 

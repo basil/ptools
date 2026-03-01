@@ -58,9 +58,9 @@ impl ReadySignal {
             .as_nanos();
         let test_pid = std::process::id();
 
-        let ready_path = format!("/tmp/ptools-test-ready-{}-{}", test_pid, unique);
+        let ready_path = format!("/tmp/ptools-test-ready-{test_pid}-{unique}");
         let child_ready_path = wait_for_child_ready
-            .then(|| format!("/tmp/ptools-test-ready-child-{}-{}", test_pid, unique));
+            .then(|| format!("/tmp/ptools-test-ready-child-{test_pid}-{unique}"));
 
         remove_if_exists(std::path::Path::new(&ready_path));
         if let Some(path) = child_ready_path.as_ref() {
@@ -93,7 +93,7 @@ impl ReadySignal {
         let child_ready_file = self.child_ready_path.as_ref().map(std::path::Path::new);
         while !(ready_file.exists() && child_ready_file.map(|p| p.exists()).unwrap_or(true)) {
             if let Some(status) = child.try_wait().expect("failed waiting for child") {
-                panic!("Child exited too soon with status {}", status);
+                panic!("Child exited too soon with status {status}");
             }
             thread::sleep(Duration::from_millis(5));
         }

@@ -286,11 +286,11 @@ impl ProcHandle {
                 offset = Some(
                     val.trim()
                         .parse::<u64>()
-                        .map_err(|e| file_parse_error("fdinfo", &format!("invalid pos: {}", e)))?,
+                        .map_err(|e| file_parse_error("fdinfo", &format!("invalid pos: {e}")))?,
                 );
             } else if let Some(val) = line.strip_prefix("flags:") {
                 let raw = i32::from_str_radix(val.trim(), 8)
-                    .map_err(|e| file_parse_error("fdinfo", &format!("invalid flags: {}", e)))?;
+                    .map_err(|e| file_parse_error("fdinfo", &format!("invalid flags: {e}")))?;
                 flags = Some(OFlag::from_bits_truncate(raw));
             } else if let Some(val) = line.strip_prefix("mnt_id:") {
                 mnt_id = val.trim().parse::<u64>().ok();
@@ -340,7 +340,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("stat", "missing utime field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid utime: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid utime: {e}")))
     }
 
     /// System CPU time in clock ticks (field 15 of /proc/[pid]/stat).
@@ -357,7 +357,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("stat", "missing stime field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid stime: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid stime: {e}")))
     }
 
     /// Process group ID (field 5 of /proc/[pid]/stat).
@@ -374,7 +374,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("stat", "missing pgrp field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid pgrp: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid pgrp: {e}")))
     }
 
     /// Session ID (field 6 of /proc/[pid]/stat).
@@ -391,7 +391,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("stat", "missing session field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid session: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid session: {e}")))
     }
 
     /// Nice value (field 19 of /proc/[pid]/stat).
@@ -410,7 +410,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("stat", "missing nice field"))?;
         field
             .parse::<i32>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid nice: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid nice: {e}")))
     }
 
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
@@ -427,7 +427,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("stat", "missing starttime field"))?;
         field
             .parse::<u64>()
-            .map_err(|e| file_parse_error("stat", &format!("invalid starttime: {}", e)))
+            .map_err(|e| file_parse_error("stat", &format!("invalid starttime: {e}")))
     }
 
     // -- Parsed from /proc/[pid]/status ------------------------------
@@ -439,7 +439,7 @@ impl ProcHandle {
                 return val
                     .trim()
                     .parse::<u64>()
-                    .map_err(|e| file_parse_error("status", &format!("invalid PPid: {}", e)));
+                    .map_err(|e| file_parse_error("status", &format!("invalid PPid: {e}")));
             }
         }
         Err(file_parse_error("status", "missing PPid"))
@@ -455,7 +455,7 @@ impl ProcHandle {
                 }
                 return fields[1]
                     .parse::<u32>()
-                    .map_err(|e| file_parse_error("status", &format!("invalid euid: {}", e)));
+                    .map_err(|e| file_parse_error("status", &format!("invalid euid: {e}")));
             }
         }
         Err(file_parse_error("status", "missing Uid"))
@@ -466,7 +466,7 @@ impl ProcHandle {
         for line in status.lines() {
             if let Some(val) = line.strip_prefix("Umask:") {
                 return u32::from_str_radix(val.trim(), 8)
-                    .map_err(|e| file_parse_error("status", &format!("invalid Umask: {}", e)));
+                    .map_err(|e| file_parse_error("status", &format!("invalid Umask: {e}")));
             }
         }
         Err(file_parse_error("status", "missing Umask"))
@@ -480,7 +480,7 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("status", "missing Threads"))?;
         val.trim()
             .parse::<usize>()
-            .map_err(|e| file_parse_error("status", &format!("invalid Threads: {}", e)))
+            .map_err(|e| file_parse_error("status", &format!("invalid Threads: {e}")))
     }
 
     pub fn cred(&self) -> io::Result<ProcCred> {
@@ -520,7 +520,7 @@ impl ProcHandle {
 
         let parse = |name: &str, hex: &str| -> io::Result<BTreeSet<usize>> {
             parse_signal_set(hex)
-                .map_err(|e| file_parse_error("status", &format!("invalid {}: {}", name, e)))
+                .map_err(|e| file_parse_error("status", &format!("invalid {name}: {e}")))
         };
 
         let ignored = parse("SigIgn", &sig_ign_hex)?;
@@ -619,7 +619,7 @@ impl ProcHandle {
             .get(36)
             .ok_or_else(|| file_parse_error("task/stat", "missing processor field"))?;
         val.parse::<u32>()
-            .map_err(|e| file_parse_error("task/stat", &format!("invalid processor: {}", e)))
+            .map_err(|e| file_parse_error("task/stat", &format!("invalid processor: {e}")))
     }
 
     /// Cpus_allowed_list from a thread's status, as a `BTreeSet<u32>`.
@@ -684,17 +684,17 @@ impl ProcHandle {
             .next()
             .ok_or_else(|| file_parse_error("schedstat", "missing run_time field"))?
             .parse::<u64>()
-            .map_err(|e| file_parse_error("schedstat", &format!("invalid run_time: {}", e)))?;
+            .map_err(|e| file_parse_error("schedstat", &format!("invalid run_time: {e}")))?;
         let wait_time_ns = fields
             .next()
             .ok_or_else(|| file_parse_error("schedstat", "missing wait_time field"))?
             .parse::<u64>()
-            .map_err(|e| file_parse_error("schedstat", &format!("invalid wait_time: {}", e)))?;
+            .map_err(|e| file_parse_error("schedstat", &format!("invalid wait_time: {e}")))?;
         let timeslices = fields
             .next()
             .ok_or_else(|| file_parse_error("schedstat", "missing timeslices field"))?
             .parse::<u64>()
-            .map_err(|e| file_parse_error("schedstat", &format!("invalid timeslices: {}", e)))?;
+            .map_err(|e| file_parse_error("schedstat", &format!("invalid timeslices: {e}")))?;
         Ok(SchedStat {
             run_time_ns,
             wait_time_ns,
@@ -903,10 +903,10 @@ fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
     if let Some((pid_str, tid_str)) = s.split_once('/') {
         let pid = pid_str
             .parse::<u64>()
-            .map_err(|e| io::Error::other(format!("Error parsing PID '{}': {}", pid_str, e)))?;
-        let tid = tid_str.parse::<u64>().map_err(|e| {
-            io::Error::other(format!("Error parsing thread ID '{}': {}", tid_str, e))
-        })?;
+            .map_err(|e| io::Error::other(format!("Error parsing PID '{pid_str}': {e}")))?;
+        let tid = tid_str
+            .parse::<u64>()
+            .map_err(|e| io::Error::other(format!("Error parsing thread ID '{tid_str}': {e}")))?;
         if pid == 0 {
             return Err(io::Error::other("PID must be >= 1".to_string()));
         }
@@ -917,7 +917,7 @@ fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
     } else {
         let pid = s
             .parse::<u64>()
-            .map_err(|e| io::Error::other(format!("Error parsing PID '{}': {}", s, e)))?;
+            .map_err(|e| io::Error::other(format!("Error parsing PID '{s}': {e}")))?;
         if pid == 0 {
             return Err(io::Error::other("PID must be >= 1".to_string()));
         }
@@ -978,9 +978,9 @@ pub fn resolve_operand_with_tid(arg: &str) -> io::Result<(ProcHandle, Option<u64
 }
 
 fn parse_error(item: &str, reason: &str) -> io::Error {
-    io::Error::other(format!("Error parsing {}: {}", item, reason))
+    io::Error::other(format!("Error parsing {item}: {reason}"))
 }
 
 fn file_parse_error(file: &str, reason: &str) -> io::Error {
-    io::Error::other(format!("Error parsing /proc/[pid]/{}: {}", file, reason))
+    io::Error::other(format!("Error parsing /proc/[pid]/{file}: {reason}"))
 }

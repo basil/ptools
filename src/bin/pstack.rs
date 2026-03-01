@@ -115,7 +115,7 @@ fn print_stack(
         // Single thread requested: push the filter into the backend so it only
         // attaches to (and unwinds) this one TID instead of every thread.
         opts.tid(tid as u32);
-        print!("{}:\t", tid);
+        print!("{tid}:\t");
         ptools::display::print_cmd_summary_from(handle);
         opts.trace_each(handle, |thread| {
             print_thread(&thread, Some(tid), args.max_frames, false, &first_thread);

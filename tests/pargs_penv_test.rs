@@ -54,20 +54,14 @@ fn pargs_matches_started_process_arguments() {
     for arg in expected_args {
         let expected_line = arg.to_string();
         if !stdout.contains(&expected_line) {
-            panic!(
-                "Argument '{}' not found in pargs output:\n\n{}\n\n",
-                arg, stdout
-            );
+            panic!("Argument '{arg}' not found in pargs output:\n\n{stdout}\n\n");
         }
     }
 
     for (i, arg) in expected_args.iter().enumerate() {
         let expected_line = format!("argv[{}]: {}", i + 1, arg);
         if !stdout.contains(&expected_line) {
-            panic!(
-                "Expected line '{}' not found in pargs output:\n\n{}\n\n",
-                expected_line, stdout
-            );
+            panic!("Expected line '{expected_line}' not found in pargs output:\n\n{stdout}\n\n");
         }
     }
 }
@@ -97,8 +91,7 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
     assert_eq!(
         lines.next(),
         None,
-        "Expected a single command-line output line, got:\n\n{}\n\n",
-        stdout
+        "Expected a single command-line output line, got:\n\n{stdout}\n\n"
     );
 
     // pargs -l resolves argv[0] to the real executable path via /proc/[pid]/exe,
@@ -134,11 +127,10 @@ fn penv_matches_started_process_environment() {
     let stdout = common::assert_success_and_get_stdout(output);
 
     for (key, value) in expected_env {
-        let expected_line = format!("{}={}", key, value);
+        let expected_line = format!("{key}={value}");
         if !stdout.contains(&expected_line) {
             panic!(
-                "Environment variable '{}' not found in penv output:\n\n{}\n\n",
-                expected_line, stdout
+                "Environment variable '{expected_line}' not found in penv output:\n\n{stdout}\n\n"
             );
         }
     }
@@ -164,11 +156,10 @@ fn pargs_e_alias_matches_started_process_environment() {
     let stdout = common::assert_success_and_get_stdout(output);
 
     for (key, value) in expected_env {
-        let expected_line = format!("{}={}", key, value);
+        let expected_line = format!("{key}={value}");
         if !stdout.contains(&expected_line) {
             panic!(
-                "Environment variable '{}' not found in pargs -e output:\n\n{}\n\n",
-                expected_line, stdout
+                "Environment variable '{expected_line}' not found in pargs -e output:\n\n{stdout}\n\n"
             );
         }
     }
@@ -181,13 +172,11 @@ fn pauxv_prints_auxv_entries() {
 
     assert!(
         !stdout.contains("argv["),
-        "pauxv should not print argv lines:\n\n{}\n\n",
-        stdout
+        "pauxv should not print argv lines:\n\n{stdout}\n\n"
     );
     assert!(
         !stdout.contains("envp["),
-        "pauxv should not print env lines:\n\n{}\n\n",
-        stdout
+        "pauxv should not print env lines:\n\n{stdout}\n\n"
     );
 
     let mut saw_auxv_line = false;
@@ -201,33 +190,28 @@ fn pauxv_prints_auxv_entries() {
         let value = parts.next().unwrap_or("");
         assert!(
             value.starts_with("0x") && (value.len() == 10 || value.len() == 18),
-            "Expected auxv value to be fixed-width hex, got '{}' in line '{}'",
-            value,
-            line
+            "Expected auxv value to be fixed-width hex, got '{value}' in line '{line}'"
         );
     }
 
     assert!(
         saw_auxv_line,
-        "Expected at least one auxv AT_* line:\n\n{}\n\n",
-        stdout
+        "Expected at least one auxv AT_* line:\n\n{stdout}\n\n"
     );
     let pagesz_line = stdout
         .lines()
         .find(|line| line.starts_with("AT_PAGESZ"))
-        .unwrap_or_else(|| panic!("Expected AT_PAGESZ in pauxv output:\n\n{}\n\n", stdout));
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ in pauxv output:\n\n{stdout}\n\n"));
     let pagesz_hex = pagesz_line
         .split_whitespace()
         .nth(1)
-        .unwrap_or_else(|| panic!("Expected AT_PAGESZ value in line '{}'", pagesz_line));
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ value in line '{pagesz_line}'"));
     let pagesz = u64::from_str_radix(pagesz_hex.trim_start_matches("0x"), 16)
-        .unwrap_or_else(|_| panic!("Expected AT_PAGESZ hex value, got '{}'", pagesz_hex));
+        .unwrap_or_else(|_| panic!("Expected AT_PAGESZ hex value, got '{pagesz_hex}'"));
     let allowed_page_sizes = [0x1000_u64, 0x4000_u64, 0x10000_u64];
     assert!(
         allowed_page_sizes.contains(&pagesz),
-        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?}",
-        pagesz,
-        allowed_page_sizes
+        "Unexpected AT_PAGESZ value 0x{pagesz:x}; expected one of {allowed_page_sizes:?}"
     );
 
     // AT_EXECFN should show the dereferenced string (an absolute path) when
@@ -237,7 +221,7 @@ fn pauxv_prints_auxv_entries() {
     let execfn_line = stdout
         .lines()
         .find(|line| line.starts_with("AT_EXECFN"))
-        .unwrap_or_else(|| panic!("Expected AT_EXECFN in pauxv output:\n\n{}\n\n", stdout));
+        .unwrap_or_else(|| panic!("Expected AT_EXECFN in pauxv output:\n\n{stdout}\n\n"));
     let execfn_tokens: Vec<&str> = execfn_line.split_whitespace().collect();
     if execfn_tokens.len() >= 3 {
         assert!(
@@ -274,13 +258,11 @@ fn pargs_x_alias_matches_pauxv_output() {
     // Both should contain AT_PAGESZ
     assert!(
         pauxv_stdout.contains("AT_PAGESZ"),
-        "pauxv should contain AT_PAGESZ:\n\n{}\n\n",
-        pauxv_stdout
+        "pauxv should contain AT_PAGESZ:\n\n{pauxv_stdout}\n\n"
     );
     assert!(
         pargs_stdout.contains("AT_PAGESZ"),
-        "pargs -x should contain AT_PAGESZ:\n\n{}\n\n",
-        pargs_stdout
+        "pargs -x should contain AT_PAGESZ:\n\n{pargs_stdout}\n\n"
     );
 
     // Both should have the same set of AT_* keys
@@ -307,13 +289,11 @@ fn pargs_x_prints_auxv_entries() {
 
     assert!(
         !stdout.contains("argv["),
-        "pargs -x should not print argv lines:\n\n{}\n\n",
-        stdout
+        "pargs -x should not print argv lines:\n\n{stdout}\n\n"
     );
     assert!(
         !stdout.contains("envp["),
-        "pargs -x should not print env lines:\n\n{}\n\n",
-        stdout
+        "pargs -x should not print env lines:\n\n{stdout}\n\n"
     );
 
     let mut saw_auxv_line = false;
@@ -327,33 +307,28 @@ fn pargs_x_prints_auxv_entries() {
         let value = parts.next().unwrap_or("");
         assert!(
             value.starts_with("0x") && (value.len() == 10 || value.len() == 18),
-            "Expected auxv value to be fixed-width hex, got '{}' in line '{}'",
-            value,
-            line
+            "Expected auxv value to be fixed-width hex, got '{value}' in line '{line}'"
         );
     }
 
     assert!(
         saw_auxv_line,
-        "Expected at least one auxv AT_* line:\n\n{}\n\n",
-        stdout
+        "Expected at least one auxv AT_* line:\n\n{stdout}\n\n"
     );
     let pagesz_line = stdout
         .lines()
         .find(|line| line.starts_with("AT_PAGESZ"))
-        .unwrap_or_else(|| panic!("Expected AT_PAGESZ in pargs -x output:\n\n{}\n\n", stdout));
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ in pargs -x output:\n\n{stdout}\n\n"));
     let pagesz_hex = pagesz_line
         .split_whitespace()
         .nth(1)
-        .unwrap_or_else(|| panic!("Expected AT_PAGESZ value in line '{}'", pagesz_line));
+        .unwrap_or_else(|| panic!("Expected AT_PAGESZ value in line '{pagesz_line}'"));
     let pagesz = u64::from_str_radix(pagesz_hex.trim_start_matches("0x"), 16)
-        .unwrap_or_else(|_| panic!("Expected AT_PAGESZ hex value, got '{}'", pagesz_hex));
+        .unwrap_or_else(|_| panic!("Expected AT_PAGESZ hex value, got '{pagesz_hex}'"));
     let allowed_page_sizes = [0x1000_u64, 0x4000_u64, 0x10000_u64];
     assert!(
         allowed_page_sizes.contains(&pagesz),
-        "Unexpected AT_PAGESZ value 0x{:x}; expected one of {:?}",
-        pagesz,
-        allowed_page_sizes
+        "Unexpected AT_PAGESZ value 0x{pagesz:x}; expected one of {allowed_page_sizes:?}"
     );
 
     // AT_EXECFN should show the dereferenced string (an absolute path) when
@@ -363,7 +338,7 @@ fn pargs_x_prints_auxv_entries() {
     let execfn_line = stdout
         .lines()
         .find(|line| line.starts_with("AT_EXECFN"))
-        .unwrap_or_else(|| panic!("Expected AT_EXECFN in pargs -x output:\n\n{}\n\n", stdout));
+        .unwrap_or_else(|| panic!("Expected AT_EXECFN in pargs -x output:\n\n{stdout}\n\n"));
     let execfn_tokens: Vec<&str> = execfn_line.split_whitespace().collect();
     if execfn_tokens.len() >= 3 {
         assert!(
