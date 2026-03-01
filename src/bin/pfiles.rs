@@ -459,11 +459,7 @@ fn print_files(handle: &ProcHandle, non_verbose: bool) -> std::io::Result<()> {
     ptools::display::print_proc_summary_from(handle);
     match handle.nofile_limit() {
         Ok(limit) => {
-            let fmt = |v: ptools::proc::RlimitVal| match v {
-                Some(n) => n.to_string(),
-                None => "unlimited".into(),
-            };
-            println!("  Current rlimit: {} file descriptors", fmt(limit.soft));
+            println!("  Current rlimit: {} file descriptors", limit.soft);
         }
         Err(e) => eprintln!("pfiles: failed to read RLIMIT_NOFILE for {pid}: {e}"),
     }

@@ -327,9 +327,9 @@ impl ProcSource for CoredumpSource {
         Ok(PathBuf::from(exe))
     }
 
-    fn read_limits(&self) -> io::Result<String> {
-        self.get_field_str("COREDUMP_PROC_LIMITS")
-            .map(str::to_string)
+    fn read_limits(&self) -> io::Result<model::limits::Limits> {
+        let text = self.get_field_str("COREDUMP_PROC_LIMITS")?;
+        model::limits::Limits::from_buf_read(text.as_bytes())
     }
 
     fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat> {

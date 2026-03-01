@@ -16,6 +16,7 @@
 
 pub mod auxv;
 pub mod fdinfo;
+pub mod limits;
 pub mod schedstat;
 
 use std::fs::File;

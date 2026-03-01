@@ -27,6 +27,7 @@
 //!   pre-parsed through the proc-handle API.
 
 use std::borrow::Cow;
+use std::fmt;
 use std::io;
 
 use nix::unistd::sysconf;
@@ -37,7 +38,17 @@ use nix::unistd::Uid;
 use nix::unistd::User;
 
 use crate::model::auxv::AuxvType;
+use crate::model::limits::LimitValue;
 use crate::proc::ProcHandle;
+
+impl fmt::Display for LimitValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LimitValue::Unlimited => f.write_str("unlimited"),
+            LimitValue::Value(v) => write!(f, "{v}"),
+        }
+    }
+}
 
 fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
     match key {

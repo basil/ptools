@@ -16,9 +16,10 @@
 
 use std::process::exit;
 
+use nix::sys::resource::Resource;
+use ptools::model::limits::Limit;
+use ptools::model::limits::LimitValue;
 use ptools::proc::ProcHandle;
-use ptools::proc::ResourceLimit;
-use ptools::proc::RlimitVal;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum UnitMode {
@@ -99,54 +100,49 @@ fn display_unit(kernel_unit: &str, mode: UnitMode) -> &str {
     }
 }
 
-fn convert_value(val: RlimitVal, kernel_unit: &str, mode: UnitMode) -> RlimitVal {
-    val.map(|v| match (kernel_unit, mode) {
-        ("bytes", UnitMode::Kbytes) => v / 1024,
-        ("bytes", UnitMode::Mbytes) => v / 1_048_576,
-        _ => v,
-    })
-}
-
-fn fmt_val(val: RlimitVal) -> String {
+fn convert_value(val: LimitValue, kernel_unit: Option<&str>, mode: UnitMode) -> LimitValue {
     match val {
-        None => "unlimited".to_string(),
-        Some(v) => v.to_string(),
+        LimitValue::Value(v) => LimitValue::Value(match (kernel_unit, mode) {
+            (Some("bytes"), UnitMode::Kbytes) => v / 1024,
+            (Some("bytes"), UnitMode::Mbytes) => v / 1_048_576,
+            _ => v,
+        }),
+        LimitValue::Unlimited => LimitValue::Unlimited,
     }
 }
 
-fn display_name(kernel_name: &str) -> &str {
-    match kernel_name {
-        "Max cpu time" => "time",
-        "Max file size" => "file",
-        "Max data size" => "data",
-        "Max stack size" => "stack",
-        "Max core file size" => "coredump",
-        "Max open files" => "nofiles",
-        "Max address space" => "vmemory",
-        "Max resident set" => "rss",
-        "Max processes" => "nproc",
-        "Max locked memory" => "memlock",
-        "Max file locks" => "locks",
-        "Max pending signals" => "sigpending",
-        "Max msgqueue size" => "msgqueue",
-        "Max nice priority" => "nice",
-        "Max realtime priority" => "rtprio",
-        "Max realtime timeout" => "rttime",
-        other => other,
+fn display_name(resource: Resource) -> &'static str {
+    match resource {
+        Resource::RLIMIT_CPU => "time",
+        Resource::RLIMIT_FSIZE => "file",
+        Resource::RLIMIT_DATA => "data",
+        Resource::RLIMIT_STACK => "stack",
+        Resource::RLIMIT_CORE => "coredump",
+        Resource::RLIMIT_NOFILE => "nofiles",
+        Resource::RLIMIT_AS => "vmemory",
+        Resource::RLIMIT_RSS => "rss",
+        Resource::RLIMIT_NPROC => "nproc",
+        Resource::RLIMIT_MEMLOCK => "memlock",
+        Resource::RLIMIT_LOCKS => "locks",
+        Resource::RLIMIT_SIGPENDING => "sigpending",
+        Resource::RLIMIT_MSGQUEUE => "msgqueue",
+        Resource::RLIMIT_NICE => "nice",
+        Resource::RLIMIT_RTPRIO => "rtprio",
+        Resource::RLIMIT_RTTIME => "rttime",
+        _ => "unknown",
     }
 }
 
-fn format_row(rl: &ResourceLimit, mode: UnitMode) -> (String, String, String) {
-    let name = display_name(&rl.name);
-    let unit = display_unit(&rl.unit, mode);
-    let label = if unit.is_empty() {
-        name.to_string()
-    } else {
-        format!("{name} ({unit})")
+fn format_row(resource: Resource, limit: &Limit, mode: UnitMode) -> (String, String, String) {
+    let name = display_name(resource);
+    let unit = limit.unit.as_deref().map(|u| display_unit(u, mode));
+    let label = match unit {
+        Some(u) if !u.is_empty() => format!("{name} ({u})"),
+        _ => name.to_string(),
     };
-    let soft = convert_value(rl.soft, &rl.unit, mode);
-    let hard = convert_value(rl.hard, &rl.unit, mode);
-    (label, fmt_val(soft), fmt_val(hard))
+    let soft = convert_value(limit.soft, limit.unit.as_deref(), mode);
+    let hard = convert_value(limit.hard, limit.unit.as_deref(), mode);
+    (label, soft.to_string(), hard.to_string())
 }
 
 fn print_limits(handle: &ProcHandle, mode: UnitMode) -> std::io::Result<()> {
@@ -155,8 +151,10 @@ fn print_limits(handle: &ProcHandle, mode: UnitMode) -> std::io::Result<()> {
         e
     })?;
 
-    let rows: Vec<(String, String, String)> =
-        limits.iter().map(|rl| format_row(rl, mode)).collect();
+    let rows: Vec<(String, String, String)> = limits
+        .iter()
+        .map(|(resource, limit)| format_row(resource, limit, mode))
+        .collect();
 
     // Compute column widths from header labels and data.
     let res_w = rows

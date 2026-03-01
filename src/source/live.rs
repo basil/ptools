@@ -47,7 +47,7 @@ pub(super) struct LiveProcess {
     environ: OnceCell<Vec<u8>>,
     auxv: OnceCell<model::auxv::Auxv>,
     exe: OnceCell<PathBuf>,
-    limits: OnceCell<String>,
+    limits: OnceCell<model::limits::Limits>,
     schedstat: OnceCell<model::schedstat::SchedStat>,
     tids: OnceCell<Vec<u64>>,
     fds: OnceCell<Vec<u64>>,
@@ -181,11 +181,12 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn read_limits(&self) -> io::Result<String> {
+    fn read_limits(&self) -> io::Result<model::limits::Limits> {
         if let Some(val) = self.limits.get() {
             return Ok(val.clone());
         }
-        let val = std::fs::read_to_string(format!("/proc/{}/limits", self.pid))?;
+        let path = format!("/proc/{}/limits", self.pid);
+        let val = model::limits::Limits::from_file(&path)?;
         let _ = self.limits.set(val.clone());
         Ok(val)
     }
