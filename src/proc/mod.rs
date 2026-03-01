@@ -167,51 +167,58 @@ impl ProcHandle {
 
     /// Process state parsed from `/proc/[pid]/stat`.
     pub fn state(&self) -> io::Result<model::stat::ProcState> {
-        let stat = self.source.read_stat()?;
-        stat.state
-            .ok_or_else(|| file_parse_error("stat", "empty state field"))
+        self.source
+            .read_stat()?
+            .state
+            .ok_or_else(|| unsupported("stat", "state"))
     }
 
     /// User CPU time in clock ticks (field 14 of /proc/[pid]/stat).
     pub fn utime(&self) -> io::Result<u64> {
-        let stat = self.source.read_stat()?;
-        stat.utime
-            .ok_or_else(|| file_parse_error("stat", "missing utime field"))
+        self.source
+            .read_stat()?
+            .utime
+            .ok_or_else(|| unsupported("stat", "utime"))
     }
 
     /// System CPU time in clock ticks (field 15 of /proc/[pid]/stat).
     pub fn stime(&self) -> io::Result<u64> {
-        let stat = self.source.read_stat()?;
-        stat.stime
-            .ok_or_else(|| file_parse_error("stat", "missing stime field"))
+        self.source
+            .read_stat()?
+            .stime
+            .ok_or_else(|| unsupported("stat", "stime"))
     }
 
     /// Process group ID (field 5 of /proc/[pid]/stat).
     pub fn pgrp(&self) -> io::Result<u64> {
-        let stat = self.source.read_stat()?;
-        stat.pgrp
-            .ok_or_else(|| file_parse_error("stat", "missing pgrp field"))
+        self.source
+            .read_stat()?
+            .pgrp
+            .ok_or_else(|| unsupported("stat", "pgrp"))
     }
 
     /// Session ID (field 6 of /proc/[pid]/stat).
     pub fn sid(&self) -> io::Result<u64> {
-        let stat = self.source.read_stat()?;
-        stat.sid
-            .ok_or_else(|| file_parse_error("stat", "missing session field"))
+        self.source
+            .read_stat()?
+            .sid
+            .ok_or_else(|| unsupported("stat", "sid"))
     }
 
     /// Nice value (field 19 of /proc/[pid]/stat).
     pub fn nice(&self) -> io::Result<i32> {
-        let stat = self.source.read_stat()?;
-        stat.nice
-            .ok_or_else(|| file_parse_error("stat", "missing nice field"))
+        self.source
+            .read_stat()?
+            .nice
+            .ok_or_else(|| unsupported("stat", "nice"))
     }
 
     /// Start time in clock ticks (field 22 of /proc/[pid]/stat).
     pub fn starttime(&self) -> io::Result<u64> {
-        let stat = self.source.read_stat()?;
-        stat.starttime
-            .ok_or_else(|| file_parse_error("stat", "missing starttime field"))
+        self.source
+            .read_stat()?
+            .starttime
+            .ok_or_else(|| unsupported("stat", "starttime"))
     }
 
     // -- Parsed from /proc/[pid]/status ------------------------------
@@ -221,48 +228,49 @@ impl ProcHandle {
     }
 
     pub fn ppid(&self) -> io::Result<u64> {
-        let status = self.source.read_status()?;
-        status
+        self.source
+            .read_status()?
             .ppid
-            .ok_or_else(|| file_parse_error("status", "missing PPid"))
+            .ok_or_else(|| unsupported("status", "PPid"))
     }
 
     pub fn euid(&self) -> io::Result<u32> {
-        let status = self.source.read_status()?;
-        status
+        self.source
+            .read_status()?
             .euid
-            .ok_or_else(|| file_parse_error("status", "missing Uid"))
+            .ok_or_else(|| unsupported("status", "Uid"))
     }
 
     pub fn umask(&self) -> io::Result<u32> {
-        let status = self.source.read_status()?;
-        status
+        self.source
+            .read_status()?
             .umask
-            .ok_or_else(|| file_parse_error("status", "missing Umask"))
+            .ok_or_else(|| unsupported("status", "Umask"))
     }
 
     pub fn thread_count(&self) -> io::Result<usize> {
-        let status = self.source.read_status()?;
-        status
+        self.source
+            .read_status()?
             .threads
-            .ok_or_else(|| file_parse_error("status", "missing Threads"))
+            .ok_or_else(|| unsupported("status", "Threads"))
     }
 
     // -- Thread methods ----------------------------------------------
 
     /// CPU number a thread is currently running on (field 39 of tid/stat).
     pub fn thread_cpu(&self, tid: u64) -> io::Result<u32> {
-        let stat = self.source.read_tid_stat(tid)?;
-        stat.processor
-            .ok_or_else(|| file_parse_error("task/stat", "missing processor field"))
+        self.source
+            .read_tid_stat(tid)?
+            .processor
+            .ok_or_else(|| unsupported("task/stat", "processor"))
     }
 
     /// Cpus_allowed_list from a thread's status, as a `BTreeSet<usize>`.
     pub fn thread_affinity(&self, tid: u64) -> io::Result<BTreeSet<usize>> {
-        let status = self.source.read_tid_status(tid)?;
-        status
+        self.source
+            .read_tid_status(tid)?
             .cpus_allowed
-            .ok_or_else(|| file_parse_error("task/status", "missing Cpus_allowed_list"))
+            .ok_or_else(|| unsupported("task/status", "Cpus_allowed_list"))
     }
 
     // -- Compound convenience ----------------------------------------
@@ -315,11 +323,11 @@ impl ProcHandle {
 
     /// Query the open-files resource limit from `/proc/[pid]/limits`.
     pub fn nofile_limit(&self) -> io::Result<model::limits::Limit> {
-        let limits = self.source.read_limits()?;
-        limits
+        self.source
+            .read_limits()?
             .get(nix::sys::resource::Resource::RLIMIT_NOFILE)
             .cloned()
-            .ok_or_else(|| file_parse_error("limits", "RLIMIT_NOFILE not found"))
+            .ok_or_else(|| unsupported("limits", "RLIMIT_NOFILE"))
     }
 
     /// Parse all resource limits from `/proc/[pid]/limits`.
@@ -378,6 +386,13 @@ fn grab_core(path: &Path) -> io::Result<ProcHandle> {
     })
 }
 
+fn unsupported(file: &str, field: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        format!("{field} not available from /proc/[pid]/{file}"),
+    )
+}
+
 /// Resolve a positional operand to a `ProcHandle`.
 ///
 /// Resolution order:
@@ -418,8 +433,4 @@ pub fn resolve_operand_with_tid(arg: &str) -> io::Result<(ProcHandle, Option<u64
             grab_core(&path).map(|h| (h, None))
         }
     }
-}
-
-fn file_parse_error(file: &str, reason: &str) -> io::Error {
-    io::Error::other(format!("Error parsing /proc/[pid]/{file}: {reason}"))
 }

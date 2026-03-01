@@ -335,13 +335,6 @@ fn prstatus_to_status(
     }
 }
 
-fn unsupported(what: &str) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::Unsupported,
-        format!("{what} not available from coredump"),
-    )
-}
-
 impl ProcSource for CoredumpSource {
     fn pid(&self) -> u64 {
         *self.pid.get_or_init(|| {
@@ -513,7 +506,10 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
-        Err(unsupported("schedstat"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "schedstat not available from coredump",
+        ))
     }
 
     fn list_tids(&self) -> io::Result<Vec<u64>> {
@@ -606,7 +602,10 @@ impl ProcSource for CoredumpSource {
     }
 
     fn read_net_file(&self, _name: &str) -> io::Result<Box<dyn io::BufRead>> {
-        Err(unsupported("network info"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "network info not available from coredump",
+        ))
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
