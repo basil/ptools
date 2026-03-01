@@ -32,12 +32,10 @@
 //! - This module provides structured data to the presentation layer for
 //!   formatting; it should never make presentation decisions itself.
 
-pub mod cred;
 pub mod fd;
 pub mod net;
 pub mod numa;
 pub mod pidfd;
-pub mod signal;
 
 use std::collections::BTreeSet;
 use std::ffi::OsString;
@@ -45,11 +43,6 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
-
-use cred::parse_cred;
-use cred::ProcCred;
-use signal::intersect_blocked_masks;
-use signal::parse_signal_set;
 
 use crate::model;
 use crate::source::ProcSource;
@@ -195,60 +188,36 @@ impl ProcHandle {
 
     // -- Parsed from /proc/[pid]/status ------------------------------
 
+    pub fn status(&self) -> io::Result<model::status::Status> {
+        self.source.read_status()
+    }
+
     pub fn ppid(&self) -> io::Result<u64> {
         let status = self.source.read_status()?;
-        for line in status.lines() {
-            if let Some(val) = line.strip_prefix("PPid:") {
-                return val
-                    .trim()
-                    .parse::<u64>()
-                    .map_err(|e| file_parse_error("status", &format!("invalid PPid: {e}")));
-            }
-        }
-        Err(file_parse_error("status", "missing PPid"))
+        status
+            .ppid
+            .ok_or_else(|| file_parse_error("status", "missing PPid"))
     }
 
     pub fn euid(&self) -> io::Result<u32> {
         let status = self.source.read_status()?;
-        for line in status.lines() {
-            if let Some(val) = line.strip_prefix("Uid:") {
-                let fields: Vec<&str> = val.split_whitespace().collect();
-                if fields.len() < 2 {
-                    return Err(file_parse_error("status", "Uid field has too few values"));
-                }
-                return fields[1]
-                    .parse::<u32>()
-                    .map_err(|e| file_parse_error("status", &format!("invalid euid: {e}")));
-            }
-        }
-        Err(file_parse_error("status", "missing Uid"))
+        status
+            .euid
+            .ok_or_else(|| file_parse_error("status", "missing Uid"))
     }
 
     pub fn umask(&self) -> io::Result<u32> {
         let status = self.source.read_status()?;
-        for line in status.lines() {
-            if let Some(val) = line.strip_prefix("Umask:") {
-                return u32::from_str_radix(val.trim(), 8)
-                    .map_err(|e| file_parse_error("status", &format!("invalid Umask: {e}")));
-            }
-        }
-        Err(file_parse_error("status", "missing Umask"))
+        status
+            .umask
+            .ok_or_else(|| file_parse_error("status", "missing Umask"))
     }
 
     pub fn thread_count(&self) -> io::Result<usize> {
         let status = self.source.read_status()?;
-        let val = status
-            .lines()
-            .find_map(|l| l.strip_prefix("Threads:"))
-            .ok_or_else(|| file_parse_error("status", "missing Threads"))?;
-        val.trim()
-            .parse::<usize>()
-            .map_err(|e| file_parse_error("status", &format!("invalid Threads: {e}")))
-    }
-
-    pub fn cred(&self) -> io::Result<ProcCred> {
-        let status = self.source.read_status()?;
-        parse_cred(&status)
+        status
+            .threads
+            .ok_or_else(|| file_parse_error("status", "missing Threads"))
     }
 
     // -- Signal masks ------------------------------------------------
@@ -258,51 +227,18 @@ impl ProcHandle {
     pub fn signal_masks(&self) -> io::Result<SignalMasks> {
         let status = self.source.read_status()?;
 
-        let mut sig_ign = None;
-        let mut sig_cgt = None;
-        let mut sig_blk = None;
-        let mut sig_pnd = None;
-        let mut shd_pnd = None;
-
-        for line in status.lines() {
-            if let Some((key, value)) = line.split_once(':') {
-                let value = value.trim();
-                match key {
-                    "SigIgn" => sig_ign = Some(value.to_string()),
-                    "SigCgt" => sig_cgt = Some(value.to_string()),
-                    "SigBlk" => sig_blk = Some(value.to_string()),
-                    "SigPnd" => sig_pnd = Some(value.to_string()),
-                    "ShdPnd" => shd_pnd = Some(value.to_string()),
-                    _ => {}
-                }
-            }
-        }
-
-        let sig_ign_hex = sig_ign.ok_or_else(|| file_parse_error("status", "missing SigIgn"))?;
-        let sig_cgt_hex = sig_cgt.ok_or_else(|| file_parse_error("status", "missing SigCgt"))?;
-
-        let parse = |name: &str, hex: &str| -> io::Result<BTreeSet<usize>> {
-            parse_signal_set(hex)
-                .map_err(|e| file_parse_error("status", &format!("invalid {name}: {e}")))
-        };
-
-        let ignored = parse("SigIgn", &sig_ign_hex)?;
-        let caught = parse("SigCgt", &sig_cgt_hex)?;
+        let ignored = status.sig_ign;
+        let caught = status.sig_cgt;
 
         // Compute blocked mask as intersection across all threads.
         // Falls back to main thread's SigBlk if /proc/[pid]/task/ is unreadable.
         let blocked = self
             .thread_blocked_masks()
             .map(|masks| intersect_blocked_masks(&masks))
-            .or_else(|| sig_blk.and_then(|s| parse_signal_set(&s).ok()))
-            .unwrap_or_default();
+            .or(status.sig_blk);
 
-        let pending = sig_pnd
-            .and_then(|s| parse_signal_set(&s).ok())
-            .unwrap_or_default();
-        let shared_pending = shd_pnd
-            .and_then(|s| parse_signal_set(&s).ok())
-            .unwrap_or_default();
+        let pending = status.sig_pnd;
+        let shared_pending = status.shd_pnd;
 
         Ok(SignalMasks {
             ignored,
@@ -319,11 +255,7 @@ impl ProcHandle {
 
         // Warn if the source reports fewer threads than actually existed.
         if let Ok(status) = self.source.read_status() {
-            if let Some(n) = status
-                .lines()
-                .find_map(|l| l.strip_prefix("Threads:"))
-                .and_then(|v| v.trim().parse::<usize>().ok())
-            {
+            if let Some(n) = status.threads {
                 if n > tids.len() {
                     eprintln!(
                         "warning: process had {} threads but only {} available; \
@@ -341,13 +273,8 @@ impl ProcHandle {
             let Ok(status) = self.source.read_tid_status(tid) else {
                 continue;
             };
-            for line in status.lines() {
-                if let Some(hex) = line.strip_prefix("SigBlk:") {
-                    if let Ok(mask) = parse_signal_set(hex) {
-                        masks.push(mask);
-                    }
-                    break;
-                }
+            if let Some(sig_blk) = status.sig_blk {
+                masks.push(sig_blk);
             }
         }
 
@@ -376,14 +303,12 @@ impl ProcHandle {
             .ok_or_else(|| file_parse_error("task/stat", "missing processor field"))
     }
 
-    /// Cpus_allowed_list from a thread's status, as a `BTreeSet<u32>`.
-    pub fn thread_affinity(&self, tid: u64) -> io::Result<std::collections::BTreeSet<u32>> {
+    /// Cpus_allowed_list from a thread's status, as a `BTreeSet<usize>`.
+    pub fn thread_affinity(&self, tid: u64) -> io::Result<BTreeSet<usize>> {
         let status = self.source.read_tid_status(tid)?;
-        let line = status
-            .lines()
-            .find_map(|l| l.strip_prefix("Cpus_allowed_list:"))
-            .ok_or_else(|| file_parse_error("task/status", "missing Cpus_allowed_list"))?;
-        numa::parse_list_format(line.trim())
+        status
+            .cpus_allowed
+            .ok_or_else(|| file_parse_error("task/status", "missing Cpus_allowed_list"))
     }
 
     // -- Compound convenience ----------------------------------------
@@ -564,12 +489,12 @@ impl ProcHandle {
 
 /// Signal disposition masks parsed from /proc/[pid]/status.
 pub struct SignalMasks {
-    pub ignored: BTreeSet<usize>,
-    pub caught: BTreeSet<usize>,
+    pub ignored: Option<BTreeSet<usize>>,
+    pub caught: Option<BTreeSet<usize>>,
     /// Intersection of SigBlk across all threads.
-    pub blocked: BTreeSet<usize>,
-    pub pending: BTreeSet<usize>,
-    pub shared_pending: BTreeSet<usize>,
+    pub blocked: Option<BTreeSet<usize>>,
+    pub pending: Option<BTreeSet<usize>>,
+    pub shared_pending: Option<BTreeSet<usize>>,
 }
 
 impl ProcHandle {
@@ -664,10 +589,51 @@ pub fn resolve_operand_with_tid(arg: &str) -> io::Result<(ProcHandle, Option<u64
     }
 }
 
+/// Compute the intersection of per-thread blocked masks.
+fn intersect_blocked_masks(masks: &[BTreeSet<usize>]) -> BTreeSet<usize> {
+    let Some(first) = masks.first() else {
+        return BTreeSet::new();
+    };
+    first
+        .iter()
+        .copied()
+        .filter(|s| masks[1..].iter().all(|m| m.contains(s)))
+        .collect()
+}
+
 fn parse_error(item: &str, reason: &str) -> io::Error {
     io::Error::other(format!("Error parsing {item}: {reason}"))
 }
 
 fn file_parse_error(file: &str, reason: &str) -> io::Error {
     io::Error::other(format!("Error parsing /proc/[pid]/{file}: {reason}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::status::parse_signal_mask;
+
+    #[test]
+    fn intersect_single_mask() {
+        let mask = parse_signal_mask("3").unwrap(); // signals 1,2
+        let result = intersect_blocked_masks(std::slice::from_ref(&mask));
+        assert_eq!(result, mask);
+    }
+
+    #[test]
+    fn intersect_two_masks() {
+        let a = parse_signal_mask("7").unwrap(); // signals 1,2,3
+        let b = parse_signal_mask("5").unwrap(); // signals 1,3
+        let result = intersect_blocked_masks(&[a, b]);
+        assert!(result.contains(&1));
+        assert!(!result.contains(&2));
+        assert!(result.contains(&3));
+    }
+
+    #[test]
+    fn intersect_empty_list() {
+        let result = intersect_blocked_masks(&[]);
+        assert!(result.is_empty());
+    }
 }

@@ -103,39 +103,59 @@ fn fmt_gid(gid: u32) -> String {
 
 fn print_cred(handle: &ProcHandle, all: bool) -> std::io::Result<()> {
     let pid = handle.pid();
-    let cred = handle.cred().map_err(|e| {
+    let status = handle.status().map_err(|e| {
         eprintln!("pcred: {pid}: {e}");
         e
     })?;
 
-    if !all && cred.euid == cred.ruid && cred.ruid == cred.suid && cred.suid == cred.fsuid {
-        print!("{}:\te/r/s/fsuid={}  ", pid, fmt_uid(cred.euid));
+    // The status parser requires exactly 4 values when the Uid/Gid line is
+    // present, so these are always all-Some or all-None.
+    let (euid, ruid, suid, fsuid) = match (status.euid, status.ruid, status.suid, status.fsuid) {
+        (Some(e), Some(r), Some(s), Some(f)) => (e, r, s, f),
+        _ => {
+            let e = std::io::Error::other("missing Uid in /proc/[pid]/status");
+            eprintln!("pcred: {pid}: {e}");
+            return Err(e);
+        }
+    };
+    let (egid, rgid, sgid, fsgid) = match (status.egid, status.rgid, status.sgid, status.fsgid) {
+        (Some(e), Some(r), Some(s), Some(f)) => (e, r, s, f),
+        _ => {
+            let e = std::io::Error::other("missing Gid in /proc/[pid]/status");
+            eprintln!("pcred: {pid}: {e}");
+            return Err(e);
+        }
+    };
+
+    if !all && euid == ruid && ruid == suid && suid == fsuid {
+        print!("{}:\te/r/s/fsuid={}  ", pid, fmt_uid(euid));
     } else {
         print!(
             "{}:\teuid={} ruid={} suid={} fsuid={}  ",
             pid,
-            fmt_uid(cred.euid),
-            fmt_uid(cred.ruid),
-            fmt_uid(cred.suid),
-            fmt_uid(cred.fsuid),
+            fmt_uid(euid),
+            fmt_uid(ruid),
+            fmt_uid(suid),
+            fmt_uid(fsuid),
         );
     }
 
-    if !all && cred.egid == cred.rgid && cred.rgid == cred.sgid && cred.sgid == cred.fsgid {
-        println!("e/r/s/fsgid={}", fmt_gid(cred.egid));
+    if !all && egid == rgid && rgid == sgid && sgid == fsgid {
+        println!("e/r/s/fsgid={}", fmt_gid(egid));
     } else {
         println!(
             "egid={} rgid={} sgid={} fsgid={}",
-            fmt_gid(cred.egid),
-            fmt_gid(cred.rgid),
-            fmt_gid(cred.sgid),
-            fmt_gid(cred.fsgid),
+            fmt_gid(egid),
+            fmt_gid(rgid),
+            fmt_gid(sgid),
+            fmt_gid(fsgid),
         );
     }
 
-    if !cred.groups.is_empty() && (all || cred.groups.len() != 1 || cred.groups[0] != cred.rgid) {
+    let groups = status.groups.unwrap_or_default();
+    if !groups.is_empty() && (all || groups.len() != 1 || groups[0] != rgid) {
         print!("\tgroups:");
-        for gid in &cred.groups {
+        for gid in &groups {
             print!(" {}", fmt_gid(*gid));
         }
         println!();

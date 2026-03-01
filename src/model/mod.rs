@@ -19,6 +19,7 @@ pub mod fdinfo;
 pub mod limits;
 pub mod schedstat;
 pub mod stat;
+pub mod status;
 
 use std::fs::File;
 use std::io::BufRead;

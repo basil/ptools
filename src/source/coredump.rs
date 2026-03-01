@@ -300,9 +300,9 @@ impl ProcSource for CoredumpSource {
         Err(unsupported("stat"))
     }
 
-    fn read_status(&self) -> io::Result<String> {
-        self.get_field_str("COREDUMP_PROC_STATUS")
-            .map(str::to_string)
+    fn read_status(&self) -> io::Result<model::status::Status> {
+        let text = self.get_field_str("COREDUMP_PROC_STATUS")?;
+        model::status::Status::from_buf_read(text.as_bytes())
     }
 
     fn read_comm(&self) -> io::Result<String> {
@@ -366,7 +366,7 @@ impl ProcSource for CoredumpSource {
         }
     }
 
-    fn read_tid_status(&self, tid: u64) -> io::Result<String> {
+    fn read_tid_status(&self, tid: u64) -> io::Result<model::status::Status> {
         if tid == self.pid() {
             self.read_status()
         } else {

@@ -18,7 +18,7 @@ use std::collections::BTreeSet;
 use std::process::exit;
 
 use nix::libc;
-use ptools::proc::signal::signal_name;
+use nix::sys::signal::Signal;
 use ptools::proc::ProcHandle;
 
 #[derive(Copy, Clone)]
@@ -26,6 +26,48 @@ enum SignalAction {
     Default,
     Ignored,
     Caught,
+}
+
+/// Return a human-readable name for the given signal number.
+///
+/// Standard signals use short names like `"HUP"`, `"INT"`.
+/// Real-time signals are formatted relative to `rtmin`/`rtmax`
+/// (e.g. `"RTMIN"`, `"RTMIN+1"`, `"RTMAX-1"`, `"RTMAX"`).
+/// Signals below `rtmin` but above 31 are named relative to RTMIN
+/// (e.g. `"RTMIN-2"`, `"RTMIN-1"`).
+fn signal_name(sig: usize, rtmin: usize, rtmax: usize) -> String {
+    // Standard signals via nix
+    if let Ok(signal) = Signal::try_from(sig as i32) {
+        return match signal {
+            // SIGIO and SIGPOLL share the same value; prefer SIGPOLL.
+            Signal::SIGIO => "POLL".to_string(),
+            s => s
+                .as_str()
+                .strip_prefix("SIG")
+                .unwrap_or(s.as_str())
+                .to_string(),
+        };
+    }
+
+    // Real-time signals
+    if sig == rtmin {
+        return "RTMIN".to_string();
+    }
+    if sig == rtmax {
+        return "RTMAX".to_string();
+    }
+    if sig < rtmin {
+        return format!("RTMIN-{}", rtmin - sig);
+    }
+    let mid = (rtmax - rtmin) / 2;
+    if sig - rtmin <= mid {
+        return format!("RTMIN+{}", sig - rtmin);
+    }
+    if sig < rtmax {
+        return format!("RTMAX-{}", rtmax - sig);
+    }
+
+    format!("SIG{sig}")
 }
 
 fn action_for_signal(
@@ -61,22 +103,26 @@ fn print_signal_actions(handle: &ProcHandle) -> std::io::Result<()> {
     let rtmin = libc::SIGRTMIN() as usize;
     let rtmax = libc::SIGRTMAX() as usize;
 
-    let max_sig = std::cmp::max(
-        64,
-        std::cmp::max(
-            rtmax,
-            std::cmp::max(
-                masks.ignored.last().copied().unwrap_or(0),
-                masks.caught.last().copied().unwrap_or(0),
-            ),
-        ),
-    );
+    let max_sig = [rtmax, 64]
+        .into_iter()
+        .chain(masks.ignored.as_ref().and_then(|s| s.last().copied()))
+        .chain(masks.caught.as_ref().and_then(|s| s.last().copied()))
+        .max()
+        .unwrap_or(64);
+
+    let have_disposition = masks.ignored.is_some() && masks.caught.is_some();
+    let empty = BTreeSet::new();
+    let ignored = masks.ignored.as_ref().unwrap_or(&empty);
+    let caught = masks.caught.as_ref().unwrap_or(&empty);
+    let blocked_set = masks.blocked.as_ref();
+    let pending_set = masks.pending.as_ref();
+    let shared_pending_set = masks.shared_pending.as_ref();
 
     for sig in 1..=max_sig {
         let name = signal_name(sig, rtmin, rtmax);
-        let action = action_for_signal(sig, &masks.ignored, &masks.caught);
-        let blocked = masks.blocked.contains(&sig);
-        let pending = masks.pending.contains(&sig) || masks.shared_pending.contains(&sig);
+        let blocked = blocked_set.is_some_and(|s| s.contains(&sig));
+        let pending = pending_set.is_some_and(|s| s.contains(&sig))
+            || shared_pending_set.is_some_and(|s| s.contains(&sig));
 
         let mut parts = Vec::new();
         if blocked {
@@ -85,9 +131,18 @@ fn print_signal_actions(handle: &ProcHandle) -> std::io::Result<()> {
         if pending {
             parts.push("pending");
         }
-        parts.push(action_text(action));
+        if have_disposition {
+            let action = action_for_signal(sig, ignored, caught);
+            parts.push(action_text(action));
+        } else {
+            parts.push("unknown");
+        }
 
-        println!("{:<10}{}", name, parts.join(","));
+        if parts.is_empty() {
+            println!("{name}");
+        } else {
+            println!("{:<10}{}", name, parts.join(","));
+        }
     }
     Ok(())
 }
@@ -168,5 +223,34 @@ fn main() {
     }
     if error {
         exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signal_name_standard() {
+        assert_eq!(signal_name(1, 34, 64), "HUP");
+        assert_eq!(signal_name(9, 34, 64), "KILL");
+        assert_eq!(signal_name(29, 34, 64), "POLL");
+        assert_eq!(signal_name(31, 34, 64), "SYS");
+    }
+
+    #[test]
+    fn signal_name_rt_reserved() {
+        assert_eq!(signal_name(32, 34, 64), "RTMIN-2");
+        assert_eq!(signal_name(33, 34, 64), "RTMIN-1");
+    }
+
+    #[test]
+    fn signal_name_rt() {
+        assert_eq!(signal_name(34, 34, 64), "RTMIN");
+        assert_eq!(signal_name(35, 34, 64), "RTMIN+1");
+        assert_eq!(signal_name(49, 34, 64), "RTMIN+15");
+        assert_eq!(signal_name(50, 34, 64), "RTMAX-14");
+        assert_eq!(signal_name(63, 34, 64), "RTMAX-1");
+        assert_eq!(signal_name(64, 34, 64), "RTMAX");
     }
 }

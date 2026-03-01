@@ -64,11 +64,10 @@ fn format_node_list(nodes: &[u32]) -> String {
 }
 
 /// Get the CPU affinity mask for a thread via syscall.
-fn get_thread_affinity(tid: u64) -> Option<BTreeSet<u32>> {
+fn get_thread_affinity(tid: u64) -> Option<BTreeSet<usize>> {
     let mask = sched_getaffinity(Pid::from_raw(tid as i32)).ok()?;
     let set = (0..nix::sched::CpuSet::count())
         .filter(|&i| mask.is_set(i).unwrap_or(false))
-        .map(|i| i as u32)
         .collect();
     Some(set)
 }
@@ -77,7 +76,7 @@ fn get_thread_affinity(tid: u64) -> Option<BTreeSet<u32>> {
 /// collapsing consecutive node IDs into ranges.
 ///
 /// Example output: `0-2/all,3/some,4-7/none`
-fn format_affinity(nodes: &[u32], affinity: &Option<BTreeSet<u32>>) -> String {
+fn format_affinity(nodes: &[u32], affinity: &Option<BTreeSet<usize>>) -> String {
     let Some(cpuset) = affinity else {
         let list = format_node_list(nodes);
         return if list.is_empty() {
@@ -129,7 +128,7 @@ fn parse_node_list(s: &str) -> std::io::Result<NodeList> {
         let part = part.trim();
         match part {
             "all" | "leaves" => {
-                result.extend(online.iter());
+                result.extend(online.iter().copied());
             }
             "root" => {
                 return Err(std::io::Error::other(

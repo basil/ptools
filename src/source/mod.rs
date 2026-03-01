@@ -53,7 +53,7 @@ pub(crate) trait ProcSource {
 
     // Per-process files
     fn read_stat(&self) -> io::Result<model::stat::Stat>;
-    fn read_status(&self) -> io::Result<String>;
+    fn read_status(&self) -> io::Result<model::status::Status>;
     fn read_comm(&self) -> io::Result<String>;
     fn read_cmdline(&self) -> io::Result<Vec<u8>>;
     fn read_environ(&self) -> io::Result<Vec<u8>>;
@@ -65,7 +65,7 @@ pub(crate) trait ProcSource {
     // Per-thread
     fn list_tids(&self) -> io::Result<Vec<u64>>;
     fn read_tid_stat(&self, tid: u64) -> io::Result<model::stat::Stat>;
-    fn read_tid_status(&self, tid: u64) -> io::Result<String>;
+    fn read_tid_status(&self, tid: u64) -> io::Result<model::status::Status>;
 
     // Per-fd
     fn list_fds(&self) -> io::Result<Vec<u64>>;
