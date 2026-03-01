@@ -389,8 +389,12 @@ impl ProcHandle {
         Ok(vars)
     }
 
-    pub fn schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
-        self.source.read_schedstat()
+    pub fn run_time_ns(&self) -> io::Result<u64> {
+        Ok(self.source.read_schedstat()?.run_time_ns)
+    }
+
+    pub fn wait_time_ns(&self) -> io::Result<u64> {
+        Ok(self.source.read_schedstat()?.wait_time_ns)
     }
 
     /// Query the open-files resource limit from `/proc/[pid]/limits`.

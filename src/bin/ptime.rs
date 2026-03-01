@@ -338,7 +338,7 @@ fn run_command(command: String, argv: Vec<CString>) {
     // Wait for SIGCHLD, read schedstat from the zombie, then reap.
     // Loop in case the child is merely stopped (SIGCHLD is also sent
     // for stop/continue events).
-    let (status, schedstat, rusage, end) = loop {
+    let (status, run_time_ns, wait_time_ns, rusage, end) = loop {
         if let Err(e) = sigchld_set.wait() {
             if e == Errno::EINTR {
                 continue;
@@ -356,7 +356,8 @@ fn run_command(command: String, argv: Vec<CString>) {
 
         // Read schedstat while the zombie still has a /proc entry.
         let handle = ProcHandle::from_pid(child_pid.as_raw() as u64);
-        let ss = handle.schedstat().ok();
+        let run = handle.run_time_ns().ok();
+        let wait = handle.wait_time_ns().ok();
 
         // Reap with wait4 to get status + rusage atomically.
         // Use WNOHANG so we can loop back if this SIGCHLD was for a
@@ -365,7 +366,7 @@ fn run_command(command: String, argv: Vec<CString>) {
             Ok((WaitStatus::StillAlive, _))
             | Ok((WaitStatus::Stopped(..), _))
             | Ok((WaitStatus::Continued(..), _)) => continue,
-            Ok((s, ru)) => break (s, ss, ru, end),
+            Ok((s, ru)) => break (s, run, wait, ru, end),
             Err(e) => {
                 eprintln!("ptime: wait4: {e}");
                 process::exit(1);
@@ -392,9 +393,9 @@ fn run_command(command: String, argv: Vec<CString>) {
     let sys_ns =
         rusage.ru_stime.tv_sec as u128 * 1_000_000_000 + rusage.ru_stime.tv_usec as u128 * 1_000;
 
-    if let Some(ref ss) = schedstat {
-        let cpu_ns = ss.run_time_ns as u128;
-        let lat_ns = ss.wait_time_ns as u128;
+    if let (Some(cpu_ns), Some(lat_ns)) = (run_time_ns, wait_time_ns) {
+        let cpu_ns = cpu_ns as u128;
+        let lat_ns = lat_ns as u128;
         let slp_ns = real_ns.saturating_sub(cpu_ns).saturating_sub(lat_ns);
         let has_low_precision = print_timings(
             8,
@@ -545,7 +546,8 @@ fn snapshot(pids: Vec<u64>) {
             }
         };
 
-        let schedstat = handle.schedstat().ok();
+        let run_time_ns = handle.run_time_ns().ok();
+        let wait_time_ns = handle.wait_time_ns().ok();
 
         ptools::display::print_proc_summary_from(&handle);
 
@@ -553,9 +555,9 @@ fn snapshot(pids: Vec<u64>) {
 
         let prec = tick_precision(clk_tck);
 
-        if let Some(ref ss) = schedstat {
-            let cpu_ns = ss.run_time_ns as u128;
-            let lat_ns = ss.wait_time_ns as u128;
+        if let (Some(cpu_ns), Some(lat_ns)) = (run_time_ns, wait_time_ns) {
+            let cpu_ns = cpu_ns as u128;
+            let lat_ns = lat_ns as u128;
             let slp_ns = real_ns.saturating_sub(cpu_ns).saturating_sub(lat_ns);
             show_star_legend |= print_timings(
                 8,
