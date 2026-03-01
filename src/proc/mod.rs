@@ -189,6 +189,26 @@ impl ProcHandle {
             .ok_or_else(|| unsupported("stat", "stime"))
     }
 
+    /// User CPU time in microseconds (from prstatus timeval, when available).
+    pub fn utime_us(&self) -> io::Result<u64> {
+        self.source.read_utime_us()
+    }
+
+    /// System CPU time in microseconds (from prstatus timeval, when available).
+    pub fn stime_us(&self) -> io::Result<u64> {
+        self.source.read_stime_us()
+    }
+
+    /// Children user CPU time in microseconds (from prstatus timeval, when available).
+    pub fn cutime_us(&self) -> io::Result<u64> {
+        self.source.read_cutime_us()
+    }
+
+    /// Children system CPU time in microseconds (from prstatus timeval, when available).
+    pub fn cstime_us(&self) -> io::Result<u64> {
+        self.source.read_cstime_us()
+    }
+
     /// Process group ID (field 5 of /proc/[pid]/stat).
     pub fn pgrp(&self) -> io::Result<u64> {
         self.source

@@ -54,6 +54,10 @@ struct ParsedNotes {
     comm: Option<String>,
     cmdline: Option<Vec<u8>>,
     auxv: Option<model::auxv::Auxv>,
+    utime_us: Option<u64>,
+    stime_us: Option<u64>,
+    cutime_us: Option<u64>,
+    cstime_us: Option<u64>,
     num_threads: usize,
     tid_stat: HashMap<u64, model::stat::Stat>,
     tid_status: HashMap<u64, model::status::Status>,
@@ -241,10 +245,27 @@ impl CoredumpSource {
                 tid_status.insert(pid, prstatus_to_status(prpsinfo.as_ref(), None));
             }
 
+            let (utime_us, stime_us, cutime_us, cstime_us) = prstatus_map
+                .get(&pid)
+                .or_else(|| prstatus_map.values().next())
+                .map(|p| {
+                    (
+                        Some(p.pr_utime_sec * 1_000_000 + p.pr_utime_usec),
+                        Some(p.pr_stime_sec * 1_000_000 + p.pr_stime_usec),
+                        Some(p.pr_cutime_sec * 1_000_000 + p.pr_cutime_usec),
+                        Some(p.pr_cstime_sec * 1_000_000 + p.pr_cstime_usec),
+                    )
+                })
+                .unwrap_or((None, None, None, None));
+
             ParsedNotes {
                 comm,
                 cmdline,
                 auxv,
+                utime_us,
+                stime_us,
+                cutime_us,
+                cstime_us,
                 num_threads,
                 tid_stat,
                 tid_status,
@@ -434,6 +455,42 @@ impl ProcSource for CoredumpSource {
             io::ErrorKind::Unsupported,
             "schedstat not available from coredump",
         ))
+    }
+
+    fn read_utime_us(&self) -> io::Result<u64> {
+        self.notes().utime_us.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "high-precision utime not available from coredump",
+            )
+        })
+    }
+
+    fn read_stime_us(&self) -> io::Result<u64> {
+        self.notes().stime_us.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "high-precision stime not available from coredump",
+            )
+        })
+    }
+
+    fn read_cutime_us(&self) -> io::Result<u64> {
+        self.notes().cutime_us.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "high-precision cutime not available from coredump",
+            )
+        })
+    }
+
+    fn read_cstime_us(&self) -> io::Result<u64> {
+        self.notes().cstime_us.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "high-precision cstime not available from coredump",
+            )
+        })
     }
 
     fn list_tids(&self) -> io::Result<Vec<u64>> {

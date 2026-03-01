@@ -509,24 +509,6 @@ fn snapshot(pids: Vec<u64>) {
 
         let handle = ProcHandle::from_pid(*pid);
 
-        let utime = match handle.utime() {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("ptime: cannot examine {pid}: {e}");
-                failed = true;
-                continue;
-            }
-        };
-
-        let stime = match handle.stime() {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("ptime: cannot examine {pid}: {e}");
-                failed = true;
-                continue;
-            }
-        };
-
         let starttime = match handle.starttime() {
             Ok(v) => v,
             Err(e) => {
@@ -536,13 +518,38 @@ fn snapshot(pids: Vec<u64>) {
             }
         };
 
+        let (user_ns, sys_ns, time_prec) = match (handle.utime_us(), handle.stime_us()) {
+            (Ok(u), Ok(s)) => (u as u128 * 1_000, s as u128 * 1_000, 6),
+            _ => {
+                let utime = match handle.utime() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("ptime: cannot examine {pid}: {e}");
+                        failed = true;
+                        continue;
+                    }
+                };
+                let stime = match handle.stime() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("ptime: cannot examine {pid}: {e}");
+                        failed = true;
+                        continue;
+                    }
+                };
+                (
+                    utime as u128 * 1_000_000_000 / clk_tck,
+                    stime as u128 * 1_000_000_000 / clk_tck,
+                    tick_precision(clk_tck),
+                )
+            }
+        };
+
         let schedstat = handle.schedstat().ok();
 
         ptools::display::print_proc_summary_from(&handle);
 
         let real_ns = boottime - (starttime as u128 * 1_000_000_000 / clk_tck);
-        let user_ns = utime as u128 * 1_000_000_000 / clk_tck;
-        let sys_ns = stime as u128 * 1_000_000_000 / clk_tck;
 
         let prec = tick_precision(clk_tck);
 
@@ -568,13 +575,13 @@ fn snapshot(pids: Vec<u64>) {
                     TimingLine {
                         indent: 4,
                         label: "user",
-                        time_str: format!("{}*", fmt_ns(user_ns, prec)),
+                        time_str: format!("{}*", fmt_ns(user_ns, time_prec)),
                         pct: None,
                     },
                     TimingLine {
                         indent: 4,
                         label: "sys",
-                        time_str: format!("{}*", fmt_ns(sys_ns, prec)),
+                        time_str: format!("{}*", fmt_ns(sys_ns, time_prec)),
                         pct: None,
                     },
                     TimingLine {
@@ -604,13 +611,13 @@ fn snapshot(pids: Vec<u64>) {
                     TimingLine {
                         indent: 2,
                         label: "user",
-                        time_str: format!("{}*", fmt_ns(user_ns, prec)),
+                        time_str: format!("{}*", fmt_ns(user_ns, time_prec)),
                         pct: None,
                     },
                     TimingLine {
                         indent: 2,
                         label: "sys",
-                        time_str: format!("{}*", fmt_ns(sys_ns, prec)),
+                        time_str: format!("{}*", fmt_ns(sys_ns, time_prec)),
                         pct: None,
                     },
                 ],
