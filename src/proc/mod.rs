@@ -69,7 +69,7 @@ impl ProcHandle {
 
     /// Walk and symbolize frames for one thread.  Delegates to the
     /// underlying data source which manages dwfl internally.
-    pub(crate) fn trace_thread(
+    pub fn trace_thread(
         &self,
         tid: u32,
         options: &crate::stack::TraceOptions,
@@ -81,7 +81,7 @@ impl ProcHandle {
     ///
     /// Prefers `AT_PAGESZ` from the auxiliary vector, falls back to
     /// `sysconf(_SC_PAGE_SIZE)`.
-    pub(crate) fn page_size(&self) -> io::Result<u64> {
+    pub fn page_size(&self) -> io::Result<u64> {
         if let Some(page_sz) = self.auxv().ok().and_then(|auxv| {
             auxv.0
                 .iter()
@@ -108,7 +108,7 @@ impl ProcHandle {
     ///
     /// Best-effort: reads from `addr` to the end of its page. If no NUL
     /// terminator is found within that range, returns the partial content.
-    pub(crate) fn read_cstring_at(&self, addr: u64) -> Option<String> {
+    pub fn read_cstring_at(&self, addr: u64) -> Option<String> {
         if addr == 0 {
             return None;
         }
@@ -131,15 +131,15 @@ impl ProcHandle {
         self.source.pid()
     }
 
-    pub(crate) fn word_size(&self) -> usize {
+    pub fn word_size(&self) -> usize {
         self.source.word_size()
     }
 
-    pub(crate) fn auxv(&self) -> io::Result<model::auxv::Auxv> {
+    pub fn auxv(&self) -> io::Result<model::auxv::Auxv> {
         self.source.read_auxv()
     }
 
-    pub(crate) fn comm(&self) -> io::Result<String> {
+    pub fn comm(&self) -> io::Result<String> {
         self.source.read_comm()
     }
 
@@ -286,7 +286,7 @@ impl ProcHandle {
     /// `(key, value)` pairs.  Entries that lack an `=` or have an
     /// empty key are silently skipped (processes like sshd can overwrite
     /// their environ memory with status info, leaving garbage).
-    pub(crate) fn environ(&self) -> io::Result<Vec<(OsString, OsString)>> {
+    pub fn environ(&self) -> io::Result<Vec<(OsString, OsString)>> {
         let bytes = self.source.read_environ()?;
         let mut vars = Vec::new();
         for chunk in bytes.split(|b| *b == b'\0') {
