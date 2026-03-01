@@ -35,12 +35,12 @@ mod dw;
 mod elf;
 mod live;
 
-use crate::model;
-
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use crate::model;
 
 /// Abstraction over process data sources.
 ///
@@ -68,7 +68,7 @@ pub(crate) trait ProcSource {
     // Per-fd
     fn list_fds(&self) -> io::Result<Vec<u64>>;
     fn read_fd_link(&self, fd: u64) -> io::Result<PathBuf>;
-    fn read_fdinfo(&self, fd: u64) -> io::Result<String>;
+    fn read_fdinfo(&self, fd: u64) -> io::Result<model::fdinfo::FdInfo>;
 
     // Network namespace
     fn read_net_file(&self, name: &str) -> io::Result<String>;

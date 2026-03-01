@@ -307,13 +307,17 @@ fn print_tcp_details(sock: &Socket) {
 }
 
 fn print_fd_details(fd: &FileDescriptor) {
-    println!("      offset: {}", fd.offset);
+    println!("      offset: {}", fd.fdinfo.pos);
     match fd.path.as_os_str().to_string_lossy().as_ref() {
-        "anon_inode:[eventpoll]" => print_epoll_fdinfo(&fd.extra_lines),
-        "anon_inode:[eventfd]" => print_matching_fdinfo_lines(&fd.extra_lines, &["eventfd-count:"]),
-        "anon_inode:[signalfd]" => print_matching_fdinfo_lines(&fd.extra_lines, &["sigmask:"]),
+        "anon_inode:[eventpoll]" => print_epoll_fdinfo(&fd.fdinfo.extra_lines),
+        "anon_inode:[eventfd]" => {
+            print_matching_fdinfo_lines(&fd.fdinfo.extra_lines, &["eventfd-count:"])
+        }
+        "anon_inode:[signalfd]" => {
+            print_matching_fdinfo_lines(&fd.fdinfo.extra_lines, &["sigmask:"])
+        }
         "anon_inode:[timerfd]" => print_matching_fdinfo_lines(
-            &fd.extra_lines,
+            &fd.fdinfo.extra_lines,
             &[
                 "clockid:",
                 "ticks:",
@@ -323,7 +327,7 @@ fn print_fd_details(fd: &FileDescriptor) {
             ],
         ),
         "anon_inode:inotify" | "anon_inode:[inotify]" => {
-            print_matching_fdinfo_lines(&fd.extra_lines, &["inotify "])
+            print_matching_fdinfo_lines(&fd.fdinfo.extra_lines, &["inotify "])
         }
         _ => {}
     }
@@ -354,7 +358,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
             return;
         }
 
-        println!("      {}", open_flags_str(&fd.open_flags));
+        println!("      {}", open_flags_str(&fd.fdinfo.flags));
 
         match fd.file_type {
             FileType::Posix(PosixFileType::Socket) => {
@@ -392,7 +396,7 @@ fn print_file(fd: &FileDescriptor, non_verbose: bool) {
             return;
         }
 
-        println!("      {}", open_flags_str(&fd.open_flags));
+        println!("      {}", open_flags_str(&fd.fdinfo.flags));
 
         if fd.path.to_string_lossy().starts_with("socket:[") {
             println!("        (socket details not available)");

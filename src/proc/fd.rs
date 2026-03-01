@@ -17,13 +17,13 @@
 use std::path::PathBuf;
 
 use nix::errno::Errno;
-use nix::fcntl::OFlag;
 use nix::sys::socket::AddressFamily;
 use nix::sys::stat::stat;
 use nix::sys::stat::FileStat;
 use nix::sys::stat::SFlag;
 
 use super::net::Socket;
+use crate::model::fdinfo::FdInfo;
 
 /// POSIX file type as identified by the `st_mode` bits from `stat(2)`.
 #[derive(Debug, PartialEq)]
@@ -67,10 +67,7 @@ pub struct FileDescriptor {
     pub path: PathBuf,
     pub file_type: FileType,
     pub stat: Option<FileStat>,
-    pub offset: u64,
-    pub open_flags: OFlag,
-    pub mnt_id: Option<u64>,
-    pub extra_lines: Vec<String>,
+    pub fdinfo: FdInfo,
     pub socket: Option<Socket>,
     pub sockprotoname: Option<String>,
 }

@@ -28,7 +28,8 @@ use nix::libc;
 use super::dw::CoreDwfl;
 use super::elf::CoreElf;
 use super::ProcSource;
-use crate::model;
+use crate::model::FromBufRead;
+use crate::model::{self};
 
 // ---------------------------------------------------------------------------
 // libsystemd journal FFI (minimal subset)
@@ -373,9 +374,9 @@ impl ProcSource for CoredumpSource {
         Ok(PathBuf::from(entry.path))
     }
 
-    fn read_fdinfo(&self, fd: u64) -> io::Result<String> {
+    fn read_fdinfo(&self, fd: u64) -> io::Result<model::fdinfo::FdInfo> {
         let entry = self.find_fd_entry(fd)?;
-        Ok(entry.fdinfo)
+        model::fdinfo::FdInfo::from_buf_read(entry.fdinfo.as_bytes())
     }
 
     fn read_net_file(&self, _name: &str) -> io::Result<String> {

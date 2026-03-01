@@ -47,13 +47,12 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 
-use crate::model;
 use cred::parse_cred;
 use cred::ProcCred;
-use nix::fcntl::OFlag;
 use signal::intersect_blocked_masks;
 use signal::parse_signal_set;
 
+use crate::model;
 use crate::source::ProcSource;
 
 /// A resource limit value (soft or hard).
@@ -79,14 +78,6 @@ pub struct ResourceLimit {
     pub hard: RlimitVal,
     /// Unit string from the kernel (e.g. "bytes", "files", "seconds").
     pub unit: String,
-}
-
-/// Parsed fdinfo with structured fields from `/proc/[pid]/fdinfo/<fd>`.
-struct FdInfo {
-    offset: u64,
-    flags: OFlag,
-    mnt_id: Option<u64>,
-    extra_lines: Vec<String>,
 }
 
 fn parse_rlimit_val(s: &str) -> io::Result<RlimitVal> {
@@ -252,37 +243,8 @@ impl ProcHandle {
         self.source.read_fd_link(fd)
     }
 
-    fn fdinfo(&self, fd: u64) -> io::Result<FdInfo> {
-        let contents = self.source.read_fdinfo(fd)?;
-        let mut offset = None;
-        let mut flags = None;
-        let mut mnt_id = None;
-        let mut extra_lines = Vec::new();
-
-        for line in contents.lines() {
-            if let Some(val) = line.strip_prefix("pos:") {
-                offset = Some(
-                    val.trim()
-                        .parse::<u64>()
-                        .map_err(|e| file_parse_error("fdinfo", &format!("invalid pos: {e}")))?,
-                );
-            } else if let Some(val) = line.strip_prefix("flags:") {
-                let raw = i32::from_str_radix(val.trim(), 8)
-                    .map_err(|e| file_parse_error("fdinfo", &format!("invalid flags: {e}")))?;
-                flags = Some(OFlag::from_bits_truncate(raw));
-            } else if let Some(val) = line.strip_prefix("mnt_id:") {
-                mnt_id = val.trim().parse::<u64>().ok();
-            } else if !line.is_empty() {
-                extra_lines.push(line.to_string());
-            }
-        }
-
-        Ok(FdInfo {
-            offset: offset.ok_or_else(|| file_parse_error("fdinfo", "missing 'pos' field"))?,
-            flags: flags.ok_or_else(|| file_parse_error("fdinfo", "missing 'flags' field"))?,
-            mnt_id,
-            extra_lines,
-        })
+    fn fdinfo(&self, fd: u64) -> io::Result<model::fdinfo::FdInfo> {
+        self.source.read_fdinfo(fd)
     }
 
     // -- Parsed from /proc/[pid]/stat --------------------------------
@@ -778,10 +740,7 @@ impl ProcHandle {
             path: path.clone(),
             file_type,
             stat: stat_result,
-            offset: info.offset,
-            open_flags: info.flags,
-            mnt_id: info.mnt_id,
-            extra_lines: info.extra_lines,
+            fdinfo: info,
             socket,
             sockprotoname,
         })

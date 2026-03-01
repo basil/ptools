@@ -14,10 +14,14 @@
 //   limitations under the License.
 //
 
+pub mod fdinfo;
 pub mod schedstat;
 
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Read;
+use std::io::{self};
 use std::path::Path;
 
 // ---------------------------------------------------------------------------

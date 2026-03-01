@@ -25,7 +25,9 @@ use nix::libc;
 use super::dw::Dwfl;
 use super::dw::{self};
 use super::ProcSource;
-use crate::model::{self, FromRead};
+use crate::model::FromBufRead;
+use crate::model::FromRead;
+use crate::model::{self};
 
 /// Live-process backend: reads everything from `/proc/[pid]/...`.
 ///
@@ -54,7 +56,7 @@ pub(super) struct LiveProcess {
     tid_stat: RefCell<HashMap<u64, String>>,
     tid_status: RefCell<HashMap<u64, String>>,
     fd_link: RefCell<HashMap<u64, PathBuf>>,
-    fdinfo: RefCell<HashMap<u64, String>>,
+    fdinfo: RefCell<HashMap<u64, model::fdinfo::FdInfo>>,
     net_file: RefCell<HashMap<String, String>>,
 }
 
@@ -237,11 +239,12 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn read_fdinfo(&self, fd: u64) -> io::Result<String> {
+    fn read_fdinfo(&self, fd: u64) -> io::Result<model::fdinfo::FdInfo> {
         if let Some(cached) = self.fdinfo.borrow().get(&fd) {
             return Ok(cached.clone());
         }
-        let val = std::fs::read_to_string(format!("/proc/{}/fdinfo/{}", self.pid, fd))?;
+        let path = format!("/proc/{}/fdinfo/{}", self.pid, fd);
+        let val = model::fdinfo::FdInfo::from_file(&path)?;
         self.fdinfo.borrow_mut().insert(fd, val.clone());
         Ok(val)
     }
