@@ -54,8 +54,9 @@ const CORE_OPERANDS: &[(&str, &str)] = &[
     ("pid", "Process ID list."),
     (
         "core",
-        "Process core file, as produced by systemd-coredump(8). The core file \
-         does not need to exist on disk; if it has been removed, the \
+        "Process core file, as produced by systemd-coredump(8), or an \
+         Ubuntu/Debian apport .crash file. For systemd core files, the \
+         file does not need to exist on disk; if it has been removed, the \
          corresponding systemd journal entry will be used instead. See \
          NOTES below.",
     ),
@@ -69,7 +70,12 @@ const CORE_NOTES: &str = "When a core file has been removed by systemd-tmpfiles(
                            longer exists on disk, and process metadata will be retrieved \
                            from the journal entry instead. Use coredumpctl(1) to obtain \
                            the path of a missing core file, e.g., \
-                           coredumpctl list <name> -F COREDUMP_FILENAME.";
+                           coredumpctl list <name> -F COREDUMP_FILENAME.\n\n\
+                           Ubuntu/Debian apport .crash files are also supported. These \
+                           files use Debian control syntax with base64-encoded gzip core \
+                           dumps. Text fields (such as ProcCmdline, ProcEnviron, and \
+                           ExecutablePath) are mapped to COREDUMP_* fields, and the core \
+                           dump is extracted on first access.";
 
 fn build_date() -> String {
     let days = (SystemTime::now()
@@ -610,7 +616,10 @@ $ plgrp -a 0-2 101398
                     "Process ID, optionally followed by a slash and a thread ID \
                      to display a single thread.",
                 ),
-                ("core", "Process core file"),
+                (
+                    "core",
+                    "Process core file, or an Ubuntu/Debian apport .crash file.",
+                ),
             ],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,

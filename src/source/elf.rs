@@ -77,6 +77,12 @@ impl CoreElf {
             fd
         };
 
+        Self::from_fd(fd)
+    }
+
+    /// Create from an already-opened file descriptor (e.g., a memfd with
+    /// decompressed core data).  Validates ELF structure and ET_CORE type.
+    pub(super) fn from_fd(fd: File) -> io::Result<Self> {
         unsafe {
             crate::dw_sys::elf_version(1); // EV_CURRENT
         }
