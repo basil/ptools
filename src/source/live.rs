@@ -101,38 +101,6 @@ impl ProcSource for LiveProcess {
         self.pid
     }
 
-    fn word_size(&self) -> usize {
-        std::mem::size_of::<usize>()
-    }
-
-    fn byte_order(&self) -> model::auxv::ByteOrder {
-        if cfg!(target_endian = "big") {
-            model::auxv::ByteOrder::Big
-        } else {
-            model::auxv::ByteOrder::Little
-        }
-    }
-
-    fn read_stat(&self) -> io::Result<model::stat::Stat> {
-        if let Some(val) = self.stat.get() {
-            return Ok(val.clone());
-        }
-        let path = format!("/proc/{}/stat", self.pid);
-        let val = model::stat::Stat::from_file(&path)?;
-        let _ = self.stat.set(val.clone());
-        Ok(val)
-    }
-
-    fn read_status(&self) -> io::Result<model::status::Status> {
-        if let Some(val) = self.status.get() {
-            return Ok(val.clone());
-        }
-        let path = format!("/proc/{}/status", self.pid);
-        let val = model::status::Status::from_file(&path)?;
-        let _ = self.status.set(val.clone());
-        Ok(val)
-    }
-
     fn read_comm(&self) -> io::Result<String> {
         if let Some(val) = self.comm.get() {
             return Ok(val.clone());
@@ -172,6 +140,51 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
+    fn read_stat(&self) -> io::Result<model::stat::Stat> {
+        if let Some(val) = self.stat.get() {
+            return Ok(val.clone());
+        }
+        let path = format!("/proc/{}/stat", self.pid);
+        let val = model::stat::Stat::from_file(&path)?;
+        let _ = self.stat.set(val.clone());
+        Ok(val)
+    }
+
+    fn read_status(&self) -> io::Result<model::status::Status> {
+        if let Some(val) = self.status.get() {
+            return Ok(val.clone());
+        }
+        let path = format!("/proc/{}/status", self.pid);
+        let val = model::status::Status::from_file(&path)?;
+        let _ = self.status.set(val.clone());
+        Ok(val)
+    }
+
+    fn read_utime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision utime not available",
+        ))
+    }
+    fn read_stime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision stime not available",
+        ))
+    }
+    fn read_cutime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision cutime not available",
+        ))
+    }
+    fn read_cstime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision cstime not available",
+        ))
+    }
+
     fn read_exe(&self) -> io::Result<PathBuf> {
         if let Some(val) = self.exe.get() {
             return Ok(val.clone());
@@ -199,31 +212,6 @@ impl ProcSource for LiveProcess {
         let val = model::schedstat::SchedStat::from_file(&path)?;
         let _ = self.schedstat.set(val.clone());
         Ok(val)
-    }
-
-    fn read_utime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision utime not available",
-        ))
-    }
-    fn read_stime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision stime not available",
-        ))
-    }
-    fn read_cutime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision cutime not available",
-        ))
-    }
-    fn read_cstime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision cstime not available",
-        ))
     }
 
     fn list_tids(&self) -> io::Result<Vec<u64>> {
@@ -295,6 +283,18 @@ impl ProcSource for LiveProcess {
         let path = format!("/proc/{}/net/{}", self.pid, name);
         let file = std::fs::File::open(&path)?;
         Ok(Box::new(io::BufReader::new(file)))
+    }
+
+    fn word_size(&self) -> usize {
+        std::mem::size_of::<usize>()
+    }
+
+    fn byte_order(&self) -> model::auxv::ByteOrder {
+        if cfg!(target_endian = "big") {
+            model::auxv::ByteOrder::Big
+        } else {
+            model::auxv::ByteOrder::Little
+        }
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {

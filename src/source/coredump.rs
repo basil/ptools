@@ -327,22 +327,45 @@ impl ProcSource for CoredumpSource {
         })
     }
 
-    fn word_size(&self) -> usize {
-        self.core_elf
-            .as_ref()
-            .and_then(|elf| elf.word_size())
-            .unwrap_or(std::mem::size_of::<usize>())
+    fn read_comm(&self) -> io::Result<String> {
+        if let Ok(s) = self.get_field_str("COREDUMP_COMM") {
+            return Ok(s.to_string());
+        }
+        self.notes().comm.clone().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "comm not available from coredump",
+            )
+        })
     }
 
-    fn byte_order(&self) -> ByteOrder {
-        self.core_elf
-            .as_ref()
-            .and_then(|elf| elf.byte_order())
-            .unwrap_or(if cfg!(target_endian = "big") {
-                ByteOrder::Big
-            } else {
-                ByteOrder::Little
-            })
+    fn read_cmdline(&self) -> io::Result<Vec<u8>> {
+        if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
+            return Ok(b.to_vec());
+        }
+        self.notes().cmdline.clone().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cmdline not available from coredump",
+            )
+        })
+    }
+
+    fn read_environ(&self) -> io::Result<Vec<u8>> {
+        self.get_field("COREDUMP_ENVIRON").map(|b| b.to_vec())
+    }
+
+    fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
+        // Try the journal field first, then fall back to the ELF NT_AUXV note.
+        if let Ok(bytes) = self.get_field("COREDUMP_PROC_AUXV") {
+            return model::auxv::Auxv::from_read(bytes, self.word_size(), self.byte_order());
+        }
+        self.notes().auxv.clone().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "auxv data not found in coredump",
+            )
+        })
     }
 
     fn read_stat(&self) -> io::Result<model::stat::Stat> {
@@ -386,64 +409,6 @@ impl ProcSource for CoredumpSource {
         }
     }
 
-    fn read_comm(&self) -> io::Result<String> {
-        if let Ok(s) = self.get_field_str("COREDUMP_COMM") {
-            return Ok(s.to_string());
-        }
-        self.notes().comm.clone().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "comm not available from coredump",
-            )
-        })
-    }
-
-    fn read_cmdline(&self) -> io::Result<Vec<u8>> {
-        if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
-            return Ok(b.to_vec());
-        }
-        self.notes().cmdline.clone().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "cmdline not available from coredump",
-            )
-        })
-    }
-
-    fn read_environ(&self) -> io::Result<Vec<u8>> {
-        self.get_field("COREDUMP_ENVIRON").map(|b| b.to_vec())
-    }
-
-    fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
-        // Try the journal field first, then fall back to the ELF NT_AUXV note.
-        if let Ok(bytes) = self.get_field("COREDUMP_PROC_AUXV") {
-            return model::auxv::Auxv::from_read(bytes, self.word_size(), self.byte_order());
-        }
-        self.notes().auxv.clone().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "auxv data not found in coredump",
-            )
-        })
-    }
-
-    fn read_exe(&self) -> io::Result<PathBuf> {
-        let exe = self.get_field_str("COREDUMP_EXE")?;
-        Ok(PathBuf::from(exe))
-    }
-
-    fn read_limits(&self) -> io::Result<model::limits::Limits> {
-        let text = self.get_field_str("COREDUMP_PROC_LIMITS")?;
-        model::limits::Limits::from_buf_read(text.as_bytes())
-    }
-
-    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "schedstat not available from coredump",
-        ))
-    }
-
     fn read_utime_us(&self) -> io::Result<u64> {
         self.notes().utime_us.ok_or_else(|| {
             io::Error::new(
@@ -478,6 +443,23 @@ impl ProcSource for CoredumpSource {
                 "high-precision cstime not available from coredump",
             )
         })
+    }
+
+    fn read_exe(&self) -> io::Result<PathBuf> {
+        let exe = self.get_field_str("COREDUMP_EXE")?;
+        Ok(PathBuf::from(exe))
+    }
+
+    fn read_limits(&self) -> io::Result<model::limits::Limits> {
+        let text = self.get_field_str("COREDUMP_PROC_LIMITS")?;
+        model::limits::Limits::from_buf_read(text.as_bytes())
+    }
+
+    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "schedstat not available from coredump",
+        ))
     }
 
     fn list_tids(&self) -> io::Result<Vec<u64>> {
@@ -543,6 +525,24 @@ impl ProcSource for CoredumpSource {
             io::ErrorKind::Unsupported,
             "network info not available from coredump",
         ))
+    }
+
+    fn word_size(&self) -> usize {
+        self.core_elf
+            .as_ref()
+            .and_then(|elf| elf.word_size())
+            .unwrap_or(std::mem::size_of::<usize>())
+    }
+
+    fn byte_order(&self) -> ByteOrder {
+        self.core_elf
+            .as_ref()
+            .and_then(|elf| elf.byte_order())
+            .unwrap_or(if cfg!(target_endian = "big") {
+                ByteOrder::Big
+            } else {
+                ByteOrder::Little
+            })
     }
 
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {

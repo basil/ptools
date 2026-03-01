@@ -49,24 +49,21 @@ use crate::model;
 /// supplies the same data from journal fields or ELF notes.
 pub(crate) trait ProcSource {
     fn pid(&self) -> u64;
-    fn word_size(&self) -> usize;
-    fn byte_order(&self) -> model::auxv::ByteOrder;
 
-    // Per-process files
-    fn read_stat(&self) -> io::Result<model::stat::Stat>;
-    fn read_status(&self) -> io::Result<model::status::Status>;
+    // Per-process
     fn read_comm(&self) -> io::Result<String>;
     fn read_cmdline(&self) -> io::Result<Vec<u8>>;
     fn read_environ(&self) -> io::Result<Vec<u8>>;
     fn read_auxv(&self) -> io::Result<model::auxv::Auxv>;
-    fn read_exe(&self) -> io::Result<PathBuf>;
-    fn read_limits(&self) -> io::Result<model::limits::Limits>;
-    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat>;
-
+    fn read_stat(&self) -> io::Result<model::stat::Stat>;
+    fn read_status(&self) -> io::Result<model::status::Status>;
     fn read_utime_us(&self) -> io::Result<u64>;
     fn read_stime_us(&self) -> io::Result<u64>;
     fn read_cutime_us(&self) -> io::Result<u64>;
     fn read_cstime_us(&self) -> io::Result<u64>;
+    fn read_exe(&self) -> io::Result<PathBuf>;
+    fn read_limits(&self) -> io::Result<model::limits::Limits>;
+    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat>;
 
     // Per-thread
     fn list_tids(&self) -> io::Result<Vec<u64>>;
@@ -82,6 +79,8 @@ pub(crate) trait ProcSource {
     fn read_net_file(&self, name: &str) -> io::Result<Box<dyn io::BufRead>>;
 
     // Memory
+    fn word_size(&self) -> usize;
+    fn byte_order(&self) -> model::auxv::ByteOrder;
     fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool;
 
     /// Walk and symbolize frames for one thread.  Manages dwfl internally.
