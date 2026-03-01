@@ -89,11 +89,9 @@ fn intersect_blocked_masks(masks: &[BTreeSet<usize>]) -> BTreeSet<usize> {
     let Some(first) = masks.first() else {
         return BTreeSet::new();
     };
-    first
-        .iter()
-        .copied()
-        .filter(|s| masks[1..].iter().all(|m| m.contains(s)))
-        .collect()
+    masks[1..].iter().fold(first.clone(), |acc, m| {
+        acc.intersection(m).copied().collect()
+    })
 }
 
 #[cfg(test)]
