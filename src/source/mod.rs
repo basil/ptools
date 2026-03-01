@@ -35,6 +35,8 @@ mod dw;
 mod elf;
 mod live;
 
+use crate::model;
+
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
@@ -56,7 +58,7 @@ pub(crate) trait ProcSource {
     fn read_auxv(&self) -> io::Result<Vec<u8>>;
     fn read_exe(&self) -> io::Result<PathBuf>;
     fn read_limits(&self) -> io::Result<String>;
-    fn read_schedstat(&self) -> io::Result<String>;
+    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat>;
 
     // Per-thread
     fn list_tids(&self) -> io::Result<Vec<u64>>;

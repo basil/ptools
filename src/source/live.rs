@@ -25,6 +25,7 @@ use nix::libc;
 use super::dw::Dwfl;
 use super::dw::{self};
 use super::ProcSource;
+use crate::model::{self, FromRead};
 
 /// Live-process backend: reads everything from `/proc/[pid]/...`.
 ///
@@ -45,7 +46,7 @@ pub(super) struct LiveProcess {
     auxv: OnceCell<Vec<u8>>,
     exe: OnceCell<PathBuf>,
     limits: OnceCell<String>,
-    schedstat: OnceCell<String>,
+    schedstat: OnceCell<model::schedstat::SchedStat>,
     tids: OnceCell<Vec<u64>>,
     fds: OnceCell<Vec<u64>>,
 
@@ -173,11 +174,12 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn read_schedstat(&self) -> io::Result<String> {
+    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
         if let Some(val) = self.schedstat.get() {
             return Ok(val.clone());
         }
-        let val = std::fs::read_to_string(format!("/proc/{}/schedstat", self.pid))?;
+        let path = format!("/proc/{}/schedstat", self.pid);
+        let val = model::schedstat::SchedStat::from_file(&path)?;
         let _ = self.schedstat.set(val.clone());
         Ok(val)
     }

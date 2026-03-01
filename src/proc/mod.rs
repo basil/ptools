@@ -47,6 +47,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::model;
 use cred::parse_cred;
 use cred::ProcCred;
 use nix::fcntl::OFlag;
@@ -164,13 +165,6 @@ fn parse_resource_limits(text: &str) -> io::Result<Vec<ResourceLimit>> {
         });
     }
     Ok(limits)
-}
-
-/// Scheduler statistics from `/proc/[pid]/schedstat`.
-pub struct SchedStat {
-    pub run_time_ns: u64,
-    pub wait_time_ns: u64,
-    pub timeslices: u64,
 }
 
 /// Opaque process handle
@@ -660,30 +654,8 @@ impl ProcHandle {
         Ok(vars)
     }
 
-    /// Parse scheduler statistics from `/proc/[pid]/schedstat`.
-    pub fn schedstat(&self) -> io::Result<SchedStat> {
-        let data = self.source.read_schedstat()?;
-        let mut fields = data.split_whitespace();
-        let run_time_ns = fields
-            .next()
-            .ok_or_else(|| file_parse_error("schedstat", "missing run_time field"))?
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("schedstat", &format!("invalid run_time: {e}")))?;
-        let wait_time_ns = fields
-            .next()
-            .ok_or_else(|| file_parse_error("schedstat", "missing wait_time field"))?
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("schedstat", &format!("invalid wait_time: {e}")))?;
-        let timeslices = fields
-            .next()
-            .ok_or_else(|| file_parse_error("schedstat", "missing timeslices field"))?
-            .parse::<u64>()
-            .map_err(|e| file_parse_error("schedstat", &format!("invalid timeslices: {e}")))?;
-        Ok(SchedStat {
-            run_time_ns,
-            wait_time_ns,
-            timeslices,
-        })
+    pub fn schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
+        self.source.read_schedstat()
     }
 
     /// Query the open-files resource limit from `/proc/[pid]/limits`.

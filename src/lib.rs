@@ -23,6 +23,7 @@ pub mod display;
 mod dw;
 #[allow(dead_code)]
 mod dw_sys;
+pub mod model;
 pub mod proc;
 mod source;
 pub mod stack;

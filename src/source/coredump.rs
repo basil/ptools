@@ -28,6 +28,7 @@ use nix::libc;
 use super::dw::CoreDwfl;
 use super::elf::CoreElf;
 use super::ProcSource;
+use crate::model;
 
 // ---------------------------------------------------------------------------
 // libsystemd journal FFI (minimal subset)
@@ -317,7 +318,7 @@ impl ProcSource for CoredumpSource {
             .map(str::to_string)
     }
 
-    fn read_schedstat(&self) -> io::Result<String> {
+    fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat> {
         Err(unsupported("schedstat"))
     }
 
