@@ -63,30 +63,10 @@ pub(crate) trait ProcSource {
     fn read_limits(&self) -> io::Result<model::limits::Limits>;
     fn read_schedstat(&self) -> io::Result<model::schedstat::SchedStat>;
 
-    fn read_utime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision utime not available",
-        ))
-    }
-    fn read_stime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision stime not available",
-        ))
-    }
-    fn read_cutime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision cutime not available",
-        ))
-    }
-    fn read_cstime_us(&self) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "high-precision cstime not available",
-        ))
-    }
+    fn read_utime_us(&self) -> io::Result<u64>;
+    fn read_stime_us(&self) -> io::Result<u64>;
+    fn read_cutime_us(&self) -> io::Result<u64>;
+    fn read_cstime_us(&self) -> io::Result<u64>;
 
     // Per-thread
     fn list_tids(&self) -> io::Result<Vec<u64>>;

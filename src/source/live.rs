@@ -201,6 +201,31 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
+    fn read_utime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision utime not available",
+        ))
+    }
+    fn read_stime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision stime not available",
+        ))
+    }
+    fn read_cutime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision cutime not available",
+        ))
+    }
+    fn read_cstime_us(&self) -> io::Result<u64> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "high-precision cstime not available",
+        ))
+    }
+
     fn list_tids(&self) -> io::Result<Vec<u64>> {
         if let Some(val) = self.tids.get() {
             return Ok(val.clone());
