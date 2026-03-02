@@ -257,26 +257,49 @@ fn print_tcp_info(info: &libc::tcp_info) {
 
 fn format_socket_options(opts: &SocketOptions) -> String {
     let mut parts = Vec::new();
+    if opts.debug {
+        parts.push("SO_DEBUG".to_string());
+    }
     if opts.reuse_addr {
         parts.push("SO_REUSEADDR".to_string());
     }
-    if opts.keep_alive {
-        parts.push("SO_KEEPALIVE".to_string());
+    if opts.dont_route {
+        parts.push("SO_DONTROUTE".to_string());
     }
     if opts.broadcast {
         parts.push("SO_BROADCAST".to_string());
     }
-    if opts.accept_conn {
-        parts.push("SO_ACCEPTCONN".to_string());
+    if opts.keep_alive {
+        parts.push("SO_KEEPALIVE".to_string());
     }
     if opts.oob_inline {
         parts.push("SO_OOBINLINE".to_string());
+    }
+    if let Some(ref linger) = opts.linger {
+        if linger.l_onoff != 0 {
+            parts.push(format!("SO_LINGER(on,{})", linger.l_linger));
+        }
+    }
+    if opts.reuse_port {
+        parts.push("SO_REUSEPORT".to_string());
+    }
+    if opts.passcred {
+        parts.push("SO_PASSCRED".to_string());
+    }
+    if opts.accept_conn {
+        parts.push("SO_ACCEPTCONN".to_string());
+    }
+    if opts.timestamp {
+        parts.push("SO_TIMESTAMP".to_string());
     }
     if let Some(sndbuf) = opts.snd_buf {
         parts.push(format!("SO_SNDBUF({sndbuf})"));
     }
     if let Some(rcvbuf) = opts.rcv_buf {
         parts.push(format!("SO_RCVBUF({rcvbuf})"));
+    }
+    if opts.tcp_nodelay {
+        parts.push("TCP_NODELAY".to_string());
     }
     parts.join(",")
 }

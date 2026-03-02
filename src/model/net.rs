@@ -308,13 +308,20 @@ pub enum NetEntry {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct SocketOptions {
+    pub debug: bool,
     pub reuse_addr: bool,
-    pub keep_alive: bool,
+    pub dont_route: bool,
     pub broadcast: bool,
-    pub accept_conn: bool,
+    pub keep_alive: bool,
     pub oob_inline: bool,
+    pub linger: Option<libc::linger>,
+    pub reuse_port: bool,
+    pub passcred: bool,
+    pub accept_conn: bool,
+    pub timestamp: bool,
     pub snd_buf: Option<usize>,
     pub rcv_buf: Option<usize>,
+    pub tcp_nodelay: bool,
 }
 
 /// Socket details queried via `getsockopt` on a duplicated file descriptor.
