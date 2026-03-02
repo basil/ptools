@@ -88,7 +88,10 @@ fn normalize_dynamic_fields(block: &str) -> String {
 fn drop_sockopts_line(block: &str) -> String {
     block
         .lines()
-        .filter(|line| !line.trim_start().starts_with("SO_"))
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            !trimmed.starts_with("SO_") && !trimmed.starts_with("TCP_")
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -123,9 +126,10 @@ fn drop_tcp_detail_lines(block: &str) -> String {
 }
 
 fn normalize_line(line: &str) -> String {
-    if line.trim_start().starts_with("SO_") {
+    if line.trim_start().starts_with("SO_") || line.trim_start().starts_with("TCP_") {
         let normalized = replace_sockopt_value(line, "SO_SNDBUF(");
-        return replace_sockopt_value(&normalized, "SO_RCVBUF(");
+        let normalized = replace_sockopt_value(&normalized, "SO_RCVBUF(");
+        return replace_sockopt_value(&normalized, "SO_LINGER(on,");
     }
 
     if line.trim_start().starts_with("sigmask:") {

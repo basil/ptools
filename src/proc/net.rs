@@ -199,15 +199,37 @@ pub(super) fn duplicate_target_fd(pid: u64, fd: u64) -> Option<OwnedFd> {
     Some(unsafe { OwnedFd::from_raw_fd(duplicated as i32) })
 }
 
+fn query_so_debug(sock_fd: &OwnedFd) -> bool {
+    let mut val: nix::libc::c_int = 0;
+    let mut len = std::mem::size_of::<nix::libc::c_int>() as nix::libc::socklen_t;
+    let rc = unsafe {
+        nix::libc::getsockopt(
+            sock_fd.as_raw_fd(),
+            nix::libc::SOL_SOCKET,
+            nix::libc::SO_DEBUG,
+            (&raw mut val).cast::<nix::libc::c_void>(),
+            &raw mut len,
+        )
+    };
+    rc == 0 && val != 0
+}
+
 fn query_socket_options(sock_fd: &OwnedFd) -> SocketOptions {
     SocketOptions {
+        debug: query_so_debug(sock_fd),
         reuse_addr: matches!(getsockopt(sock_fd, sockopt::ReuseAddr), Ok(true)),
-        keep_alive: matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)),
+        dont_route: matches!(getsockopt(sock_fd, sockopt::DontRoute), Ok(true)),
         broadcast: matches!(getsockopt(sock_fd, sockopt::Broadcast), Ok(true)),
-        accept_conn: matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)),
+        keep_alive: matches!(getsockopt(sock_fd, sockopt::KeepAlive), Ok(true)),
         oob_inline: matches!(getsockopt(sock_fd, sockopt::OobInline), Ok(true)),
+        linger: getsockopt(sock_fd, sockopt::Linger).ok(),
+        reuse_port: matches!(getsockopt(sock_fd, sockopt::ReusePort), Ok(true)),
+        passcred: matches!(getsockopt(sock_fd, sockopt::PassCred), Ok(true)),
+        accept_conn: matches!(getsockopt(sock_fd, sockopt::AcceptConn), Ok(true)),
+        timestamp: matches!(getsockopt(sock_fd, sockopt::ReceiveTimestamp), Ok(true)),
         snd_buf: getsockopt(sock_fd, sockopt::SndBuf).ok(),
         rcv_buf: getsockopt(sock_fd, sockopt::RcvBuf).ok(),
+        tcp_nodelay: matches!(getsockopt(sock_fd, sockopt::TcpNoDelay), Ok(true)),
     }
 }
 
