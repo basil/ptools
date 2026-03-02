@@ -262,7 +262,7 @@ struct Args {
 
 fn print_usage() {
     eprintln!("Usage: ptree [-ag] [pid|user]...");
-    eprintln!("Print process trees.");
+    eprintln!("Print process trees. A /proc/pid path may be used in place of a PID.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -a, --all        Include children of PID 0");
@@ -343,6 +343,17 @@ fn main() {
                     error = true;
                 }
                 continue;
+            }
+            if let Some(pid) = ptools::proc::parse_proc_path(target) {
+                if printed.insert(pid)
+                    && !print_tree(pid, &parent_map, &child_map, graph, &mut printed)
+                {
+                    error = true;
+                }
+                continue;
+            }
+            if target.starts_with("/proc/") {
+                continue; // non-PID /proc path from shell expansion
             }
 
             match pids_for_user(target, &uid_map) {

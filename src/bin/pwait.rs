@@ -34,7 +34,7 @@ struct Args {
 
 fn print_usage() {
     eprintln!("Usage: pwait [-v] PID...");
-    eprintln!("Wait for processes to terminate.");
+    eprintln!("Wait for processes to terminate. A /proc/pid path may also be used.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -v               Report terminations to standard output");
@@ -67,10 +67,11 @@ fn parse_args() -> Args {
             Short('v') => args.verbose = true,
             Value(val) => {
                 let s = val.to_string_lossy();
-                match s.parse::<u64>() {
-                    Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => args.pid.push(pid),
-                    _ => {
-                        eprintln!("pwait: invalid PID '{s}'");
+                match ptools::proc::parse_pid_arg(&s) {
+                    Ok(ptools::proc::PidArg::Pid(pid)) => args.pid.push(pid),
+                    Ok(ptools::proc::PidArg::Skip) => {}
+                    Err(msg) => {
+                        eprintln!("pwait: {msg}");
                         process::exit(2);
                     }
                 }

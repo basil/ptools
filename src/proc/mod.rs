@@ -421,6 +421,50 @@ impl ProcHandle {
     }
 }
 
+/// Extract a PID from a `/proc/<pid>` path.
+pub fn parse_proc_path(s: &str) -> Option<u64> {
+    let suffix = s.strip_prefix("/proc/")?;
+    suffix.parse::<u64>().ok().filter(|&pid| pid >= 1)
+}
+
+/// Result of parsing a command-line argument as a PID.
+pub enum PidArg {
+    /// Successfully parsed PID.
+    Pid(u64),
+    /// Non-PID /proc path (e.g. /proc/cpuinfo from shell expansion); skip silently.
+    Skip,
+}
+
+/// Parse a command-line argument as a PID.
+///
+/// Accepts plain numeric PIDs ("1234") and /proc paths ("/proc/1234").
+/// Returns `Skip` for /proc paths with non-numeric suffixes, allowing
+/// `tool /proc/*` to work on Linux where /proc contains non-PID entries.
+pub fn parse_pid_arg(s: &str) -> Result<PidArg, String> {
+    if let Ok(pid) = s.parse::<u64>() {
+        if pid < 1 || pid > i32::MAX as u64 {
+            return Err(format!("invalid PID '{s}'"));
+        }
+        return Ok(PidArg::Pid(pid));
+    }
+    if let Some(pid) = parse_proc_path(s) {
+        if pid > i32::MAX as u64 {
+            return Err(format!("invalid PID '{s}'"));
+        }
+        return Ok(PidArg::Pid(pid));
+    }
+    if s.starts_with("/proc/") {
+        return Ok(PidArg::Skip);
+    }
+    Err(format!("invalid PID '{s}'"))
+}
+
+/// True if `s` is a /proc path that is not a PID directory.
+pub fn is_non_pid_proc_path(s: &str) -> bool {
+    s.strip_prefix("/proc/")
+        .is_some_and(|suffix| !suffix.is_empty() && suffix.parse::<u64>().is_err())
+}
+
 /// A parsed PID with an optional thread (LWP) filter.
 struct PidSpec {
     pid: u64,
@@ -428,6 +472,9 @@ struct PidSpec {
 }
 
 fn parse_pid_spec(s: &str) -> io::Result<PidSpec> {
+    if let Some(pid) = parse_proc_path(s) {
+        return Ok(PidSpec { pid, tid: None });
+    }
     if let Some((pid_str, tid_str)) = s.split_once('/') {
         let pid = pid_str
             .parse::<u64>()
@@ -486,6 +533,9 @@ pub fn resolve_operand(arg: &str) -> io::Result<ProcHandle> {
             Ok(ProcHandle::from_pid(pid))
         }
         Err(_) => {
+            if let Some(pid) = parse_proc_path(arg) {
+                return Ok(ProcHandle::from_pid(pid));
+            }
             let path = PathBuf::from(arg);
             grab_core(&path)
         }

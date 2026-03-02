@@ -305,6 +305,9 @@ fn main() {
 
     let mut error = false;
     for operand in &args.operands {
+        if ptools::proc::is_non_pid_proc_path(operand) {
+            continue;
+        }
         let (handle, tid) = match ptools::proc::resolve_operand_with_tid(operand) {
             Ok(r) => r,
             Err(e) => {
