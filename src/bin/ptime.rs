@@ -46,7 +46,7 @@ fn print_usage() {
     eprintln!("Time a command, or display timing statistics for existing processes.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -p pidlist       Display timing statistics for the specified PIDs");
+    eprintln!("  -p pidlist       Display timing statistics for the specified PIDs (/proc/pid paths accepted)");
     eprintln!("  -h, --help       Print help");
     eprintln!("  -V, --version    Print version");
 }
@@ -82,10 +82,11 @@ fn parse_args() -> Args {
                     if part.is_empty() {
                         continue;
                     }
-                    match part.parse::<u64>() {
-                        Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => pids.push(pid),
-                        _ => {
-                            eprintln!("ptime: invalid PID '{part}'");
+                    match ptools::proc::parse_pid_arg(part) {
+                        Ok(ptools::proc::PidArg::Pid(pid)) => pids.push(pid),
+                        Ok(ptools::proc::PidArg::Skip) => {}
+                        Err(msg) => {
+                            eprintln!("ptime: {msg}");
                             process::exit(1);
                         }
                     }

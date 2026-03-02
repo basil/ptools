@@ -75,7 +75,7 @@ struct Args {
 
 fn print_usage() {
     eprintln!("Usage: pstop PID...");
-    eprintln!("Stop processes with SIGSTOP.");
+    eprintln!("Stop processes with SIGSTOP. A /proc/pid path may also be used.");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -h, --help       Print help");
@@ -103,10 +103,11 @@ fn parse_args() -> Args {
             }
             Value(val) => {
                 let s = val.to_string_lossy();
-                match s.parse::<u64>() {
-                    Ok(pid) if pid >= 1 && pid <= i32::MAX as u64 => args.pid.push(pid),
-                    _ => {
-                        eprintln!("pstop: invalid PID '{s}'");
+                match ptools::proc::parse_pid_arg(&s) {
+                    Ok(ptools::proc::PidArg::Pid(pid)) => args.pid.push(pid),
+                    Ok(ptools::proc::PidArg::Skip) => {}
+                    Err(msg) => {
+                        eprintln!("pstop: {msg}");
                         process::exit(2);
                     }
                 }

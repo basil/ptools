@@ -51,7 +51,12 @@ const DEFAULT_EXIT_STATUS: &str =
 const DEFAULT_FILES: &str = "/proc/pid/*\tProcess information and control files.";
 
 const CORE_OPERANDS: &[(&str, &str)] = &[
-    ("pid", "Process ID list."),
+    (
+        "pid",
+        "Process ID list. A /proc/pid path may also be used, \
+         allowing shell expansions like /proc/* to target all \
+         processes on the system.",
+    ),
     (
         "core",
         "Process core file, as produced by systemd-coredump(8), or an \
@@ -374,7 +379,12 @@ fn main() {
             description: "Stop each process by sending SIGSTOP.",
             synopsis: "PID...",
             options: &[],
-            operands: &[],
+            operands: &[(
+                "PID",
+                "Process ID. A /proc/pid path may also be used, \
+                 allowing shell expansions like /proc/* to target all \
+                 processes on the system.",
+            )],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -396,7 +406,12 @@ fn main() {
             description: "Set running each process by sending SIGCONT (the inverse of pstop(1)).",
             synopsis: "PID...",
             options: &[],
-            operands: &[],
+            operands: &[(
+                "PID",
+                "Process ID. A /proc/pid path may also be used, \
+                 allowing shell expansions like /proc/* to target all \
+                 processes on the system.",
+            )],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -421,7 +436,12 @@ fn main() {
                  process is a child of the calling process, the wait status is also \
                  displayed.",
             )],
-            operands: &[],
+            operands: &[(
+                "PID",
+                "Process ID. A /proc/pid path may also be used, \
+                 allowing shell expansions like /proc/* to target all \
+                 processes on the system.",
+            )],
             examples: &[],
             exit_status: DEFAULT_EXIT_STATUS,
             files: DEFAULT_FILES,
@@ -453,7 +473,15 @@ fn main() {
                      ASCII line drawing characters are used.",
                 ),
             ],
-            operands: &[],
+            operands: &[
+                (
+                    "pid",
+                    "Process ID. A /proc/pid path may also be used, \
+                     allowing shell expansions like /proc/* to target all \
+                     processes on the system.",
+                ),
+                ("user", "User login name."),
+            ],
             examples: &[
                 Example {
                     title: "Example 1 Using ptree",
@@ -526,7 +554,9 @@ $ ptree -ag `pgrep ssh`
                 (
                     "pid[/tid]",
                     "Process ID, optionally followed by a slash and a thread ID \
-                     to display a single thread.",
+                     to display a single thread. A /proc/pid path may also be \
+                     used, allowing shell expansions like /proc/* to target all \
+                     processes on the system.",
                 ),
                 (
                     "core",
@@ -614,7 +644,9 @@ $ plgrp -a 0-2 101398
                 (
                     "pid[/tid]",
                     "Process ID, optionally followed by a slash and a thread ID \
-                     to display a single thread.",
+                     to display a single thread. A /proc/pid path may also be \
+                     used, allowing shell expansions like /proc/* to target all \
+                     processes on the system.",
                 ),
                 (
                     "core",
@@ -685,7 +717,9 @@ $ plgrp -a 0-2 101398
                 (
                     "pidlist",
                     "A list of process IDs separated by commas, whitespace, \
-                     or any combination of the two.",
+                     or any combination of the two. A /proc/pid path may also \
+                     be used, allowing shell expansions like /proc/* to target \
+                     all processes on the system.",
                 ),
             ],
             examples: &[],

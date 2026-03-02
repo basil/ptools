@@ -228,6 +228,9 @@ fn main() {
     let mut error = false;
     let mut first = true;
     for operand in &args.operands {
+        if ptools::proc::is_non_pid_proc_path(operand) {
+            continue;
+        }
         if !first {
             println!();
         }
