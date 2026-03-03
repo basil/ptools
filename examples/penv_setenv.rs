@@ -14,14 +14,13 @@
 //   limitations under the License.
 //
 
-//! Test helper that modifies its environment at runtime via `setenv`.
+//! Test helper that modifies its environment at runtime via `set_var`.
 //!
 //! Used by integration tests to verify that `penv` and `pargs -e` reflect
 //! runtime environment changes (read from the `environ` symbol) rather than
 //! the static `/proc/pid/environ` snapshot.
 
 use std::env;
-use std::ffi::CString;
 use std::fs::File;
 use std::thread;
 use std::time::Duration;
@@ -47,18 +46,10 @@ fn main() {
 
     // Add a new environment variable at runtime.  This will only be visible
     // via the `environ` symbol (process_vm_readv), not via /proc/pid/environ.
-    let key = CString::new("PTOOLS_TEST_SETENV_VAR").unwrap();
-    let value = CString::new("runtime_value").unwrap();
-    unsafe {
-        nix::libc::setenv(key.as_ptr(), value.as_ptr(), 1);
-    }
+    env::set_var("PTOOLS_TEST_SETENV_VAR", "runtime_value");
 
     // Also overwrite an existing variable to verify updates are reflected.
-    let key2 = CString::new("PTOOLS_TEST_OVERWRITE_VAR").unwrap();
-    let value2 = CString::new("after").unwrap();
-    unsafe {
-        nix::libc::setenv(key2.as_ptr(), value2.as_ptr(), 1);
-    }
+    env::set_var("PTOOLS_TEST_OVERWRITE_VAR", "after");
 
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
