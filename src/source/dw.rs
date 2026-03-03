@@ -111,18 +111,21 @@ pub(super) fn find_environ_symbol(
         }
         Ok(())
     })?;
-    // Prefer the non-libc copy (typically the main executable).  On
-    // dynamically linked executables the linker emits a copy relocation
-    // for `environ`, placing the live storage in the executable's BSS.
-    // The libc address may remain at its initial (zero) value because
-    // all runtime updates go through the copy-relocated slot.
+    // Prefer the non-libc copy (typically the main executable).  Non-PIE
+    // executables that reference `extern char **environ` get a copy
+    // relocation, placing the live storage in the executable's BSS; in
+    // that case the libc copy is stale because all runtime updates go
+    // through the copy-relocated slot.  When no copy relocation exists
+    // (PIE executables, Rust programs, etc.) only the libc symbol is
+    // found and used directly.
     Ok(other_addr.or(libc_addr))
 }
 
-/// Returns `true` if the module name looks like it belongs to libc.
+/// Returns `true` if the module name looks like it belongs to the C runtime.
 ///
-/// Matches glibc (`libc.so.6`, `libc-2.31.so`) and musl (`ld-musl-x86_64.so.1`,
-/// which is musl's combined dynamic-linker/libc).
+/// Matches glibc's libc (`libc.so.6`, `libc-2.31.so`), glibc's dynamic
+/// linker (`ld-linux-x86-64.so.2`, `ld-linux-aarch64.so.1`), and musl
+/// (`ld-musl-x86_64.so.1`, which is musl's combined dynamic-linker/libc).
 fn is_libc_module(module: &ModuleRef) -> bool {
     module.name().is_some_and(|name| {
         let bytes = name.to_bytes();
@@ -130,7 +133,9 @@ fn is_libc_module(module: &ModuleRef) -> bool {
             Some(pos) => &bytes[pos + 1..],
             None => bytes,
         };
-        filename.starts_with(b"libc") || filename.starts_with(b"ld-musl")
+        filename.starts_with(b"libc")
+            || filename.starts_with(b"ld-linux")
+            || filename.starts_with(b"ld-musl")
     })
 }
 

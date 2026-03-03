@@ -283,6 +283,64 @@ fn pargs_x_alias_matches_pauxv_output() {
 }
 
 #[test]
+fn penv_reflects_runtime_setenv() {
+    let output = common::run_ptool(
+        "penv",
+        &[],
+        "examples/penv_setenv",
+        &[],
+        &[("PTOOLS_TEST_OVERWRITE_VAR", "before")],
+        false,
+    );
+    let stdout = common::assert_success_and_get_stdout_allow_warnings(output);
+
+    // PTOOLS_TEST_SETENV_VAR was added at runtime via setenv() and should
+    // only be visible when reading the environ symbol (not /proc/pid/environ).
+    assert!(
+        stdout.contains("PTOOLS_TEST_SETENV_VAR=runtime_value"),
+        "Runtime setenv variable not found in penv output:\n\n{stdout}\n\n"
+    );
+
+    // PTOOLS_TEST_OVERWRITE_VAR was passed as "before" at spawn time and then
+    // overwritten to "after" via setenv().
+    assert!(
+        stdout.contains("PTOOLS_TEST_OVERWRITE_VAR=after"),
+        "Overwritten env variable should show new value in penv output:\n\n{stdout}\n\n"
+    );
+    assert!(
+        !stdout.contains("PTOOLS_TEST_OVERWRITE_VAR=before"),
+        "Overwritten env variable should not show old value in penv output:\n\n{stdout}\n\n"
+    );
+}
+
+#[test]
+fn pargs_e_reflects_runtime_setenv() {
+    let output = common::run_ptool(
+        "pargs",
+        &["-e"],
+        "examples/penv_setenv",
+        &[],
+        &[("PTOOLS_TEST_OVERWRITE_VAR", "before")],
+        false,
+    );
+    let stdout = common::assert_success_and_get_stdout_allow_warnings(output);
+
+    assert!(
+        stdout.contains("PTOOLS_TEST_SETENV_VAR=runtime_value"),
+        "Runtime setenv variable not found in pargs -e output:\n\n{stdout}\n\n"
+    );
+
+    assert!(
+        stdout.contains("PTOOLS_TEST_OVERWRITE_VAR=after"),
+        "Overwritten env variable should show new value in pargs -e output:\n\n{stdout}\n\n"
+    );
+    assert!(
+        !stdout.contains("PTOOLS_TEST_OVERWRITE_VAR=before"),
+        "Overwritten env variable should not show old value in pargs -e output:\n\n{stdout}\n\n"
+    );
+}
+
+#[test]
 fn pargs_x_prints_auxv_entries() {
     let output = common::run_ptool("pargs", &["-x"], "examples/pargs_penv", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
