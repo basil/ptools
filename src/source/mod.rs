@@ -61,6 +61,7 @@ pub(crate) trait ProcSource {
     // Per-process
     fn read_comm(&self) -> io::Result<String>;
     fn read_cmdline(&self) -> io::Result<Vec<OsString>>;
+    fn is_cmdline_lossy(&self) -> bool;
     fn read_environ(&self) -> io::Result<Vec<OsString>>;
     fn read_auxv(&self) -> io::Result<model::auxv::Auxv>;
     fn read_stat(&self) -> io::Result<model::stat::Stat>;

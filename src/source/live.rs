@@ -48,7 +48,7 @@ pub(super) struct LiveProcess {
     word_size: OnceCell<usize>,
 
     // Stack-walk and symbol-lookup caches (address space reads).
-    initial_stack: OnceCell<Option<InitialStack>>,
+    initial_stack: OnceCell<Result<InitialStack, io::Error>>,
     final_env: OnceCell<Option<Vec<OsString>>>,
 
     // Per-process caches (no parameters).
@@ -147,9 +147,9 @@ impl LiveProcess {
     /// Lazily perform the stack walk from AT_RANDOM.
     fn ensure_initial_stack(&self) -> io::Result<&InitialStack> {
         self.initial_stack
-            .get_or_init(|| initial::read_initial_stack(self).ok())
+            .get_or_init(|| initial::read_initial_stack(self))
             .as_ref()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Unsupported, "initial stack walk failed"))
+            .map_err(|e| io::Error::new(e.kind(), e.to_string()))
     }
 
     /// Lazily look up the `environ` symbol and read the current environ.
@@ -208,6 +208,10 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
+    fn is_cmdline_lossy(&self) -> bool {
+        false
+    }
+
     fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
         // Try the stack walk first (recovers original argv even if overwritten).
         if let Ok(initial) = self.ensure_initial_stack() {
@@ -223,10 +227,15 @@ impl ProcSource for LiveProcess {
             return Ok(final_env.clone());
         }
         // Try the initial environ from the stack walk.
-        if let Ok(initial) = self.ensure_initial_stack() {
-            return Ok(initial.env.clone());
+        match self.ensure_initial_stack() {
+            Ok(initial) => return Ok(initial.env.clone()),
+            Err(e) => eprintln!("process_vm_readv: {e}"),
         }
         // Fallback: cached /proc/pid/environ.
+        eprintln!(
+            "warning: showing environment at time of \
+             process launch, which may not reflect runtime changes",
+        );
         Ok(self.ensure_environ()?.clone())
     }
 

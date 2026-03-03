@@ -126,10 +126,8 @@ fn store_field(fields: &mut HashMap<String, Vec<u8>>, key: &str, value: &str) {
         "ProcCmdline" => {
             // Apport stores cmdline with spaces; convert to NUL-separated.
             // This is lossy: arguments containing spaces are split incorrectly.
-            eprintln!(
-                "warning: cmdline reconstructed from apport ProcCmdline; \
-                 arguments containing spaces or empty arguments may be wrong"
-            );
+            // Mark the cmdline as lossy so callers can warn when appropriate.
+            fields.insert("_CMDLINE_LOSSY".to_string(), Vec::new());
             let mut b: Vec<u8> = value
                 .bytes()
                 .map(|c| if c == b' ' { 0 } else { c })

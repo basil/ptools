@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+use std::cell::Cell;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -55,6 +56,7 @@ pub(super) struct CoredumpSource {
     notes: OnceCell<ParsedNotes>,
     initial_stack: OnceCell<Option<InitialStack>>,
     final_env: OnceCell<Option<Vec<OsString>>>,
+    cmdline_lossy: Cell<bool>,
 }
 
 /// Lazily parsed ELF note data, converted to high-level model types.
@@ -146,6 +148,7 @@ impl CoredumpSource {
             notes: OnceCell::new(),
             initial_stack: OnceCell::new(),
             final_env: OnceCell::new(),
+            cmdline_lossy: Cell::new(false),
         })
     }
 
@@ -166,6 +169,7 @@ impl CoredumpSource {
             notes: OnceCell::new(),
             initial_stack: OnceCell::new(),
             final_env: OnceCell::new(),
+            cmdline_lossy: Cell::new(false),
         })
     }
 
@@ -429,21 +433,27 @@ impl ProcSource for CoredumpSource {
             return Ok(initial.args.clone());
         }
         // COREDUMP_CMDLINE from journal is NUL-delimited and preserves argv faithfully.
+        // For apport crash files, however, ProcCmdline is space-separated and
+        // the conversion to NUL-separated is lossy (marked by _CMDLINE_LOSSY).
         if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
+            if self.fields.contains_key("_CMDLINE_LOSSY") {
+                self.cmdline_lossy.set(true);
+            }
             return Ok(split_nul_bytes(b));
         }
         // Last resort: pr_psargs is lossy (whitespace-split, 80-char truncation).
         if let Some(cmdline) = self.notes().cmdline.clone() {
-            eprintln!(
-                "warning: cmdline reconstructed from pr_psargs; \
-                 arguments containing spaces or empty arguments may be wrong"
-            );
+            self.cmdline_lossy.set(true);
             return Ok(cmdline);
         }
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "cmdline not available from coredump",
         ))
+    }
+
+    fn is_cmdline_lossy(&self) -> bool {
+        self.cmdline_lossy.get()
     }
 
     fn read_environ(&self) -> io::Result<Vec<OsString>> {

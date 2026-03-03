@@ -306,6 +306,10 @@ impl ProcHandle {
         self.source.read_cmdline()
     }
 
+    pub fn is_cmdline_lossy(&self) -> bool {
+        self.source.is_cmdline_lossy()
+    }
+
     /// Read the environment of the process.
     pub fn read_environ(&self) -> io::Result<Vec<OsString>> {
         self.source.read_environ()
