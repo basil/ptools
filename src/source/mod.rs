@@ -131,21 +131,36 @@ pub(crate) trait ProcSource {
         }
     }
 
-    /// Read `count` consecutive pointer-sized words starting at `addr` in
-    /// a single `read_memory` call.
+    /// Read `count` consecutive pointer-sized words starting at `addr`.
+    ///
+    /// Loops on short reads so that page/segment boundaries do not cause
+    /// spurious failures.
     fn read_words(&self, addr: u64, count: usize) -> io::Result<Vec<u64>> {
         if count == 0 {
             return Ok(Vec::new());
         }
         let ws = self.word_size();
         let bo = self.byte_order();
-        let mut buf = vec![0u8; count * ws];
-        let n = self.read_memory(addr, &mut buf)?;
-        if n < buf.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                format!("partial read: got {n} of {} bytes at {addr:#x}", buf.len()),
-            ));
+        let total = count * ws;
+        let mut buf = vec![0u8; total];
+        let mut filled = 0usize;
+        while filled < total {
+            let n = self.read_memory(
+                addr.checked_add(filled as u64).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "address overflow in read_words")
+                })?,
+                &mut buf[filled..],
+            )?;
+            if n == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    format!(
+                        "zero-byte read at {:#x} ({filled} of {total} bytes read)",
+                        addr + filled as u64,
+                    ),
+                ));
+            }
+            filled += n;
         }
         let mut result = Vec::with_capacity(count);
         for i in 0..count {
