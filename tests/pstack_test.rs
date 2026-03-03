@@ -79,6 +79,7 @@ fn pstack_module_flag_shows_module_paths() {
 }
 
 #[test]
+#[cfg_attr(not(debug_assertions), ignore = "optimized builds may inline source locations")]
 fn pstack_verbose_shows_source_locations() {
     let output = common::run_ptool(
         "pstack",
