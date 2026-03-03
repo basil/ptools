@@ -179,7 +179,14 @@ argv[10]: -wm
 argv[11]: 95
 ```
 
-`penv(1)` prints the environment variables a process was started with:
+`penv(1)` prints the environment variables of a process. Unlike
+`cat /proc/[pid]/environ` or `ps e`, which only show a static snapshot
+captured at process start, `penv(1)` reads live process memory (via the
+`environ` symbol) to show the **current** environment, including any variables
+added or modified at runtime with `setenv(3)` or `putenv(3)`. No other
+Linux command-line tool provides this capability; on stock Linux the only
+alternative is attaching a full debugger. This makes `penv(1)` invaluable
+for debugging processes whose environment changes after startup.
 
 ```text
 $ penv $(pgrep Xwayland)

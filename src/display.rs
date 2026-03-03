@@ -109,25 +109,12 @@ fn auxv_type_str(key: &AuxvType) -> Cow<'static, str> {
 }
 
 pub fn print_env_from(handle: &ProcHandle) -> io::Result<()> {
-    // This contains the environ as it was when the proc was started. To get the current
-    // environment, we need to inspect its memory to find out how it has changed. POSIX defines a
-    // char **__environ symbol that we will need to find. Unfortunately, inspecting the memory of
-    // another process is not typically permitted, even if the process is owned by the same user. See
-    // /etc/sysctl.d/10-ptrace.conf for details.
-    //
-    // TODO Long term, we might want to print the current environment if we can, and print a warning
-    // + the contents of /proc/[pid]/environ if we can't
-    let vars = handle.environ()?;
+    let vars = handle.read_environ()?;
 
     print_proc_summary_from(handle);
 
-    for (i, (key, value)) in vars.iter().enumerate() {
-        println!(
-            "envp[{}]: {}={}",
-            i,
-            key.to_string_lossy(),
-            value.to_string_lossy()
-        );
+    for (i, entry) in vars.iter().enumerate() {
+        println!("envp[{}]: {}", i, entry.to_string_lossy());
     }
     Ok(())
 }
@@ -139,12 +126,8 @@ pub fn print_auxv_from(handle: &ProcHandle) -> io::Result<()> {
     print_proc_summary_from(handle);
     for &(typ, value) in &auxv.0 {
         let key = auxv_type_str(&typ);
-        if typ.is_string_pointer() {
-            if let Some(s) = handle.read_cstring_at(value) {
-                println!("{key:<15} 0x{value:0hex_width$x} {s}");
-            } else {
-                println!("{key:<15} 0x{value:0hex_width$x}");
-            }
+        if let Ok(s) = handle.read_auxv_string(typ) {
+            println!("{key:<15} 0x{value:0hex_width$x} {}", s.to_string_lossy());
         } else if let Some(flags) = decode_hwcap(typ, value) {
             println!(
                 "{:<15} 0x{:0width$x} {}",
@@ -186,7 +169,7 @@ pub fn print_proc_summary_from(handle: &ProcHandle) {
 }
 
 pub fn print_cmd_summary_from(handle: &ProcHandle) {
-    match handle.argv() {
+    match handle.read_cmdline() {
         Ok(args) if !args.is_empty() => {
             let summary: Vec<_> = args.iter().map(|a| a.to_string_lossy()).collect();
             println!("{}", summary.join(" "));

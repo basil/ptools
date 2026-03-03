@@ -76,6 +76,64 @@ pub(super) struct CoreDwfl {
     _core_elf: Arc<CoreElf>,
 }
 
+/// ELF symbol type for data objects (`STT_OBJECT`).
+const STT_OBJECT: u8 = 1;
+
+/// Find the address of the `environ` or `__environ` symbol by searching
+/// all loaded modules.
+///
+/// Only considers `STT_OBJECT` symbols to avoid matching indirect or
+/// function symbols that happen to share the name.  Prefers the
+/// non-libc copy (typically the main executable's copy-relocated
+/// slot) over the libc symbol.
+///
+/// Returns `Ok(None)` when no matching symbol is found, and `Err` when
+/// the module traversal itself fails.
+pub(super) fn find_environ_symbol(
+    dwfl: &mut Dwfl<'static>,
+) -> Result<Option<u64>, crate::dw::dwfl::Error> {
+    let mut libc_addr = None;
+    let mut other_addr = None;
+    dwfl.modules(|module| {
+        if other_addr.is_some() {
+            return Ok(());
+        }
+        let addr = module
+            .find_symbol("environ", Some(STT_OBJECT))
+            .or_else(|| module.find_symbol("__environ", Some(STT_OBJECT)))
+            .filter(|&a| a != 0);
+        if let Some(a) = addr {
+            if is_libc_module(module) {
+                libc_addr = Some(a);
+            } else if other_addr.is_none() {
+                other_addr = Some(a);
+            }
+        }
+        Ok(())
+    })?;
+    // Prefer the non-libc copy (typically the main executable).  On
+    // dynamically linked executables the linker emits a copy relocation
+    // for `environ`, placing the live storage in the executable's BSS.
+    // The libc address may remain at its initial (zero) value because
+    // all runtime updates go through the copy-relocated slot.
+    Ok(other_addr.or(libc_addr))
+}
+
+/// Returns `true` if the module name looks like it belongs to libc.
+///
+/// Matches glibc (`libc.so.6`, `libc-2.31.so`) and musl (`ld-musl-x86_64.so.1`,
+/// which is musl's combined dynamic-linker/libc).
+fn is_libc_module(module: &ModuleRef) -> bool {
+    module.name().is_some_and(|name| {
+        let bytes = name.to_bytes();
+        let filename = match bytes.iter().rposition(|&b| b == b'/') {
+            Some(pos) => &bytes[pos + 1..],
+            None => bytes,
+        };
+        filename.starts_with(b"libc") || filename.starts_with(b"ld-musl")
+    })
+}
+
 impl CoreDwfl {
     pub(super) fn new(core_elf: Arc<CoreElf>) -> Result<Self, crate::dw::dwfl::Error> {
         // SAFETY: `core_elf` is moved into `_core_elf` below, and `dwfl` is
@@ -102,6 +160,10 @@ impl CoreDwfl {
         options: &TraceOptions,
     ) -> Result<Vec<Frame>, crate::dw::dwfl::Error> {
         walk_thread_frames(&mut self.dwfl.borrow_mut(), tid, options)
+    }
+
+    pub(super) fn find_environ_symbol(&self) -> Result<Option<u64>, crate::dw::dwfl::Error> {
+        find_environ_symbol(&mut self.dwfl.borrow_mut())
     }
 }
 

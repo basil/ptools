@@ -134,11 +134,11 @@ impl CoreElf {
     }
 
     /// Read memory from the core file's PT_LOAD segments.
-    pub(super) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
+    pub(super) fn read_memory(&self, addr: u64, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
             let mut phnum: libc::size_t = 0;
             if crate::dw_sys::elf_getphdrnum(self.elf.0, &mut phnum) != 0 {
-                return false;
+                return Err(io::Error::other("failed to get ELF program header count"));
             }
             for i in 0..phnum as c_int {
                 let mut phdr = std::mem::zeroed::<crate::dw_sys::GElf_Phdr>();
@@ -148,17 +148,6 @@ impl CoreElf {
                 if phdr.p_type != libc::PT_LOAD {
                     continue;
                 }
-                let end = match addr.checked_add(buf.len() as u64) {
-                    Some(e) => e,
-                    None => {
-                        eprintln!(
-                            "core: arithmetic overflow computing read end \
-                             (addr {addr:#x}, len {:#x})",
-                            buf.len(),
-                        );
-                        continue;
-                    }
-                };
                 let seg_end = match phdr.p_vaddr.checked_add(phdr.p_filesz) {
                     Some(e) => e,
                     None => {
@@ -170,7 +159,9 @@ impl CoreElf {
                         continue;
                     }
                 };
-                if addr >= phdr.p_vaddr && end <= seg_end {
+                if addr >= phdr.p_vaddr && addr < seg_end {
+                    let available = (seg_end - addr) as usize;
+                    let to_read = buf.len().min(available);
                     let Some(offset) = (addr - phdr.p_vaddr).checked_add(phdr.p_offset) else {
                         eprintln!(
                             "core: arithmetic overflow computing PT_LOAD segment {i} offset \
@@ -183,26 +174,34 @@ impl CoreElf {
                     let data = crate::dw_sys::elf_getdata_rawchunk(
                         self.elf.0,
                         offset,
-                        buf.len(),
+                        to_read,
                         crate::dw_sys::ELF_T_BYTE,
                     );
                     if data.is_null() {
-                        return false;
+                        return Err(io::Error::other(format!(
+                            "failed to read core data at offset {offset:#x}"
+                        )));
                     }
                     let d = &*data;
-                    if d.d_buf.is_null() || d.d_size < buf.len() {
-                        return false;
+                    if d.d_buf.is_null() || d.d_size < to_read {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            format!(
+                                "core data at offset {offset:#x} too small \
+                                 (got {}, need {to_read})",
+                                d.d_size,
+                            ),
+                        ));
                     }
-                    std::ptr::copy_nonoverlapping(
-                        d.d_buf.cast::<u8>(),
-                        buf.as_mut_ptr(),
-                        buf.len(),
-                    );
-                    return true;
+                    std::ptr::copy_nonoverlapping(d.d_buf.cast::<u8>(), buf.as_mut_ptr(), to_read);
+                    return Ok(to_read);
                 }
             }
         }
-        false
+        Err(io::Error::new(
+            io::ErrorKind::AddrNotAvailable,
+            format!("address {addr:#x} not in any PT_LOAD segment"),
+        ))
     }
 }
 

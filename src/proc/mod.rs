@@ -41,11 +41,8 @@ pub mod signal;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::io;
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
-
-use nix::unistd::{sysconf, SysconfVar};
 
 use crate::model;
 use crate::model::auxv::AuxvType;
@@ -77,52 +74,9 @@ impl ProcHandle {
         self.source.trace_thread(tid, options)
     }
 
-    /// Return the page size for the target process.
-    ///
-    /// Prefers `AT_PAGESZ` from the auxiliary vector, falls back to
-    /// `sysconf(_SC_PAGE_SIZE)`.
-    pub fn page_size(&self) -> io::Result<u64> {
-        if let Some(page_sz) = self.auxv().ok().and_then(|auxv| {
-            auxv.0
-                .iter()
-                .find(|(typ, _)| *typ == AuxvType::PageSz)
-                .map(|(_, value)| *value)
-        }) {
-            return Ok(page_sz);
-        }
-
-        eprintln!("warning: AT_PAGESZ not available, falling back to sysconf");
-        match sysconf(SysconfVar::PAGE_SIZE) {
-            Ok(Some(v)) => Ok(v as u64),
-            Ok(None) => Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "sysconf(_SC_PAGE_SIZE) returned no value",
-            )),
-            Err(e) => Err(io::Error::other(format!(
-                "sysconf(_SC_PAGE_SIZE) failed: {e}"
-            ))),
-        }
-    }
-
-    /// Read a NUL-terminated C string from the target process's memory.
-    ///
-    /// Best-effort: reads from `addr` to the end of its page. If no NUL
-    /// terminator is found within that range, returns the partial content.
-    pub fn read_cstring_at(&self, addr: u64) -> Option<String> {
-        if addr == 0 {
-            return None;
-        }
-        let page_size = match self.page_size() {
-            Ok(v) => v.clamp(1, 64 * 1024),
-            Err(_) => return None,
-        };
-        let bytes_to_page_end = (page_size - (addr % page_size)) as usize;
-        let mut buf = vec![0u8; bytes_to_page_end];
-        if !self.source.read_memory(addr, &mut buf) {
-            return None;
-        }
-        let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-        Some(String::from_utf8_lossy(&buf[..len]).into_owned())
+    /// Read the string value of an auxv string-pointer type.
+    pub fn read_auxv_string(&self, typ: AuxvType) -> io::Result<OsString> {
+        self.source.read_auxv_string(typ)
     }
 
     // -- Pure delegation ---------------------------------------------
@@ -347,46 +301,14 @@ impl ProcHandle {
 
     // -- Compound convenience ----------------------------------------
 
-    /// Read cmdline and split on NUL into individual arguments.
-    pub fn argv(&self) -> io::Result<Vec<OsString>> {
-        let bytes = self.source.read_cmdline()?;
-        let mut args: Vec<OsString> = bytes
-            .split(|b| *b == b'\0')
-            .map(|b| OsString::from(std::ffi::OsStr::from_bytes(b)))
-            .collect();
-        if args.last().is_some_and(|arg| arg.is_empty()) {
-            args.pop();
-        }
-        Ok(args)
+    /// Read command-line arguments.
+    pub fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
+        self.source.read_cmdline()
     }
 
-    /// Read environment variables and parse into key-value pairs.
-    ///
-    /// Splits the raw NUL-delimited environ blob on `=` to produce
-    /// `(key, value)` pairs.  Entries that lack an `=` or have an
-    /// empty key are silently skipped (processes like sshd can overwrite
-    /// their environ memory with status info, leaving garbage).
-    pub fn environ(&self) -> io::Result<Vec<(OsString, OsString)>> {
-        let bytes = self.source.read_environ()?;
-        let mut vars = Vec::new();
-        for chunk in bytes.split(|b| *b == b'\0') {
-            if chunk.is_empty() {
-                continue;
-            }
-            if let Some(pos) = chunk.iter().position(|b| *b == b'=') {
-                if pos > 0 {
-                    let key = OsString::from(std::ffi::OsStr::from_bytes(&chunk[..pos]));
-                    let value = OsString::from(std::ffi::OsStr::from_bytes(&chunk[pos + 1..]));
-                    vars.push((key, value));
-                } else {
-                    eprintln!(
-                        "warning: skipping environ entry with empty key for pid {}",
-                        self.pid()
-                    );
-                }
-            }
-        }
-        Ok(vars)
+    /// Read the environment of the process.
+    pub fn read_environ(&self) -> io::Result<Vec<OsString>> {
+        self.source.read_environ()
     }
 
     pub fn run_time_ns(&self) -> io::Result<u64> {

@@ -217,6 +217,11 @@ fn main() {
             description: "Examine a target process or process core file \
                           and print arguments, environment variables and values, or the \
                           process auxiliary vector. \
+                          For live processes, arguments and environment variables are read \
+                          from process memory and reflect the current state, including any \
+                          modifications made at runtime (e.g., via setenv(3) or by overwriting \
+                          argv). This is in contrast to /proc/pid/cmdline and /proc/pid/environ, \
+                          which are static snapshots captured at process start. \
                           The pauxv command is equivalent to running pargs(1) with the -x option. \
                           The penv command is equivalent to running pargs(1) with the -e option.",
             synopsis: "[-l] [-a|--args] [-e|--env] [-x|--auxv] [pid | core]...",
@@ -228,12 +233,14 @@ fn main() {
                 ),
                 (
                     "-a, --args",
-                    "Print process arguments as contained in /proc/pid/cmdline (default).",
+                    "Print process arguments (default). For live processes, arguments are \
+                     read from process memory and reflect the current values.",
                 ),
                 (
                     "-e, --env",
-                    "Print process environment variables and values as contained in \
-                     /proc/pid/environ.",
+                    "Print process environment variables and values. For live processes, \
+                     the environment is read from process memory via the environ symbol \
+                     and reflects runtime changes made with setenv(3) or putenv(3).",
                 ),
                 (
                     "-x, --auxv",
@@ -277,6 +284,11 @@ fn main() {
             about: "print process environment variables",
             description: "Examine a target process or process core file \
                           and print environment variables and values. \
+                          For live processes, the environment is read from process memory \
+                          via the environ symbol and reflects the current state, including \
+                          any variables added or modified at runtime with setenv(3) or \
+                          putenv(3). This is in contrast to /proc/pid/environ, which is a \
+                          static snapshot captured at process start. \
                           This command is equivalent to running pargs(1) with the -e option.",
             synopsis: "[pid | core]...",
             options: &[],
