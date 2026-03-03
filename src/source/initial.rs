@@ -50,9 +50,6 @@ use std::ffi::OsString;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
 
-use nix::unistd::sysconf;
-use nix::unistd::SysconfVar;
-
 use super::ProcSource;
 use crate::model::auxv::Auxv;
 use crate::model::auxv::AuxvType;
@@ -104,24 +101,6 @@ pub(super) fn read_initial_stack(source: &dyn ProcSource) -> io::Result<InitialS
             .filter(|&v| v != 0)
     };
 
-    let execfn_addr = auxv_val(AuxvType::ExecFn);
-    let platform_addr = auxv_val(AuxvType::Platform);
-    let base_platform_addr = auxv_val(AuxvType::BasePlatform);
-
-    // Linux limits each argv/environ string to PAGE_SIZE * 32 bytes.
-    let page_size = auxv_val(AuxvType::PageSz).unwrap_or(4096) as usize;
-    let max_string_len = page_size * 32;
-
-    // The total argv+environ string data on the initial stack is bounded
-    // by ARG_MAX.  Use this as the maximum span for bulk_read_strings to
-    // prevent runaway allocations when the stack walk produces garbage
-    // pointers.
-    let arg_max = sysconf(SysconfVar::ARG_MAX)
-        .ok()
-        .flatten()
-        .map(|v| v as usize)
-        .unwrap_or(max_string_len);
-
     // AT_RANDOM sits just above the auxv array, so the scan distance
     // to AT_NULL is minimal (a few KiB).
     let scan_start = auxv_val(AuxvType::Random)
@@ -163,12 +142,13 @@ pub(super) fn read_initial_stack(source: &dyn ProcSource) -> io::Result<InitialS
         .iter()
         .chain(env_ptrs.iter())
         .copied()
-        .chain(execfn_addr)
-        .chain(platform_addr)
-        .chain(base_platform_addr)
+        .chain(auxv_val(AuxvType::ExecFn))
+        .chain(auxv_val(AuxvType::Platform))
+        .chain(auxv_val(AuxvType::BasePlatform))
         .collect();
 
-    let string_cache = bulk_read_strings(source, &all_ptrs, max_string_len, arg_max)?;
+    let page_size = auxv_val(AuxvType::PageSz).unwrap_or(4096) as usize;
+    let string_cache = bulk_read_strings(source, &all_ptrs, page_size)?;
 
     let args = argv_ptrs.iter().map(|p| string_cache[p].clone()).collect();
     let env = env_ptrs.iter().map(|p| string_cache[p].clone()).collect();
@@ -321,9 +301,19 @@ fn collect_pointers_backward(
 fn bulk_read_strings(
     source: &dyn ProcSource,
     ptrs: &[u64],
-    max_string_len: usize,
-    max_span: usize,
+    page_size: usize,
 ) -> io::Result<HashMap<u64, OsString>> {
+    // Linux limits each argv/environ string to PAGE_SIZE * 32 bytes;
+    // double it for good measure.
+    let max_string_len = page_size * 64;
+
+    // The total argv+environ string data on the initial stack is bounded
+    // by ARG_MAX.  On Linux with the default 8 MiB stack limit,
+    // sysconf(_SC_ARG_MAX) returns 2 MiB (512 * PAGE_SIZE).  Double it
+    // as a generous maximum span to prevent runaway allocations when the
+    // stack walk produces garbage pointers.
+    let max_span = page_size * 1024;
+
     let mut sorted: Vec<u64> = ptrs.to_vec();
     sorted.sort_unstable();
 
