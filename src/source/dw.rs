@@ -95,7 +95,7 @@ pub(super) fn find_environ_symbol(
     let mut libc_addr = None;
     let mut other_addr = None;
     dwfl.modules(|module| {
-        if libc_addr.is_some() {
+        if other_addr.is_some() {
             return Ok(());
         }
         let addr = module
