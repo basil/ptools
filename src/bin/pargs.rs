@@ -20,8 +20,8 @@ use std::process::exit;
 use ptools::proc::ProcHandle;
 
 fn read_cmdline(handle: &ProcHandle) -> std::io::Result<Vec<OsString>> {
-    handle.argv().map_err(|e| {
-        eprintln!("Error opening /proc/{}/cmdline: {}", handle.pid(), e);
+    handle.read_cmdline().map_err(|e| {
+        eprintln!("Error reading cmdline for PID {}: {}", handle.pid(), e);
         e
     })
 }

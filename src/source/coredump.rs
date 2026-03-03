@@ -16,6 +16,7 @@
 
 use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
@@ -28,6 +29,9 @@ use super::dw::CoreDwfl;
 use super::elf::CoreElf;
 use super::elf::Prpsinfo;
 use super::elf::Prstatus;
+use super::initial::InitialStack;
+use super::initial::{self};
+use super::split_nul_bytes;
 use super::systemd::lookup_journal_fields;
 use super::ProcSource;
 use crate::model;
@@ -49,12 +53,14 @@ pub(super) struct CoredumpSource {
     pid: OnceCell<u64>,
     tids: OnceCell<Vec<u64>>,
     notes: OnceCell<ParsedNotes>,
+    initial_stack: OnceCell<Option<InitialStack>>,
+    final_env: OnceCell<Option<Vec<OsString>>>,
 }
 
 /// Lazily parsed ELF note data, converted to high-level model types.
 struct ParsedNotes {
     comm: Option<String>,
-    cmdline: Option<Vec<u8>>,
+    cmdline: Option<Vec<OsString>>,
     auxv: Option<model::auxv::Auxv>,
     utime_us: Option<u64>,
     stime_us: Option<u64>,
@@ -119,11 +125,6 @@ impl CoredumpSource {
                     ),
                 ));
             }
-            eprintln!(
-                "warning: no matching journal entry found for {}; \
-                 output will be limited to core file metadata",
-                path.display()
-            );
         } else if core_elf.is_none() {
             eprintln!(
                 "warning: core file {} no longer exists; \
@@ -143,6 +144,8 @@ impl CoredumpSource {
             pid: OnceCell::new(),
             tids: OnceCell::new(),
             notes: OnceCell::new(),
+            initial_stack: OnceCell::new(),
+            final_env: OnceCell::new(),
         })
     }
 
@@ -161,6 +164,8 @@ impl CoredumpSource {
             pid: OnceCell::new(),
             tids: OnceCell::new(),
             notes: OnceCell::new(),
+            initial_stack: OnceCell::new(),
+            final_env: OnceCell::new(),
         })
     }
 
@@ -217,6 +222,34 @@ impl CoredumpSource {
             .as_ref()
     }
 
+    /// Lazily perform the stack walk from AT_RANDOM.
+    fn ensure_initial_stack(&self) -> io::Result<&InitialStack> {
+        self.initial_stack
+            .get_or_init(|| initial::read_initial_stack(self).ok())
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Unsupported, "initial stack walk failed"))
+    }
+
+    /// Lazily look up the `environ` symbol and read the current environ.
+    fn ensure_final_env(&self) -> io::Result<&Vec<OsString>> {
+        self.final_env
+            .get_or_init(|| {
+                let core_dwfl = self.ensure_core_dwfl()?;
+                let sym_addr = match core_dwfl.find_environ_symbol() {
+                    Ok(addr) => addr?,
+                    Err(e) => {
+                        eprintln!("warning: environ symbol lookup failed: {e}");
+                        return None;
+                    }
+                };
+                self.read_environ_from_symbol(sym_addr).ok()
+            })
+            .as_ref()
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Unsupported, "environ symbol not available")
+            })
+    }
+
     fn get_field(&self, key: &str) -> io::Result<&[u8]> {
         self.fields.get(key).map(|v| v.as_slice()).ok_or_else(|| {
             io::Error::new(
@@ -265,9 +298,7 @@ impl CoredumpSource {
                 if p.pr_psargs.is_empty() {
                     None
                 } else {
-                    let mut bytes = p.pr_psargs.as_bytes().to_vec();
-                    bytes.push(0);
-                    Some(bytes)
+                    Some(p.pr_psargs.split_whitespace().map(OsString::from).collect())
                 }
             });
 
@@ -392,20 +423,46 @@ impl ProcSource for CoredumpSource {
         })
     }
 
-    fn read_cmdline(&self) -> io::Result<Vec<u8>> {
-        if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
-            return Ok(b.to_vec());
+    fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
+        // Try the stack walk first (recovers original argv from core memory).
+        if let Ok(initial) = self.ensure_initial_stack() {
+            return Ok(initial.args.clone());
         }
-        self.notes().cmdline.clone().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Unsupported,
-                "cmdline not available from coredump",
-            )
-        })
+        // COREDUMP_CMDLINE from journal is NUL-delimited and preserves argv faithfully.
+        if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
+            return Ok(split_nul_bytes(b));
+        }
+        // Last resort: pr_psargs is lossy (whitespace-split, 80-char truncation).
+        if let Some(cmdline) = self.notes().cmdline.clone() {
+            eprintln!(
+                "warning: cmdline reconstructed from pr_psargs; \
+                 arguments containing spaces or empty arguments may be wrong"
+            );
+            return Ok(cmdline);
+        }
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "cmdline not available from coredump",
+        ))
     }
 
-    fn read_environ(&self) -> io::Result<Vec<u8>> {
-        self.get_field("COREDUMP_ENVIRON").map(|b| b.to_vec())
+    fn read_environ(&self) -> io::Result<Vec<OsString>> {
+        // Try the current environ from the environ symbol.
+        if let Ok(final_env) = self.ensure_final_env() {
+            return Ok(final_env.clone());
+        }
+        // Try the initial environ from the stack walk.
+        if let Ok(initial) = self.ensure_initial_stack() {
+            return Ok(initial.env.clone());
+        }
+        // Fallback: COREDUMP_ENVIRON journal field.
+        if let Ok(b) = self.get_field("COREDUMP_ENVIRON") {
+            return Ok(split_nul_bytes(b));
+        }
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "environ not available from coredump",
+        ))
     }
 
     fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
@@ -596,10 +653,21 @@ impl ProcSource for CoredumpSource {
             })
     }
 
-    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
+    fn cached_string(&self, addr: u64) -> Option<OsString> {
+        self.ensure_initial_stack()
+            .ok()?
+            .string_cache
+            .get(&addr)
+            .cloned()
+    }
+
+    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> io::Result<usize> {
         match self.ensure_core_elf() {
             Some(elf) => elf.read_memory(addr, buf),
-            None => false,
+            None => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "no core ELF available",
+            )),
         }
     }
 

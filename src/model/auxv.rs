@@ -130,10 +130,6 @@ impl AuxvType {
     pub fn is_gid(self) -> bool {
         matches!(self, Self::Gid | Self::Egid)
     }
-
-    pub fn is_string_pointer(self) -> bool {
-        matches!(self, Self::ExecFn | Self::Platform | Self::BasePlatform)
-    }
 }
 
 /// Parsed auxiliary vector with metadata about the originating process.

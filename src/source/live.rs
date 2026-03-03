@@ -17,6 +17,7 @@
 use std::cell::OnceCell;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
@@ -25,6 +26,9 @@ use nix::libc;
 
 use super::dw::Dwfl;
 use super::dw::{self};
+use super::initial::InitialStack;
+use super::initial::{self};
+use super::split_nul_bytes;
 use super::ProcSource;
 use crate::model::FromBufRead;
 use crate::model::FromRead;
@@ -43,12 +47,16 @@ pub(super) struct LiveProcess {
     // Cached word size from /proc/[pid]/exe ELF header.
     word_size: OnceCell<usize>,
 
+    // Stack-walk and symbol-lookup caches (address space reads).
+    initial_stack: OnceCell<Option<InitialStack>>,
+    final_env: OnceCell<Option<Vec<OsString>>>,
+
     // Per-process caches (no parameters).
     stat: OnceCell<model::stat::Stat>,
     status: OnceCell<model::status::Status>,
     comm: OnceCell<String>,
-    cmdline: OnceCell<Vec<u8>>,
-    environ: OnceCell<Vec<u8>>,
+    cmdline: OnceCell<Result<Vec<OsString>, io::Error>>,
+    environ: OnceCell<Result<Vec<OsString>, io::Error>>,
     auxv: OnceCell<model::auxv::Auxv>,
     exe: OnceCell<PathBuf>,
     limits: OnceCell<model::limits::Limits>,
@@ -69,6 +77,8 @@ impl LiveProcess {
             pid,
             dwfl: OnceCell::new(),
             word_size: OnceCell::new(),
+            initial_stack: OnceCell::new(),
+            final_env: OnceCell::new(),
             stat: OnceCell::new(),
             status: OnceCell::new(),
             comm: OnceCell::new(),
@@ -130,14 +140,56 @@ impl LiveProcess {
     /// Lazily create and cache the dwfl session for live stack walking.
     fn ensure_dwfl(&self) -> Option<&RefCell<Dwfl<'static>>> {
         self.dwfl
-            .get_or_init(|| match dw::create_dwfl_live(self.pid as u32) {
-                Ok(d) => Some(RefCell::new(d)),
-                Err(e) => {
-                    eprintln!("warning: failed to create dwfl session: {e}");
-                    None
-                }
+            .get_or_init(|| dw::create_dwfl_live(self.pid as u32).ok().map(RefCell::new))
+            .as_ref()
+    }
+
+    /// Lazily perform the stack walk from AT_RANDOM.
+    fn ensure_initial_stack(&self) -> io::Result<&InitialStack> {
+        self.initial_stack
+            .get_or_init(|| initial::read_initial_stack(self).ok())
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Unsupported, "initial stack walk failed"))
+    }
+
+    /// Lazily look up the `environ` symbol and read the current environ.
+    fn ensure_final_env(&self) -> io::Result<&Vec<OsString>> {
+        self.final_env
+            .get_or_init(|| {
+                let dwfl = self.ensure_dwfl()?;
+                let sym_addr = match dw::find_environ_symbol(&mut dwfl.borrow_mut()) {
+                    Ok(addr) => addr?,
+                    Err(e) => {
+                        eprintln!("warning: environ symbol lookup failed: {e}");
+                        return None;
+                    }
+                };
+                self.read_environ_from_symbol(sym_addr).ok()
             })
             .as_ref()
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Unsupported, "environ symbol not available")
+            })
+    }
+
+    /// Lazily read and cache `/proc/[pid]/cmdline`.
+    fn ensure_cmdline(&self) -> io::Result<&Vec<OsString>> {
+        self.cmdline
+            .get_or_init(|| {
+                std::fs::read(format!("/proc/{}/cmdline", self.pid)).map(|b| split_nul_bytes(&b))
+            })
+            .as_ref()
+            .map_err(|e| io::Error::new(e.kind(), e.to_string()))
+    }
+
+    /// Lazily read and cache `/proc/[pid]/environ`.
+    fn ensure_environ(&self) -> io::Result<&Vec<OsString>> {
+        self.environ
+            .get_or_init(|| {
+                std::fs::read(format!("/proc/{}/environ", self.pid)).map(|b| split_nul_bytes(&b))
+            })
+            .as_ref()
+            .map_err(|e| io::Error::new(e.kind(), e.to_string()))
     }
 }
 
@@ -156,22 +208,26 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn read_cmdline(&self) -> io::Result<Vec<u8>> {
-        if let Some(val) = self.cmdline.get() {
-            return Ok(val.clone());
+    fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
+        // Try the stack walk first (recovers original argv even if overwritten).
+        if let Ok(initial) = self.ensure_initial_stack() {
+            return Ok(initial.args.clone());
         }
-        let val = std::fs::read(format!("/proc/{}/cmdline", self.pid))?;
-        let _ = self.cmdline.set(val.clone());
-        Ok(val)
+        // Fallback: cached /proc/pid/cmdline.
+        Ok(self.ensure_cmdline()?.clone())
     }
 
-    fn read_environ(&self) -> io::Result<Vec<u8>> {
-        if let Some(val) = self.environ.get() {
-            return Ok(val.clone());
+    fn read_environ(&self) -> io::Result<Vec<OsString>> {
+        // Try the current environ from the environ symbol (includes setenv changes).
+        if let Ok(final_env) = self.ensure_final_env() {
+            return Ok(final_env.clone());
         }
-        let val = std::fs::read(format!("/proc/{}/environ", self.pid))?;
-        let _ = self.environ.set(val.clone());
-        Ok(val)
+        // Try the initial environ from the stack walk.
+        if let Ok(initial) = self.ensure_initial_stack() {
+            return Ok(initial.env.clone());
+        }
+        // Fallback: cached /proc/pid/environ.
+        Ok(self.ensure_environ()?.clone())
     }
 
     fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
@@ -342,7 +398,15 @@ impl ProcSource for LiveProcess {
         }
     }
 
-    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> bool {
+    fn cached_string(&self, addr: u64) -> Option<OsString> {
+        self.ensure_initial_stack()
+            .ok()?
+            .string_cache
+            .get(&addr)
+            .cloned()
+    }
+
+    fn read_memory(&self, addr: u64, buf: &mut [u8]) -> io::Result<usize> {
         let local = libc::iovec {
             iov_base: buf.as_mut_ptr().cast(),
             iov_len: buf.len(),
@@ -351,9 +415,12 @@ impl ProcSource for LiveProcess {
             iov_base: addr as *mut libc::c_void,
             iov_len: buf.len(),
         };
-        unsafe {
-            libc::process_vm_readv(self.pid as libc::pid_t, &local, 1, &remote, 1, 0)
-                == buf.len() as isize
+        let n =
+            unsafe { libc::process_vm_readv(self.pid as libc::pid_t, &local, 1, &remote, 1, 0) };
+        if n >= 0 {
+            Ok(n as usize)
+        } else {
+            Err(io::Error::last_os_error())
         }
     }
 

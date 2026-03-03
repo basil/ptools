@@ -187,6 +187,41 @@ impl<'a> DwflRef<'a> {
         unsafe { crate::dw_sys::dwfl_pid(self.as_ptr()) as u32 }
     }
 
+    /// Iterates through all modules in the session.
+    ///
+    /// The callback will be invoked for each module in turn.
+    pub fn modules<F>(&mut self, mut callback: F) -> Result<(), Error>
+    where
+        F: FnMut(&ModuleRef) -> Result<(), Error>,
+    {
+        unsafe {
+            let mut state = ModulesCallbackState {
+                callback: &mut callback,
+                panic: None,
+                error: None,
+            };
+            let mut offset: libc::ptrdiff_t = 0;
+            loop {
+                offset = crate::dw_sys::dwfl_getmodules(
+                    self.as_ptr(),
+                    Some(modules_cb),
+                    &mut state as *mut _ as *mut c_void,
+                    offset,
+                );
+                if let Some(payload) = state.panic.take() {
+                    panic::resume_unwind(payload);
+                }
+                if let Some(error) = state.error.take() {
+                    return Err(error);
+                }
+                if offset <= 0 {
+                    break;
+                }
+            }
+            Ok(())
+        }
+    }
+
     /// Looks up the module containing the address.
     pub fn addr_module(&self, address: u64) -> Result<&ModuleRef, Error> {
         unsafe {
@@ -237,6 +272,35 @@ impl<'a, 'b> Report<'a, 'b> {
             Err(Error::new())
         } else {
             Ok(())
+        }
+    }
+}
+
+struct ModulesCallbackState<'a> {
+    callback: &'a mut dyn FnMut(&ModuleRef) -> Result<(), Error>,
+    panic: Option<Box<dyn Any + Send>>,
+    error: Option<Error>,
+}
+
+unsafe extern "C" fn modules_cb(
+    module: *mut crate::dw_sys::Dwfl_Module,
+    _userdata: *mut *mut c_void,
+    _name: *const libc::c_char,
+    _addr: crate::dw_sys::Dwarf_Addr,
+    arg: *mut c_void,
+) -> c_int {
+    let state = &mut *(arg as *mut ModulesCallbackState);
+    let module = ModuleRef::from_ptr(module);
+
+    match panic::catch_unwind(AssertUnwindSafe(|| (state.callback)(module))) {
+        Ok(Ok(())) => crate::dw_sys::DWARF_CB_OK,
+        Ok(Err(e)) => {
+            state.error = Some(e);
+            crate::dw_sys::DWARF_CB_ABORT
+        }
+        Err(e) => {
+            state.panic = Some(e);
+            crate::dw_sys::DWARF_CB_ABORT
         }
     }
 }

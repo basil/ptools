@@ -83,7 +83,7 @@ pub(super) fn parse_crash_fields(path: &Path) -> io::Result<HashMap<String, Vec<
                 store_field(&mut fields, &prev_key, &current_value);
             }
 
-            // Binary field marker — stop parsing text fields.
+            // Binary field marker -- stop parsing text fields.
             if value == "base64" {
                 break;
             }
@@ -125,6 +125,11 @@ fn store_field(fields: &mut HashMap<String, Vec<u8>>, key: &str, value: &str) {
     let bytes = match key {
         "ProcCmdline" => {
             // Apport stores cmdline with spaces; convert to NUL-separated.
+            // This is lossy: arguments containing spaces are split incorrectly.
+            eprintln!(
+                "warning: cmdline reconstructed from apport ProcCmdline; \
+                 arguments containing spaces or empty arguments may be wrong"
+            );
             let mut b: Vec<u8> = value
                 .bytes()
                 .map(|c| if c == b' ' { 0 } else { c })

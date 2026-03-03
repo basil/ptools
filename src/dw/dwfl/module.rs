@@ -15,6 +15,7 @@
 //
 
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem;
 use std::os::raw::c_int;
@@ -129,6 +130,64 @@ impl ModuleRef {
                 Some((scopes, n))
             }
         }
+    }
+
+    /// Find a named symbol in this module's symbol table.
+    ///
+    /// Returns the relocated address of the first matching symbol.
+    /// Matches the base name only, ignoring any ELF symbol version suffix
+    /// that dwfl appends.  Prefers the default version (`@@VERSION`) over
+    /// a hidden/non-default version (`@VERSION`).
+    ///
+    /// If `sym_type` is `Some(t)`, only symbols whose ELF type
+    /// (`ELF64_ST_TYPE(st_info)`) equals `t` are considered.
+    pub fn find_symbol(&self, name: &str, sym_type: Option<u8>) -> Option<u64> {
+        let c_name = CString::new(name).ok()?;
+        let name_bytes = c_name.as_bytes();
+        let mut fallback = None;
+        unsafe {
+            let nsyms = crate::dw_sys::dwfl_module_getsymtab(self.as_ptr());
+            if nsyms <= 0 {
+                return None;
+            }
+            for i in 0..nsyms {
+                let mut sym = mem::zeroed::<crate::dw_sys::GElf_Sym>();
+                let mut addr: crate::dw_sys::GElf_Addr = 0;
+                let sym_name = crate::dw_sys::dwfl_module_getsym_info(
+                    self.as_ptr(),
+                    i,
+                    &mut sym,
+                    &mut addr,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                );
+                if sym_name.is_null() {
+                    continue;
+                }
+                if let Some(t) = sym_type {
+                    if (sym.st_info & 0xf) != t {
+                        continue;
+                    }
+                }
+                // dwfl decorates versioned symbol names: "@@VERSION" for
+                // the default version, "@VERSION" for hidden/non-default.
+                let sym_bytes = CStr::from_ptr(sym_name).to_bytes();
+                let at_pos = sym_bytes.iter().position(|&b| b == b'@');
+                let base = &sym_bytes[..at_pos.unwrap_or(sym_bytes.len())];
+                if base != name_bytes {
+                    continue;
+                }
+                match at_pos {
+                    // Unversioned or default version (@@) -- return immediately.
+                    None => return Some(addr),
+                    Some(p) if sym_bytes.get(p + 1) == Some(&b'@') => return Some(addr),
+                    // Non-default version (@) -- save as fallback.
+                    Some(_) => fallback.get_or_insert(addr),
+                };
+            }
+        }
+        fallback
     }
 
     /// Returns information about the symbol containing the address.
