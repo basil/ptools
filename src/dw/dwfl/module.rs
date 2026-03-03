@@ -165,6 +165,12 @@ impl ModuleRef {
                 if sym_name.is_null() {
                     continue;
                 }
+                // Skip LOCAL-binding symbols.  LOCAL symbols are
+                // file-scoped and not visible outside their object
+                // file, so they should never match external lookups.
+                if (sym.st_info >> 4) == 0 {
+                    continue;
+                }
                 if let Some(t) = sym_type {
                     if (sym.st_info & 0xf) != t {
                         continue;
