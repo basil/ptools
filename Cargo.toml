@@ -22,7 +22,7 @@ lexopt = "0.3"
 libc = "0.2"
 nix = { version = "0.30", features = ["event", "feature", "fs", "process", "resource", "sched", "signal", "socket", "time", "user"] }
 rustc-demangle = "0.1"
-zstd = "0.13"
+zstd = { version = "0.13", default-features = false }
 
 [build-dependencies]
 pkg-config = "0.3"
