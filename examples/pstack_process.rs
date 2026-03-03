@@ -19,7 +19,25 @@ use std::fs::File;
 use std::thread;
 use std::time::Duration;
 
+fn allow_ptrace_for_tests() {
+    // On Linux with Yama ptrace_scope=1 (the Ubuntu default), only a
+    // process's descendants may ptrace it.  Since the test harness spawns
+    // this process and the ptool as siblings, we opt in to tracing by any
+    // process so the tests work without elevated privileges.
+    unsafe {
+        nix::libc::prctl(
+            nix::libc::PR_SET_PTRACER,
+            nix::libc::PR_SET_PTRACER_ANY,
+            0,
+            0,
+            0,
+        );
+    }
+}
+
 fn main() {
+    allow_ptrace_for_tests();
+
     let signal_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
 
