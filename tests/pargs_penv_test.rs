@@ -124,7 +124,7 @@ fn penv_matches_started_process_environment() {
         &expected_env,
         false,
     );
-    let stdout = common::assert_success_and_get_stdout(output);
+    let stdout = common::assert_success_and_get_stdout_allow_warnings(output);
 
     for (key, value) in expected_env {
         let expected_line = format!("{key}={value}");
@@ -153,7 +153,7 @@ fn pargs_e_alias_matches_started_process_environment() {
         &expected_env,
         false,
     );
-    let stdout = common::assert_success_and_get_stdout(output);
+    let stdout = common::assert_success_and_get_stdout_allow_warnings(output);
 
     for (key, value) in expected_env {
         let expected_line = format!("{key}={value}");

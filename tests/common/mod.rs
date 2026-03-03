@@ -197,3 +197,21 @@ pub fn assert_success_and_get_stdout(output: Output) -> String {
     assert!(output.status.success());
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
+
+/// Like [`assert_success_and_get_stdout`] but tolerates warnings on stderr.
+///
+/// On CI environments where `process_vm_readv` is not permitted (e.g. yama
+/// ptrace_scope=1), tools fall back to `/proc/pid/environ` and emit a
+/// diagnostic to stderr.  This helper allows such warnings while still
+/// asserting that no unexpected errors appear.
+pub fn assert_success_and_get_stdout_allow_warnings(output: Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for line in stderr.lines() {
+        assert!(
+            line.starts_with("warning:") || line.starts_with("process_vm_readv:"),
+            "Unexpected stderr line: {line}\nFull stderr:\n{stderr}"
+        );
+    }
+    assert!(output.status.success());
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
