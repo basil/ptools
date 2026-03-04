@@ -179,7 +179,7 @@ pub fn print_cmd_summary_from(handle: &ProcHandle) {
             let is_zombie = matches!(handle.state(), Ok(crate::model::stat::ProcState::Zombie));
             match handle.comm() {
                 Ok(ref comm) if !comm.is_empty() => {
-                    print!("{comm}");
+                    print!("{}", comm.to_string_lossy());
                     if is_zombie {
                         print!(" <defunct>");
                     }

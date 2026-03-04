@@ -17,8 +17,10 @@
 use std::cell::Cell;
 use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -61,7 +63,7 @@ pub(super) struct CoredumpSource {
 
 /// Lazily parsed ELF note data, converted to high-level model types.
 struct ParsedNotes {
-    comm: Option<String>,
+    comm: Option<OsString>,
     cmdline: Option<Vec<OsString>>,
     auxv: Option<model::auxv::Auxv>,
     utime_us: Option<u64>,
@@ -302,7 +304,14 @@ impl CoredumpSource {
                 if p.pr_psargs.is_empty() {
                     None
                 } else {
-                    Some(p.pr_psargs.split_whitespace().map(OsString::from).collect())
+                    Some(
+                        p.pr_psargs
+                            .as_bytes()
+                            .split(|&b| b == b' ')
+                            .filter(|s| !s.is_empty())
+                            .map(|s| OsString::from(OsStr::from_bytes(s)))
+                            .collect(),
+                    )
                 }
             });
 
@@ -415,9 +424,9 @@ impl ProcSource for CoredumpSource {
         })
     }
 
-    fn read_comm(&self) -> io::Result<String> {
+    fn read_comm(&self) -> io::Result<OsString> {
         if let Ok(s) = self.get_field_str("COREDUMP_COMM") {
-            return Ok(s.to_string());
+            return Ok(OsString::from(s));
         }
         self.notes().comm.clone().ok_or_else(|| {
             io::Error::new(

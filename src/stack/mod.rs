@@ -397,7 +397,7 @@ impl TraceOptions {
         }
         let pid = handle.pid() as u32;
         header(pid);
-        let comm = handle.comm().ok();
+        let comm = handle.comm().ok().map(|s| s.to_string_lossy().into_owned());
         let tids = handle.tids()?;
         for tid in tids {
             let tid32 = tid as u32;

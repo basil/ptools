@@ -59,7 +59,7 @@ pub(crate) trait ProcSource {
     fn pid(&self) -> u64;
 
     // Per-process
-    fn read_comm(&self) -> io::Result<String>;
+    fn read_comm(&self) -> io::Result<OsString>;
     fn read_cmdline(&self) -> io::Result<Vec<OsString>>;
     fn is_cmdline_lossy(&self) -> bool;
     fn read_environ(&self) -> io::Result<Vec<OsString>>;

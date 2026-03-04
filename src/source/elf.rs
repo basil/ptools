@@ -20,12 +20,15 @@
 //! core dump.  Provides memory reading via PT_LOAD segments.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::{self};
 use std::os::raw::c_int;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
@@ -243,8 +246,8 @@ pub(super) struct Prpsinfo {
     pub pr_ppid: u32,
     pub pr_pgrp: u32,
     pub pr_sid: u32,
-    pub pr_fname: String,
-    pub pr_psargs: String,
+    pub pr_fname: OsString,
+    pub pr_psargs: OsString,
 }
 
 /// ELF64 prstatus layout offsets (from <sys/procfs.h> / <linux/elfcore.h>):
@@ -366,10 +369,10 @@ fn parse_prpsinfo64(desc: &[u8], endian: ByteOrder) -> Option<Prpsinfo> {
     }
     let rd32 = |off: usize| endian.u32(desc[off..][..4].try_into().unwrap());
 
-    let nul_trimmed = |start: usize, len: usize| -> String {
+    let nul_trimmed = |start: usize, len: usize| -> OsString {
         let slice = &desc[start..start + len];
         let end = slice.iter().position(|&b| b == 0).unwrap_or(len);
-        String::from_utf8_lossy(&slice[..end]).into_owned()
+        OsString::from(OsStr::from_bytes(&slice[..end]))
     };
 
     Some(Prpsinfo {
@@ -411,10 +414,10 @@ fn parse_prpsinfo32(desc: &[u8], endian: ByteOrder) -> Option<Prpsinfo> {
     let rd16 = |off: usize| endian.u16(desc[off..][..2].try_into().unwrap());
     let rd32 = |off: usize| endian.u32(desc[off..][..4].try_into().unwrap());
 
-    let nul_trimmed = |start: usize, len: usize| -> String {
+    let nul_trimmed = |start: usize, len: usize| -> OsString {
         let slice = &desc[start..start + len];
         let end = slice.iter().position(|&b| b == 0).unwrap_or(len);
-        String::from_utf8_lossy(&slice[..end]).into_owned()
+        OsString::from(OsStr::from_bytes(&slice[..end]))
     };
 
     Some(Prpsinfo {

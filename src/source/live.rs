@@ -17,8 +17,10 @@
 use std::cell::OnceCell;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 
@@ -54,7 +56,7 @@ pub(super) struct LiveProcess {
     // Per-process caches (no parameters).
     stat: OnceCell<model::stat::Stat>,
     status: OnceCell<model::status::Status>,
-    comm: OnceCell<String>,
+    comm: OnceCell<OsString>,
     cmdline: OnceCell<Result<Vec<OsString>, io::Error>>,
     environ: OnceCell<Result<Vec<OsString>, io::Error>>,
     auxv: OnceCell<model::auxv::Auxv>,
@@ -198,12 +200,14 @@ impl ProcSource for LiveProcess {
         self.pid
     }
 
-    fn read_comm(&self) -> io::Result<String> {
+    fn read_comm(&self) -> io::Result<OsString> {
         if let Some(val) = self.comm.get() {
             return Ok(val.clone());
         }
-        let val = std::fs::read_to_string(format!("/proc/{}/comm", self.pid))?;
-        let val = val.trim_end().to_string();
+        let bytes = std::fs::read(format!("/proc/{}/comm", self.pid))?;
+        let val = OsString::from(OsStr::from_bytes(
+            bytes.strip_suffix(b"\n").unwrap_or(&bytes),
+        ));
         let _ = self.comm.set(val.clone());
         Ok(val)
     }

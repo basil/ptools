@@ -93,7 +93,7 @@ impl ProcHandle {
         self.source.read_auxv()
     }
 
-    pub fn comm(&self) -> io::Result<String> {
+    pub fn comm(&self) -> io::Result<OsString> {
         self.source.read_comm()
     }
 
