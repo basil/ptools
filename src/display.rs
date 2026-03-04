@@ -170,7 +170,7 @@ pub fn print_proc_summary_from(handle: &ProcHandle) {
 
 pub fn print_cmd_summary_from(handle: &ProcHandle) {
     match handle.read_cmdline() {
-        Ok(args) if !args.is_empty() => {
+        Ok((args, _)) if !args.is_empty() => {
             let summary: Vec<_> = args.iter().map(|a| a.to_string_lossy()).collect();
             println!("{}", summary.join(" "));
         }

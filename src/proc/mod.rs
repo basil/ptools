@@ -302,17 +302,39 @@ impl ProcHandle {
     // -- Compound convenience ----------------------------------------
 
     /// Read command-line arguments.
-    pub fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
-        self.source.read_cmdline()
-    }
-
-    pub fn is_cmdline_lossy(&self) -> bool {
-        self.source.is_cmdline_lossy()
+    ///
+    /// Tries initial args (stack walk), then current args (/proc or journal),
+    /// then fallback (pr_psargs).  Returns `(args, is_lossy)`.
+    pub fn read_cmdline(&self) -> io::Result<(Vec<OsString>, bool)> {
+        if let Ok(args) = self.source.read_initial_args() {
+            return Ok((args, false));
+        }
+        if let Ok((args, lossy)) = self.source.read_current_args() {
+            return Ok((args, lossy));
+        }
+        self.source.read_fallback_args().map(|args| (args, true))
     }
 
     /// Read the environment of the process.
+    ///
+    /// Tries current environ (symbol dereference), then initial (stack walk),
+    /// then fallback (/proc or journal).
     pub fn read_environ(&self) -> io::Result<Vec<OsString>> {
-        self.source.read_environ()
+        if let Ok(env) = self.source.read_current_environ() {
+            return Ok(env);
+        }
+        match self.source.read_initial_environ() {
+            Ok(env) => return Ok(env),
+            Err(e) if !self.is_core => eprintln!("process_vm_readv: {e}"),
+            Err(_) => {}
+        }
+        if !self.is_core {
+            eprintln!(
+                "warning: showing environment at time of \
+                 process launch, which may not reflect runtime changes",
+            );
+        }
+        self.source.read_fallback_environ()
     }
 
     pub fn run_time_ns(&self) -> io::Result<u64> {

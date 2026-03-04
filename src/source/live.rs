@@ -212,34 +212,30 @@ impl ProcSource for LiveProcess {
         Ok(val)
     }
 
-    fn is_cmdline_lossy(&self) -> bool {
-        false
+    fn read_initial_args(&self) -> io::Result<Vec<OsString>> {
+        Ok(self.ensure_initial_stack()?.args.clone())
     }
 
-    fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
-        // Try the stack walk first (recovers original argv even if overwritten).
-        if let Ok(initial) = self.ensure_initial_stack() {
-            return Ok(initial.args.clone());
-        }
-        // Fallback: cached /proc/pid/cmdline.
-        Ok(self.ensure_cmdline()?.clone())
+    fn read_current_args(&self) -> io::Result<(Vec<OsString>, bool)> {
+        Ok((self.ensure_cmdline()?.clone(), false))
     }
 
-    fn read_environ(&self) -> io::Result<Vec<OsString>> {
-        // Try the current environ from the environ symbol (includes setenv changes).
-        if let Ok(final_env) = self.ensure_final_env() {
-            return Ok(final_env.clone());
-        }
-        // Try the initial environ from the stack walk.
-        match self.ensure_initial_stack() {
-            Ok(initial) => return Ok(initial.env.clone()),
-            Err(e) => eprintln!("process_vm_readv: {e}"),
-        }
-        // Fallback: cached /proc/pid/environ.
-        eprintln!(
-            "warning: showing environment at time of \
-             process launch, which may not reflect runtime changes",
-        );
+    fn read_fallback_args(&self) -> io::Result<Vec<OsString>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no fallback args source for live process",
+        ))
+    }
+
+    fn read_current_environ(&self) -> io::Result<Vec<OsString>> {
+        Ok(self.ensure_final_env()?.clone())
+    }
+
+    fn read_initial_environ(&self) -> io::Result<Vec<OsString>> {
+        Ok(self.ensure_initial_stack()?.env.clone())
+    }
+
+    fn read_fallback_environ(&self) -> io::Result<Vec<OsString>> {
         Ok(self.ensure_environ()?.clone())
     }
 

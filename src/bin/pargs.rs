@@ -20,11 +20,11 @@ use std::process::exit;
 use ptools::proc::ProcHandle;
 
 fn read_cmdline(handle: &ProcHandle) -> std::io::Result<Vec<OsString>> {
-    let args = handle.read_cmdline().map_err(|e| {
+    let (args, lossy) = handle.read_cmdline().map_err(|e| {
         eprintln!("Error reading cmdline for PID {}: {}", handle.pid(), e);
         e
     })?;
-    if handle.is_cmdline_lossy() {
+    if lossy {
         eprintln!(
             "warning: cmdline reconstructed from lossy source; \
              arguments containing spaces or empty arguments may be wrong",

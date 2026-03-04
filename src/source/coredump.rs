@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-use std::cell::Cell;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -58,7 +57,6 @@ pub(super) struct CoredumpSource {
     notes: OnceCell<ParsedNotes>,
     initial_stack: OnceCell<Option<InitialStack>>,
     final_env: OnceCell<Option<Vec<OsString>>>,
-    cmdline_lossy: Cell<bool>,
 }
 
 /// Lazily parsed ELF note data, converted to high-level model types.
@@ -150,7 +148,6 @@ impl CoredumpSource {
             notes: OnceCell::new(),
             initial_stack: OnceCell::new(),
             final_env: OnceCell::new(),
-            cmdline_lossy: Cell::new(false),
         })
     }
 
@@ -171,7 +168,6 @@ impl CoredumpSource {
             notes: OnceCell::new(),
             initial_stack: OnceCell::new(),
             final_env: OnceCell::new(),
-            cmdline_lossy: Cell::new(false),
         })
     }
 
@@ -436,52 +432,36 @@ impl ProcSource for CoredumpSource {
         })
     }
 
-    fn read_cmdline(&self) -> io::Result<Vec<OsString>> {
-        // Try the stack walk first (recovers original argv from core memory).
-        if let Ok(initial) = self.ensure_initial_stack() {
-            return Ok(initial.args.clone());
-        }
-        // COREDUMP_CMDLINE from journal is NUL-delimited and preserves argv faithfully.
-        // For apport crash files, however, ProcCmdline is space-separated and
-        // the conversion to NUL-separated is lossy (marked by _CMDLINE_LOSSY).
-        if let Ok(b) = self.get_field("COREDUMP_CMDLINE") {
-            if self.fields.contains_key("_CMDLINE_LOSSY") {
-                self.cmdline_lossy.set(true);
-            }
-            return Ok(split_nul_bytes(b));
-        }
-        // Last resort: pr_psargs is lossy (whitespace-split, 80-char truncation).
-        if let Some(cmdline) = self.notes().cmdline.clone() {
-            self.cmdline_lossy.set(true);
-            return Ok(cmdline);
-        }
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "cmdline not available from coredump",
-        ))
+    fn read_initial_args(&self) -> io::Result<Vec<OsString>> {
+        Ok(self.ensure_initial_stack()?.args.clone())
     }
 
-    fn is_cmdline_lossy(&self) -> bool {
-        self.cmdline_lossy.get()
+    fn read_current_args(&self) -> io::Result<(Vec<OsString>, bool)> {
+        let b = self.get_field("COREDUMP_CMDLINE")?;
+        let lossy = self.fields.contains_key("_CMDLINE_LOSSY");
+        Ok((split_nul_bytes(b), lossy))
     }
 
-    fn read_environ(&self) -> io::Result<Vec<OsString>> {
-        // Try the current environ from the environ symbol.
-        if let Ok(final_env) = self.ensure_final_env() {
-            return Ok(final_env.clone());
-        }
-        // Try the initial environ from the stack walk.
-        if let Ok(initial) = self.ensure_initial_stack() {
-            return Ok(initial.env.clone());
-        }
-        // Fallback: COREDUMP_ENVIRON journal field.
-        if let Ok(b) = self.get_field("COREDUMP_ENVIRON") {
-            return Ok(split_nul_bytes(b));
-        }
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "environ not available from coredump",
-        ))
+    fn read_fallback_args(&self) -> io::Result<Vec<OsString>> {
+        self.notes().cmdline.clone().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Unsupported,
+                "cmdline not available from coredump",
+            )
+        })
+    }
+
+    fn read_current_environ(&self) -> io::Result<Vec<OsString>> {
+        Ok(self.ensure_final_env()?.clone())
+    }
+
+    fn read_initial_environ(&self) -> io::Result<Vec<OsString>> {
+        Ok(self.ensure_initial_stack()?.env.clone())
+    }
+
+    fn read_fallback_environ(&self) -> io::Result<Vec<OsString>> {
+        let b = self.get_field("COREDUMP_ENVIRON")?;
+        Ok(split_nul_bytes(b))
     }
 
     fn read_auxv(&self) -> io::Result<model::auxv::Auxv> {
