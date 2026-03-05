@@ -212,6 +212,96 @@ fn ptree_accepts_username_operand() {
 }
 
 #[test]
+fn ptree_truncates_lines_to_columns_width() {
+    let columns = "40";
+    let parent_arg = "TRUNCATION_TEST_PARENT_LONG_ARGUMENT";
+    let child_arg = "TRUNCATION_TEST_CHILD_LONG_ARGUMENT";
+
+    let ready = common::ReadySignal::new(true);
+    let mut example_cmd = Command::new(common::find_exec("examples/ptree_parent_child"));
+    example_cmd
+        .args([parent_arg, child_arg])
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit());
+    ready.apply_to_command(&mut example_cmd);
+
+    let mut child = example_cmd.spawn().expect("failed to spawn example");
+    ready.wait_for_readiness(&mut child);
+
+    let output = Command::new(common::find_exec("ptree"))
+        .arg(child.id().to_string())
+        .env("COLUMNS", columns)
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run ptree");
+
+    let _ = child.kill();
+    let _ = child.wait();
+    ready.cleanup();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let max_width: usize = columns.parse().unwrap();
+    for line in stdout.lines() {
+        assert!(
+            line.len() <= max_width,
+            "Line exceeds {max_width} columns ({} chars): {line:?}",
+            line.len()
+        );
+    }
+    // Verify the output actually has content (not empty)
+    assert!(
+        stdout.lines().count() >= 2,
+        "Expected at least 2 lines of output:\n{stdout}"
+    );
+}
+
+#[test]
+fn ptree_wrap_flag_disables_truncation() {
+    let columns = "40";
+    let parent_arg = "WRAP_TEST_PARENT_WITH_A_VERY_LONG_ARGUMENT_THAT_EXCEEDS_FORTY_COLUMNS";
+    let child_arg = "WRAP_TEST_CHILD";
+
+    let ready = common::ReadySignal::new(true);
+    let mut example_cmd = Command::new(common::find_exec("examples/ptree_parent_child"));
+    example_cmd
+        .args([parent_arg, child_arg])
+        .stdin(Stdio::null())
+        .stderr(Stdio::inherit())
+        .stdout(Stdio::inherit());
+    ready.apply_to_command(&mut example_cmd);
+
+    let mut child = example_cmd.spawn().expect("failed to spawn example");
+    ready.wait_for_readiness(&mut child);
+
+    let output = Command::new(common::find_exec("ptree"))
+        .args(["-w", &child.id().to_string()])
+        .env("COLUMNS", columns)
+        .stdin(Stdio::null())
+        .output()
+        .expect("failed to run ptree");
+
+    let _ = child.kill();
+    let _ = child.wait();
+    ready.cleanup();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let max_width: usize = columns.parse().unwrap();
+    let has_long_line = stdout.lines().any(|line| line.len() > max_width);
+    assert!(
+        has_long_line,
+        "Expected at least one line to exceed {max_width} columns with -w flag:\n{stdout}"
+    );
+    assert_contains(
+        &stdout,
+        parent_arg,
+        "Expected full parent argument to appear with -w flag",
+    );
+}
+
+#[test]
 fn ptree_accepts_mixed_pid_and_user_operands() {
     let Some(username) = current_username() else {
         eprintln!("Skipping: unable to resolve current username");

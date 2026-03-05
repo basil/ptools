@@ -105,7 +105,7 @@ fn print_stack(
             handle,
             |pid| {
                 print!("{pid}:\t");
-                ptools::display::print_cmd_summary_from(handle);
+                println!("{}", ptools::display::cmd_summary_from(handle));
                 println!();
                 first_thread.set(true);
             },
@@ -116,7 +116,7 @@ fn print_stack(
         // attaches to (and unwinds) this one TID instead of every thread.
         opts.tid(tid as u32);
         print!("{tid}:\t");
-        ptools::display::print_cmd_summary_from(handle);
+        println!("{}", ptools::display::cmd_summary_from(handle));
         opts.trace_each(handle, |thread| {
             print_thread(&thread, Some(tid), args.max_frames, false, &first_thread);
         })?;

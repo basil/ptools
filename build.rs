@@ -472,7 +472,7 @@ fn main() {
                           child processes indented from their respective parent processes. An \
                           argument of all digits is taken to be a process ID; otherwise it is \
                           assumed to be a user login name. The default is all processes.",
-            synopsis: "[-ag] [pid|user]...",
+            synopsis: "[-agw] [pid|user]...",
             options: &[
                 (
                     "-a, --all",
@@ -483,6 +483,11 @@ fn main() {
                     "Use line drawing characters. If the current locale is a UTF-8 \
                      locale, the UTF-8 line drawing characters are used, otherwise \
                      ASCII line drawing characters are used.",
+                ),
+                (
+                    "-w, --wrap",
+                    "Allow output lines to wrap. Normally output lines are \
+                     truncated to the current width of the terminal window.",
                 ),
             ],
             operands: &[

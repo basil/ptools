@@ -165,39 +165,35 @@ pub fn print_auxv_from(handle: &ProcHandle) -> io::Result<()> {
 
 pub fn print_proc_summary_from(handle: &ProcHandle) {
     print!("{}:\t", handle.pid());
-    print_cmd_summary_from(handle);
+    println!("{}", cmd_summary_from(handle));
 }
 
-pub fn print_cmd_summary_from(handle: &ProcHandle) {
+pub fn cmd_summary_from(handle: &ProcHandle) -> String {
     match handle.read_cmdline() {
         Ok((args, _)) if !args.is_empty() => {
             let summary: Vec<_> = args.iter().map(|a| a.to_string_lossy()).collect();
-            println!("{}", summary.join(" "));
+            summary.join(" ")
         }
         Ok(_) => {
             // Empty cmdline -- fall back to comm name.
             let is_zombie = matches!(handle.state(), Ok(crate::model::stat::ProcState::Zombie));
             match handle.comm() {
                 Ok(ref comm) if !comm.is_empty() => {
-                    print!("{}", comm.to_string_lossy());
+                    let mut s = comm.to_string_lossy().into_owned();
                     if is_zombie {
-                        print!(" <defunct>");
+                        s.push_str(" <defunct>");
                     }
-                    println!();
+                    s
                 }
-                Ok(_) => println!("<unknown>"),
-                Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-                    println!("<exited>");
-                }
-                Err(_) => println!("<unknown>"),
+                Ok(_) => "<unknown>".to_string(),
+                Err(ref e) if e.kind() == io::ErrorKind::NotFound => "<exited>".to_string(),
+                Err(_) => "<unknown>".to_string(),
             }
         }
-        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
-            println!("<exited>");
-        }
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => "<exited>".to_string(),
         Err(e) => {
-            println!("<error reading cmdline>");
             eprintln!("{e}");
+            "<error reading cmdline>".to_string()
         }
     }
 }
