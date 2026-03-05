@@ -146,21 +146,124 @@ struct PrintOpts<'a> {
     pid_width: usize,
 }
 
-fn print_tree(
-    pid: u64,
+/// Walk up the parent chain for `pid`, returning the chain root-first.
+/// Stops when the parent's parent is PID 0 (same boundary as the old
+/// `print_parents`).
+fn ancestor_chain(pid: u64, parent_map: &HashMap<u64, u64>) -> Vec<u64> {
+    let mut chain = vec![pid];
+    let mut cur = pid;
+    while let Some(&ppid) = parent_map.get(&cur) {
+        // Stop before adding ancestors whose parent is PID 0.
+        let ppid_parent = parent_map.get(&ppid).copied().unwrap_or(0);
+        if ppid_parent == 0 {
+            break;
+        }
+        chain.push(ppid);
+        cur = ppid;
+    }
+    chain.reverse();
+    chain
+}
+
+/// Build the pruned children map and group roots for a set of target PIDs.
+/// Returns `(pruned_children, sorted_roots)`.
+fn build_merged_groups(
+    targets: &HashSet<u64>,
     parent_map: &HashMap<u64, u64>,
     child_map: &HashMap<u64, Vec<u64>>,
-    opts: &PrintOpts,
-    printed: &mut HashSet<u64>,
-) -> bool {
-    if !parent_map.contains_key(&pid) {
-        eprintln!("ptree: no such pid {pid}");
-        return false;
+) -> (HashMap<u64, Vec<u64>>, Vec<u64>) {
+    let mut pruned_children: HashMap<u64, Vec<u64>> = HashMap::new();
+    let mut root_set: HashSet<u64> = HashSet::new();
+
+    for &pid in targets {
+        let chain = ancestor_chain(pid, parent_map);
+        if let Some(&root) = chain.first() {
+            root_set.insert(root);
+        }
+        // Insert edges from the chain into pruned_children.
+        for window in chain.windows(2) {
+            let parent = window[0];
+            let child = window[1];
+            let children = pruned_children.entry(parent).or_default();
+            if !children.contains(&child) {
+                children.push(child);
+            }
+        }
     }
-    let mut cont = Vec::new();
-    let indent_level = print_parents(parent_map, pid, opts, &mut cont, printed);
-    print_children(child_map, pid, indent_level, opts, &mut cont, true, printed);
-    true
+
+    // Sort each pruned_children entry to match child_map ordering.
+    for (parent, children) in pruned_children.iter_mut() {
+        if let Some(full_children) = child_map.get(parent) {
+            children.sort_by_key(|c| {
+                full_children
+                    .iter()
+                    .position(|fc| fc == c)
+                    .unwrap_or(usize::MAX)
+            });
+        }
+    }
+
+    // Sort roots by minimum target PID reachable from each root.
+    let mut roots: Vec<u64> = root_set.into_iter().collect();
+    roots.sort_by_key(|root| {
+        targets
+            .iter()
+            .filter(|t| {
+                let chain = ancestor_chain(**t, parent_map);
+                chain.first() == Some(root)
+            })
+            .min()
+            .copied()
+            .unwrap_or(*root)
+    });
+
+    (pruned_children, roots)
+}
+
+struct MergedTreeCtx<'a> {
+    pruned_children: &'a HashMap<u64, Vec<u64>>,
+    targets: &'a HashSet<u64>,
+    child_map: &'a HashMap<u64, Vec<u64>>,
+    opts: &'a PrintOpts<'a>,
+}
+
+fn print_merged_tree(
+    pid: u64,
+    ctx: &MergedTreeCtx,
+    indent_level: u64,
+    cont: &mut Vec<bool>,
+    is_last: bool,
+) {
+    print_ptree_line(pid, indent_level, ctx.opts, cont, is_last);
+
+    if ctx.targets.contains(&pid) {
+        // Target PID: show its full subtree.
+        if let Some(children) = ctx.child_map.get(&pid) {
+            let mut printed = HashSet::new();
+            for (i, child) in children.iter().enumerate() {
+                let child_is_last = i == children.len() - 1;
+                cont.push(!child_is_last);
+                print_children(
+                    ctx.child_map,
+                    *child,
+                    indent_level + 1,
+                    ctx.opts,
+                    cont,
+                    child_is_last,
+                    &mut printed,
+                );
+                cont.pop();
+            }
+        }
+    } else if let Some(children) = ctx.pruned_children.get(&pid) {
+        // Ancestor-only node: only recurse into pruned branches.
+        for (i, child) in children.iter().enumerate() {
+            let child_is_last = i == children.len() - 1;
+            cont.push(!child_is_last);
+            print_merged_tree(*child, ctx, indent_level + 1, cont, child_is_last);
+            cont.pop();
+        }
+    }
 }
 
 fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>, opts: &PrintOpts) {
@@ -171,35 +274,6 @@ fn print_all_trees(child_map: &HashMap<u64, Vec<u64>>, opts: &PrintOpts) {
             print_children(child_map, *pid, 0, opts, &mut cont, true, &mut printed);
         }
     }
-}
-
-// Returns the current indentation level
-fn print_parents(
-    parent_map: &HashMap<u64, u64>,
-    pid: u64,
-    opts: &PrintOpts,
-    cont: &mut Vec<bool>,
-    printed: &mut HashSet<u64>,
-) -> u64 {
-    let ppid = match parent_map.get(&pid) {
-        Some(ppid) => *ppid,
-        // Process exited before we could read its parent, stop the ancestry chain.
-        None => return 0,
-    };
-
-    // Don't print ancestors whose parent is PID 0. This skips PID 1
-    // (init/systemd) and PID 2 (kthreadd) since both have ppid=0.
-    let ppid_parent = parent_map.get(&ppid).copied().unwrap_or(0);
-    if ppid_parent == 0 {
-        return 0;
-    }
-
-    let indent_level = print_parents(parent_map, ppid, opts, cont, printed);
-    print_ptree_line(ppid, indent_level, opts, cont, true);
-    printed.insert(ppid);
-    // Ancestor path is a single chain, no siblings to continue
-    cont.push(false);
-    indent_level + 1
 }
 
 fn print_children(
@@ -368,7 +442,8 @@ fn main() {
 
     let mut error = false;
     if !args.target.is_empty() {
-        let mut printed = HashSet::new();
+        // Phase 1: Collect all target PIDs.
+        let mut target_pids = Vec::new();
         for target in &args.target {
             if let Ok(pid) = target.parse::<u64>() {
                 if pid == 0 {
@@ -376,19 +451,21 @@ fn main() {
                     error = true;
                     continue;
                 }
-                if printed.insert(pid)
-                    && !print_tree(pid, &parent_map, &child_map, &opts, &mut printed)
-                {
+                if !parent_map.contains_key(&pid) {
+                    eprintln!("ptree: no such pid {pid}");
                     error = true;
+                    continue;
                 }
+                target_pids.push(pid);
                 continue;
             }
             if let Some(pid) = ptools::proc::parse_proc_path(target) {
-                if printed.insert(pid)
-                    && !print_tree(pid, &parent_map, &child_map, &opts, &mut printed)
-                {
+                if !parent_map.contains_key(&pid) {
+                    eprintln!("ptree: no such pid {pid}");
                     error = true;
+                    continue;
                 }
+                target_pids.push(pid);
                 continue;
             }
             if target.starts_with("/proc/") {
@@ -398,10 +475,8 @@ fn main() {
             match pids_for_user(target, &uid_map) {
                 Ok(pids) => {
                     for pid in pids {
-                        if printed.insert(pid)
-                            && !print_tree(pid, &parent_map, &child_map, &opts, &mut printed)
-                        {
-                            error = true;
+                        if parent_map.contains_key(&pid) {
+                            target_pids.push(pid);
                         }
                     }
                 }
@@ -410,6 +485,26 @@ fn main() {
                     error = true;
                 }
             }
+        }
+
+        // Deduplicate while preserving order.
+        let mut seen = HashSet::new();
+        target_pids.retain(|pid| seen.insert(*pid));
+
+        // Phase 2: Build merged groups.
+        let target_set: HashSet<u64> = target_pids.iter().copied().collect();
+        let (pruned_children, roots) = build_merged_groups(&target_set, &parent_map, &child_map);
+
+        // Phase 3: Print merged trees.
+        let ctx = MergedTreeCtx {
+            pruned_children: &pruned_children,
+            targets: &target_set,
+            child_map: &child_map,
+            opts: &opts,
+        };
+        for root in &roots {
+            let mut cont = Vec::new();
+            print_merged_tree(*root, &ctx, 0, &mut cont, true);
         }
     } else if args.all {
         print_all_trees(&child_map, &opts);
