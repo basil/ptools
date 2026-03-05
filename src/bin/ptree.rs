@@ -24,6 +24,14 @@ use nix::unistd::User;
 
 nix::ioctl_read_bad!(tiocgwinsz, libc::TIOCGWINSZ, libc::winsize);
 
+fn pid_width() -> usize {
+    std::fs::read_to_string("/proc/sys/kernel/pid_max")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|max| max.to_string().len())
+        .unwrap_or(7)
+}
+
 fn terminal_width() -> Option<usize> {
     if let Ok(cols) = std::env::var("COLUMNS") {
         if let Ok(w) = cols.parse::<usize>() {
@@ -135,6 +143,7 @@ fn build_proc_maps() -> Result<ProcMaps, Box<dyn Error>> {
 struct PrintOpts<'a> {
     graph: Option<&'a GraphChars>,
     max_width: Option<usize>,
+    pid_width: usize,
 }
 
 fn print_tree(
@@ -247,7 +256,7 @@ fn print_ptree_line(pid: u64, indent_level: u64, opts: &PrintOpts, cont: &[bool]
             }
         }
     }
-    let _ = write!(line, "{pid}  ");
+    let _ = write!(line, "{pid:<width$}  ", width = opts.pid_width);
     let handle = ptools::proc::ProcHandle::from_pid(pid);
     line.push_str(&ptools::display::cmd_summary_from(&handle));
     if let Some(w) = opts.max_width {
@@ -354,6 +363,7 @@ fn main() {
             None
         },
         max_width: if args.wrap { None } else { terminal_width() },
+        pid_width: pid_width(),
     };
 
     let mut error = false;
