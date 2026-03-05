@@ -233,14 +233,13 @@ fn print_merged_tree(
     indent_level: u64,
     cont: &mut Vec<bool>,
     is_last: bool,
-    printed: &mut HashSet<u64>,
 ) {
     print_ptree_line(pid, indent_level, ctx.opts, cont, is_last);
-    printed.insert(pid);
 
     if ctx.targets.contains(&pid) {
         // Target PID: show its full subtree.
         if let Some(children) = ctx.child_map.get(&pid) {
+            let mut printed = HashSet::new();
             for (i, child) in children.iter().enumerate() {
                 let child_is_last = i == children.len() - 1;
                 cont.push(!child_is_last);
@@ -251,7 +250,7 @@ fn print_merged_tree(
                     ctx.opts,
                     cont,
                     child_is_last,
-                    printed,
+                    &mut printed,
                 );
                 cont.pop();
             }
@@ -261,7 +260,7 @@ fn print_merged_tree(
         for (i, child) in children.iter().enumerate() {
             let child_is_last = i == children.len() - 1;
             cont.push(!child_is_last);
-            print_merged_tree(*child, ctx, indent_level + 1, cont, child_is_last, printed);
+            print_merged_tree(*child, ctx, indent_level + 1, cont, child_is_last);
             cont.pop();
         }
     }
@@ -503,10 +502,9 @@ fn main() {
             child_map: &child_map,
             opts: &opts,
         };
-        let mut printed = HashSet::new();
         for root in &roots {
             let mut cont = Vec::new();
-            print_merged_tree(*root, &ctx, 0, &mut cont, true, &mut printed);
+            print_merged_tree(*root, &ctx, 0, &mut cont, true);
         }
     } else if args.all {
         print_all_trees(&child_map, &opts);
