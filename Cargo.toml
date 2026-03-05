@@ -20,7 +20,7 @@ flate2 = "1.1"
 foreign-types = "0.5"
 lexopt = "0.3"
 libc = "0.2"
-nix = { version = "0.30", features = ["event", "feature", "fs", "ioctl", "process", "resource", "sched", "signal", "socket", "time", "user"] }
+nix = { version = "0.31", features = ["event", "feature", "fs", "ioctl", "process", "resource", "sched", "signal", "socket", "time", "user"] }
 rustc-demangle = "0.1"
 zstd = { version = "0.13", default-features = false }
 
