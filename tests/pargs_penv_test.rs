@@ -41,14 +41,7 @@ fn pargs_matches_started_process_arguments() {
         "tabs\tinside",
     ];
 
-    let output = common::run_ptool(
-        "pargs",
-        &[],
-        "examples/pargs_penv",
-        &expected_args,
-        &[],
-        false,
-    );
+    let output = common::run_ptool("pargs", &[], "pargs_penv", &expected_args, &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     for arg in expected_args {
@@ -76,14 +69,7 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
         "tabs\tinside",
     ];
 
-    let output = common::run_ptool(
-        "pargs",
-        &["-l"],
-        "examples/pargs_penv",
-        &expected_args,
-        &[],
-        false,
-    );
+    let output = common::run_ptool("pargs", &["-l"], "pargs_penv", &expected_args, &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let mut lines = stdout.lines();
@@ -96,9 +82,7 @@ fn pargs_l_matches_started_process_arguments_as_shell_command_line() {
 
     // pargs -l resolves argv[0] to the real executable path via /proc/[pid]/exe,
     // so the first token should be the canonical path to the example binary.
-    let exe_path = common::find_exec("examples/pargs_penv")
-        .canonicalize()
-        .unwrap();
+    let exe_path = common::find_exec("pargs_penv").canonicalize().unwrap();
     let expected_line = std::iter::once(exe_path.to_str().unwrap())
         .chain(expected_args.iter().copied())
         .map(shell_quote)
@@ -116,14 +100,7 @@ fn penv_matches_started_process_environment() {
         ("PTOOLS_TEST_UNICODE", "✓"),
     ];
 
-    let output = common::run_ptool(
-        "penv",
-        &[],
-        "examples/pargs_penv",
-        &[],
-        &expected_env,
-        false,
-    );
+    let output = common::run_ptool("penv", &[], "pargs_penv", &[], &expected_env, false);
     let stdout = common::assert_success_and_get_stdout_allow_warnings(output);
 
     for (key, value) in expected_env {
@@ -145,14 +122,7 @@ fn pargs_e_alias_matches_started_process_environment() {
         ("PTOOLS_TEST_UNICODE", "✓"),
     ];
 
-    let output = common::run_ptool(
-        "pargs",
-        &["-e"],
-        "examples/pargs_penv",
-        &[],
-        &expected_env,
-        false,
-    );
+    let output = common::run_ptool("pargs", &["-e"], "pargs_penv", &[], &expected_env, false);
     let stdout = common::assert_success_and_get_stdout_allow_warnings(output);
 
     for (key, value) in expected_env {
@@ -167,7 +137,7 @@ fn pargs_e_alias_matches_started_process_environment() {
 
 #[test]
 fn pauxv_prints_auxv_entries() {
-    let output = common::run_ptool("pauxv", &[], "examples/pargs_penv", &[], &[], false);
+    let output = common::run_ptool("pauxv", &[], "pargs_penv", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     assert!(
@@ -249,10 +219,10 @@ fn pauxv_prints_auxv_entries() {
 
 #[test]
 fn pargs_x_alias_matches_pauxv_output() {
-    let pauxv_output = common::run_ptool("pauxv", &[], "examples/pargs_penv", &[], &[], false);
+    let pauxv_output = common::run_ptool("pauxv", &[], "pargs_penv", &[], &[], false);
     let pauxv_stdout = common::assert_success_and_get_stdout(pauxv_output);
 
-    let pargs_output = common::run_ptool("pargs", &["-x"], "examples/pargs_penv", &[], &[], false);
+    let pargs_output = common::run_ptool("pargs", &["-x"], "pargs_penv", &[], &[], false);
     let pargs_stdout = common::assert_success_and_get_stdout(pargs_output);
 
     // Both should contain AT_PAGESZ
@@ -287,7 +257,7 @@ fn penv_reflects_runtime_setenv() {
     let output = common::run_ptool(
         "penv",
         &[],
-        "examples/penv_setenv",
+        "penv_setenv",
         &[],
         &[("PTOOLS_TEST_OVERWRITE_VAR", "before")],
         false,
@@ -318,7 +288,7 @@ fn pargs_e_reflects_runtime_setenv() {
     let output = common::run_ptool(
         "pargs",
         &["-e"],
-        "examples/penv_setenv",
+        "penv_setenv",
         &[],
         &[("PTOOLS_TEST_OVERWRITE_VAR", "before")],
         false,
@@ -342,7 +312,7 @@ fn pargs_e_reflects_runtime_setenv() {
 
 #[test]
 fn pargs_x_prints_auxv_entries() {
-    let output = common::run_ptool("pargs", &["-x"], "examples/pargs_penv", &[], &[], false);
+    let output = common::run_ptool("pargs", &["-x"], "pargs_penv", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     assert!(

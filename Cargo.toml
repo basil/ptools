@@ -9,6 +9,25 @@ repository = "https://github.com/basil/ptools"
 license = "Apache-2.0"
 keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
+exclude = [
+  "src/bin/pargs_penv.rs",
+  "src/bin/pcred_process.rs",
+  "src/bin/penv_setenv.rs",
+  "src/bin/pfiles_af_alg.rs",
+  "src/bin/pfiles_epoll.rs",
+  "src/bin/pfiles_matrix.rs",
+  "src/bin/pfiles_matrix_file_link.rs",
+  "src/bin/pfiles_matrix_unix_socket.rs",
+  "src/bin/pfiles_netlink.rs",
+  "src/bin/pfiles_sockopts_parent.rs",
+  "src/bin/plgrp_process.rs",
+  "src/bin/plimit_process.rs",
+  "src/bin/psig_signals.rs",
+  "src/bin/pstack_process.rs",
+  "src/bin/pstop_prun_process.rs",
+  "src/bin/ptree_parent_child.rs",
+  "src/bin/pwait_process.rs",
+]
 
 [lints.clippy]
 uninlined_format_args = "warn"

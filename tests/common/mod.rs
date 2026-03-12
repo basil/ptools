@@ -26,13 +26,19 @@ use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-// Find an executable produced by the Cargo build
+// Find an executable produced by the Cargo build.
+//
+// Cargo >=1.94 exposes `CARGO_BIN_EXE_<name>` to integration tests, which
+// works regardless of `build.build-dir` or layout changes.  Older Cargo
+// versions fall back to locating the binary relative to the test executable.
 pub fn find_exec(name: &str) -> PathBuf {
-    // Find the path where Cargo has placed the executables by looking at this test process's
-    // executable, which was also built by Cargo.
+    let env_var = format!("CARGO_BIN_EXE_{name}");
+    if let Some(p) = std::env::var_os(&env_var) {
+        return p.into();
+    }
+
     let this_exec = std::env::current_exe().unwrap();
     let exec_dir = this_exec.parent().unwrap().parent().unwrap();
-
     exec_dir.join(name)
 }
 

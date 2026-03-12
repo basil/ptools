@@ -25,7 +25,7 @@ fn find_line_for_signal<'a>(stdout: &'a str, name: &str) -> &'a str {
 
 #[test]
 fn psig_reports_default_ignored_and_caught_actions() {
-    let output = common::run_ptool("psig", &[], "examples/psig_signals", &[], &[], false);
+    let output = common::run_ptool("psig", &[], "psig_signals", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let mut lines = stdout.lines();
