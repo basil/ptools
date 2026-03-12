@@ -18,7 +18,7 @@ mod common;
 
 #[test]
 fn pstack_prints_stack_trace() {
-    let output = common::run_ptool("pstack", &[], "examples/pstack_process", &[], &[], false);
+    let output = common::run_ptool("pstack", &[], "test_pstack_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let mut lines = stdout.lines();
@@ -26,7 +26,7 @@ fn pstack_prints_stack_trace() {
         .next()
         .unwrap_or_else(|| panic!("Expected process summary line in pstack output:\n{stdout}"));
     assert!(
-        summary.contains("pstack_process"),
+        summary.contains("test_pstack_process"),
         "Expected summary to contain pstack_process executable name:\n{stdout}"
     );
 
@@ -51,14 +51,7 @@ fn pstack_prints_stack_trace() {
 
 #[test]
 fn pstack_module_flag_shows_module_paths() {
-    let output = common::run_ptool(
-        "pstack",
-        &["-m"],
-        "examples/pstack_process",
-        &[],
-        &[],
-        false,
-    );
+    let output = common::run_ptool("pstack", &["-m"], "test_pstack_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let frame_lines: Vec<&str> = stdout
@@ -84,14 +77,7 @@ fn pstack_module_flag_shows_module_paths() {
     ignore = "optimized builds may inline source locations"
 )]
 fn pstack_verbose_shows_source_locations() {
-    let output = common::run_ptool(
-        "pstack",
-        &["-v"],
-        "examples/pstack_process",
-        &[],
-        &[],
-        false,
-    );
+    let output = common::run_ptool("pstack", &["-v"], "test_pstack_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let frame_lines: Vec<&str> = stdout
@@ -118,7 +104,7 @@ fn pstack_n_limits_frame_count() {
     let output = common::run_ptool(
         "pstack",
         &["-n", "2"],
-        "examples/pstack_process",
+        "test_pstack_process",
         &[],
         &[],
         false,

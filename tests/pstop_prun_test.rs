@@ -56,7 +56,7 @@ fn wait_for_state(pid: u32, expected: &[char], timeout_ms: u64) -> char {
 #[test]
 fn pstop_stops_a_running_process() {
     let ready = ReadySignal::new(false);
-    let mut example_cmd = Command::new(find_exec("examples/pstop_prun_process"));
+    let mut example_cmd = Command::new(find_exec("test_pstop_prun_process"));
     example_cmd
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
@@ -97,7 +97,7 @@ fn pstop_stops_a_running_process() {
 #[test]
 fn prun_resumes_a_stopped_process() {
     let ready = ReadySignal::new(false);
-    let mut example_cmd = Command::new(find_exec("examples/pstop_prun_process"));
+    let mut example_cmd = Command::new(find_exec("test_pstop_prun_process"));
     example_cmd
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())

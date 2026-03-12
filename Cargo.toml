@@ -9,6 +9,7 @@ repository = "https://github.com/basil/ptools"
 license = "Apache-2.0"
 keywords = ["linux", "process", "procfs", "debugging", "cli"]
 categories = ["command-line-utilities", "development-tools::debugging"]
+exclude = ["src/bin/test_*.rs"]
 
 [lints.clippy]
 uninlined_format_args = "warn"

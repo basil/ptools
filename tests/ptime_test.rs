@@ -184,7 +184,7 @@ fn ptime_snapshot_reports_timing() {
     let output = common::run_ptool(
         "ptime",
         &["-p", "__PID__"],
-        "examples/pcred_process",
+        "test_pcred_process",
         &[],
         &[],
         false,

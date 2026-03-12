@@ -18,7 +18,7 @@ mod common;
 
 #[test]
 fn pcred_reports_condensed_credentials() {
-    let output = common::run_ptool("pcred", &[], "examples/pcred_process", &[], &[], false);
+    let output = common::run_ptool("pcred", &[], "test_pcred_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let mut lines = stdout.lines();
@@ -39,7 +39,7 @@ fn pcred_reports_condensed_credentials() {
 
 #[test]
 fn pcred_all_flag_shows_separate_credentials() {
-    let output = common::run_ptool("pcred", &["-a"], "examples/pcred_process", &[], &[], false);
+    let output = common::run_ptool("pcred", &["-a"], "test_pcred_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let mut lines = stdout.lines();
@@ -90,7 +90,7 @@ fn pcred_reports_groups_when_supplementary_groups_exist() {
 
     // The default mode may suppress the groups line if there is only one group
     // matching rgid, so verify with -a which shows groups unconditionally.
-    let output = common::run_ptool("pcred", &["-a"], "examples/pcred_process", &[], &[], false);
+    let output = common::run_ptool("pcred", &["-a"], "test_pcred_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     assert!(

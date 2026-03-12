@@ -25,6 +25,11 @@ use std::thread;
 use std::time::Duration;
 
 fn find_exec(name: &str) -> std::path::PathBuf {
+    let env_var = format!("CARGO_BIN_EXE_{name}");
+    if let Some(p) = std::env::var_os(&env_var) {
+        return p.into();
+    }
+
     let this_exec = std::env::current_exe().expect("current exe");
     let exec_dir = this_exec
         .parent()
@@ -52,7 +57,7 @@ fn parent_main() {
     let ready_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
 
-    let mut child = Command::new(find_exec("examples/pfiles_sockopts_parent"))
+    let mut child = Command::new(find_exec("test_pfiles_sockopts_parent"))
         .arg("--child")
         .env("PTOOLS_TEST_READY_FILE", &ready_path)
         .stdin(Stdio::null())

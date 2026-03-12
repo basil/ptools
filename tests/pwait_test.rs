@@ -29,7 +29,7 @@ use common::ReadySignal;
 /// Returns the child and the ReadySignal for cleanup.
 fn spawn_example(env: &[(&str, &str)]) -> (std::process::Child, ReadySignal) {
     let ready = ReadySignal::new(false);
-    let mut cmd = Command::new(find_exec("examples/pwait_process"));
+    let mut cmd = Command::new(find_exec("test_pwait_process"));
     cmd.stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -205,7 +205,7 @@ fn pwait_mixed_valid_and_invalid_exits_nonzero() {
 fn pwait_already_exited_process() {
     // Spawn a process that exits almost immediately.
     let ready = ReadySignal::new(false);
-    let mut cmd = Command::new(find_exec("examples/pwait_process"));
+    let mut cmd = Command::new(find_exec("test_pwait_process"));
     cmd.stdin(Stdio::null())
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())

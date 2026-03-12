@@ -25,7 +25,7 @@ fn find_line_for_signal<'a>(stdout: &'a str, name: &str) -> &'a str {
 
 #[test]
 fn psig_reports_default_ignored_and_caught_actions() {
-    let output = common::run_ptool("psig", &[], "examples/psig_signals", &[], &[], false);
+    let output = common::run_ptool("psig", &[], "test_psig_signals", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let mut lines = stdout.lines();
@@ -33,7 +33,7 @@ fn psig_reports_default_ignored_and_caught_actions() {
         .next()
         .unwrap_or_else(|| panic!("Expected process summary line in psig output:\n{stdout}"));
     assert!(
-        summary.contains("psig_signals"),
+        summary.contains("test_psig_signals"),
         "Expected summary to contain psig_signals executable path:\n{stdout}"
     );
 
