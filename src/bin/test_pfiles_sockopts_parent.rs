@@ -57,7 +57,7 @@ fn parent_main() {
     let ready_path =
         env::var("PTOOLS_TEST_READY_FILE").expect("PTOOLS_TEST_READY_FILE must be set");
 
-    let mut child = Command::new(find_exec("pfiles_sockopts_parent"))
+    let mut child = Command::new(find_exec("test_pfiles_sockopts_parent"))
         .arg("--child")
         .env("PTOOLS_TEST_READY_FILE", &ready_path)
         .stdin(Stdio::null())

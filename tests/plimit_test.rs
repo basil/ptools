@@ -18,7 +18,7 @@ mod common;
 
 #[test]
 fn plimit_displays_resource_limits() {
-    let output = common::run_ptool("plimit", &[], "plimit_process", &[], &[], false);
+    let output = common::run_ptool("plimit", &[], "test_plimit_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     assert!(
@@ -55,7 +55,7 @@ fn plimit_reports_known_nofile_limit() {
     let output = common::run_ptool(
         "plimit",
         &[],
-        "plimit_process",
+        "test_plimit_process",
         &[],
         &[
             ("PTOOLS_TEST_SET_RLIMIT_NOFILE_SOFT", "123"),
@@ -82,7 +82,7 @@ fn plimit_reports_known_nofile_limit() {
 
 #[test]
 fn plimit_k_flag_shows_kilobytes() {
-    let output = common::run_ptool("plimit", &["-k"], "plimit_process", &[], &[], false);
+    let output = common::run_ptool("plimit", &["-k"], "test_plimit_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let file_line = stdout
@@ -106,7 +106,7 @@ fn plimit_k_flag_shows_kilobytes() {
 
 #[test]
 fn plimit_m_flag_shows_megabytes() {
-    let output = common::run_ptool("plimit", &["-m"], "plimit_process", &[], &[], false);
+    let output = common::run_ptool("plimit", &["-m"], "test_plimit_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     for name in &["file", "data", "stack", "coredump", "vmemory"] {
@@ -126,7 +126,7 @@ fn plimit_k_flag_converts_stack_bytes_to_kilobytes() {
     let output = common::run_ptool(
         "plimit",
         &["-k"],
-        "plimit_process",
+        "test_plimit_process",
         &[],
         &[
             ("PTOOLS_TEST_SET_RLIMIT_STACK_SOFT", "10485760"),
@@ -150,7 +150,14 @@ fn plimit_k_flag_converts_stack_bytes_to_kilobytes() {
 
 #[test]
 fn plimit_rejects_missing_pid() {
-    let output = common::run_ptool("plimit", &["__NO_PID__"], "plimit_process", &[], &[], false);
+    let output = common::run_ptool(
+        "plimit",
+        &["__NO_PID__"],
+        "test_plimit_process",
+        &[],
+        &[],
+        false,
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !output.status.success(),
@@ -167,7 +174,7 @@ fn plimit_rejects_invalid_pid() {
     let output = common::run_ptool(
         "plimit",
         &["__NO_PID__", "not_a_pid"],
-        "plimit_process",
+        "test_plimit_process",
         &[],
         &[],
         false,

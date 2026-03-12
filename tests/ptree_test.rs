@@ -94,7 +94,7 @@ fn ptree_shows_parent_and_child_with_arguments() {
     let output = common::run_ptool(
         "ptree",
         &[],
-        "ptree_parent_child",
+        "test_ptree_parent_child",
         &[parent_arg, child_arg],
         &[],
         true,
@@ -191,7 +191,7 @@ fn ptree_accepts_username_operand() {
     let output = common::run_ptool(
         "ptree",
         &[username.as_str(), "__NO_PID__"],
-        "ptree_parent_child",
+        "test_ptree_parent_child",
         &[parent_arg, child_arg],
         &[],
         true,
@@ -218,7 +218,7 @@ fn ptree_truncates_lines_to_columns_width() {
     let child_arg = "TRUNCATION_TEST_CHILD_LONG_ARGUMENT";
 
     let ready = common::ReadySignal::new(true);
-    let mut example_cmd = Command::new(common::find_exec("ptree_parent_child"));
+    let mut example_cmd = Command::new(common::find_exec("test_ptree_parent_child"));
     example_cmd
         .args([parent_arg, child_arg])
         .stdin(Stdio::null())
@@ -264,7 +264,7 @@ fn ptree_wrap_flag_disables_truncation() {
     let child_arg = "WRAP_TEST_CHILD";
 
     let ready = common::ReadySignal::new(true);
-    let mut example_cmd = Command::new(common::find_exec("ptree_parent_child"));
+    let mut example_cmd = Command::new(common::find_exec("test_ptree_parent_child"));
     example_cmd
         .args([parent_arg, child_arg])
         .stdin(Stdio::null())
@@ -314,7 +314,7 @@ fn ptree_accepts_mixed_pid_and_user_operands() {
     let output = common::run_ptool(
         "ptree",
         &["__PID__", username.as_str()],
-        "ptree_parent_child",
+        "test_ptree_parent_child",
         &[parent_arg, child_arg],
         &[],
         true,

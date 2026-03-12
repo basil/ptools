@@ -18,7 +18,7 @@ mod common;
 
 #[test]
 fn plgrp_shows_home_node_for_all_threads() {
-    let output = common::run_ptool("plgrp", &[], "plgrp_process", &[], &[], false);
+    let output = common::run_ptool("plgrp", &[], "test_plgrp_process", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     // Header line should contain NODE.
@@ -52,7 +52,7 @@ fn plgrp_shows_single_thread_with_tid() {
     use std::process::Stdio;
 
     let ready = common::ReadySignal::new(false);
-    let mut example_cmd = Command::new(common::find_exec("plgrp_process"));
+    let mut example_cmd = Command::new(common::find_exec("test_plgrp_process"));
     example_cmd
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
@@ -85,7 +85,14 @@ fn plgrp_shows_single_thread_with_tid() {
 
 #[test]
 fn plgrp_affinity_flag_shows_affinity_column() {
-    let output = common::run_ptool("plgrp", &["-a", "all"], "plgrp_process", &[], &[], false);
+    let output = common::run_ptool(
+        "plgrp",
+        &["-a", "all"],
+        "test_plgrp_process",
+        &[],
+        &[],
+        false,
+    );
     let stdout = common::assert_success_and_get_stdout(output);
 
     let header = stdout.lines().next().expect("expected header line");
@@ -108,7 +115,7 @@ fn plgrp_error_for_nonexistent_pid() {
     let output = common::run_ptool(
         "plgrp",
         &["999999999", "__NO_PID__"],
-        "plgrp_process",
+        "test_plgrp_process",
         &[],
         &[],
         false,

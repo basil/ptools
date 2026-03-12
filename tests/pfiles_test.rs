@@ -500,7 +500,7 @@ fn pfiles_prints_header_lines() {
     let output = common::run_ptool(
         "pfiles",
         &[],
-        "pargs_penv",
+        "test_pargs_penv",
         &[],
         &[
             ("PTOOLS_TEST_SET_RLIMIT_NOFILE_SOFT", "123"),
@@ -534,7 +534,7 @@ fn pfiles_prints_header_lines() {
 
 #[test]
 fn pfiles_reports_epoll_anon_inode() {
-    let output = common::run_ptool("pfiles", &[], "pfiles_epoll", &[], &[], false);
+    let output = common::run_ptool("pfiles", &[], "test_pfiles_epoll", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let fd_map = parse_fd_map(&stdout);
@@ -553,7 +553,7 @@ fn pfiles_reports_epoll_anon_inode() {
 
 #[test]
 fn pfiles_non_verbose_mode_prints_fstat_only_descriptor_lines() {
-    let output = common::run_ptool("pfiles", &["-n"], "pfiles_epoll", &[], &[], false);
+    let output = common::run_ptool("pfiles", &["-n"], "test_pfiles_epoll", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let fd_map = parse_fd_map(&stdout);
@@ -585,7 +585,7 @@ fn pfiles_non_verbose_mode_prints_fstat_only_descriptor_lines() {
 fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
     let ready = common::ReadySignal::new(false);
 
-    let example = common::find_exec("pfiles_netlink");
+    let example = common::find_exec("test_pfiles_netlink");
     let mut unshare_cmd = Command::new("unshare");
     unshare_cmd
         .arg("--net")
@@ -652,7 +652,7 @@ fn pfiles_resolves_socket_metadata_for_target_net_namespace() {
 
 #[test]
 fn pfiles_reports_netlink_socket() {
-    let output = common::run_ptool("pfiles", &[], "pfiles_netlink", &[], &[], false);
+    let output = common::run_ptool("pfiles", &[], "test_pfiles_netlink", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let fd_map = parse_fd_map(&stdout);
@@ -690,7 +690,14 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
         }
     }
 
-    let output = common::run_ptool("pfiles", &[], "pfiles_af_alg", &[&status_path], &[], false);
+    let output = common::run_ptool(
+        "pfiles",
+        &[],
+        "test_pfiles_af_alg",
+        &[&status_path],
+        &[],
+        false,
+    );
 
     assert!(
         output.status.success(),
@@ -721,7 +728,7 @@ fn pfiles_falls_back_to_sockprotoname_xattr_for_unknown_socket_family() {
 
 #[test]
 fn pfiles_matrix_covers_file_types_and_socket_families() {
-    let output = common::run_ptool("pfiles", &[], "pfiles_matrix", &[], &[], false);
+    let output = common::run_ptool("pfiles", &[], "test_pfiles_matrix", &[], &[], false);
     let stdout = common::assert_success_and_get_stdout(output);
 
     let fd_map = parse_fd_map(&stdout);
@@ -853,7 +860,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv4 listening socket block"
     );
 
-    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET 127.0.0.1  port: <dynamic>\n        state: TCP_ESTABLISHED";
+    let inet_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET 127.0.0.1  port: <dynamic>\n        peer: test_pfiles_mat[<dynamic>]\n        peername: AF_INET 127.0.0.1  port: <dynamic>\n        state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet_peer_expected) >= 1,
         "expected at least one IPv4 established socket block"
@@ -868,7 +875,7 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
         "expected exactly one IPv6 listening socket block"
     );
 
-    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET6 ::1  port: <dynamic>\n        peer: pfiles_matrix[<dynamic>]\n        peername: AF_INET6 ::1  port: <dynamic>\n        state: TCP_ESTABLISHED";
+    let inet6_peer_expected = "S_IFSOCK mode:0777 dev:<dynamic> ino:<dynamic> uid:<dynamic> gid:<dynamic> size:<dynamic>\n      O_RDWR|O_CLOEXEC\n        SOCK_STREAM\n        SO_SNDBUF(<dynamic>),SO_RCVBUF(<dynamic>)\n        sockname: AF_INET6 ::1  port: <dynamic>\n        peer: test_pfiles_mat[<dynamic>]\n        peername: AF_INET6 ::1  port: <dynamic>\n        state: TCP_ESTABLISHED";
     assert!(
         count_normalized_blocks_ignoring_tcp_details(&fd_map, inet6_peer_expected) >= 1,
         "expected at least one IPv6 established socket block"
@@ -891,7 +898,14 @@ fn pfiles_matrix_covers_file_types_and_socket_families() {
 
 #[test]
 fn pfiles_matrix_unix_socket() {
-    let output = common::run_ptool("pfiles", &[], "pfiles_matrix_unix_socket", &[], &[], false);
+    let output = common::run_ptool(
+        "pfiles",
+        &[],
+        "test_pfiles_matrix_unix_socket",
+        &[],
+        &[],
+        false,
+    );
     let stdout = common::assert_success_and_get_stdout(output);
     let fd_map = parse_fd_map(&stdout);
 
@@ -925,7 +939,7 @@ fn pfiles_matrix_file_and_symlink_paths() {
     let output = common::run_ptool(
         "pfiles",
         &[],
-        "pfiles_matrix_file_link",
+        "test_pfiles_matrix_file_link",
         &[matrix_file_path.as_str(), matrix_link_path.as_str()],
         &[],
         false,
@@ -982,7 +996,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
     let output = common::run_ptool(
         "pfiles",
         &[],
-        "pfiles_sockopts_parent",
+        "test_pfiles_sockopts_parent",
         &["--child"],
         &[],
         false,
@@ -1035,7 +1049,7 @@ fn pfiles_reports_socket_options_when_target_is_child_of_inspector() {
 
 #[test]
 fn pfiles_exits_nonzero_when_any_pid_fails() {
-    let output = common::run_ptool("pfiles", &["999999999"], "pargs_penv", &[], &[], false);
+    let output = common::run_ptool("pfiles", &["999999999"], "test_pargs_penv", &[], &[], false);
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
