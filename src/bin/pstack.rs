@@ -219,10 +219,6 @@ fn parse_args() -> Args {
 fn main() {
     ptools::reset_sigpipe();
 
-    // Prevent libdw/debuginfod from downloading debuginfo over the network.
-    // Locally installed debug packages are still used.
-    std::env::remove_var("DEBUGINFOD_URLS");
-
     let args = parse_args();
 
     let mut error = false;

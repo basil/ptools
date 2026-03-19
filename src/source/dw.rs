@@ -26,6 +26,7 @@ use std::ffi::CStr;
 use std::os::raw::c_int;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::sync::Once;
 
 use nix::libc;
 
@@ -44,6 +45,17 @@ use crate::stack::TraceOptions;
 // Dwfl session constructors
 // ---------------------------------------------------------------------------
 
+/// Prevent libdw/debuginfod from downloading debuginfo over the network.
+/// Locally installed debug packages are still used.
+fn disable_debuginfod() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        // SAFETY: called before any dwfl session is created, so no other
+        // thread is concurrently reading DEBUGINFOD_URLS via libdw.
+        unsafe { std::env::remove_var("DEBUGINFOD_URLS") };
+    });
+}
+
 static CALLBACKS: LazyLock<Callbacks> =
     LazyLock::new(|| Callbacks::new(FindElf::LINUX_PROC, FindDebuginfo::STANDARD));
 
@@ -57,6 +69,7 @@ static CORE_CALLBACKS: LazyLock<Callbacks> =
 /// The returned `Dwfl` borrows from `core_elf` internally (via the raw ELF
 /// pointer).  The caller must ensure that the `CoreElf` outlives the `Dwfl`.
 unsafe fn create_dwfl_core(core_elf: &CoreElf) -> Result<Dwfl<'static>, crate::dw::dwfl::Error> {
+    disable_debuginfod();
     let elf_ptr = core_elf.as_elf_ptr();
     let mut dwfl = Dwfl::begin(&CORE_CALLBACKS)?;
     dwfl.report().core_file(elf_ptr)?;
@@ -177,6 +190,7 @@ impl CoreDwfl {
 /// The process's threads must already be ptrace-stopped before calling
 /// `walk_thread_frames`.
 pub(super) fn create_dwfl_live(pid: u32) -> Result<Dwfl<'static>, crate::dw::dwfl::Error> {
+    disable_debuginfod();
     let mut dwfl = Dwfl::begin(&CALLBACKS)?;
     dwfl.report().linux_proc(pid)?;
     dwfl.linux_proc_attach(pid, true)?;
