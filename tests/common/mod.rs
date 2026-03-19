@@ -28,10 +28,16 @@ use std::time::UNIX_EPOCH;
 
 // Find an executable produced by the Cargo build.
 //
-// Cargo >=1.94 exposes `CARGO_BIN_EXE_<name>` to integration tests, which
-// works regardless of `build.build-dir` or layout changes.  Older Cargo
-// versions fall back to locating the binary relative to the test executable.
+// For example targets (prefixed with "examples/"), uses snapbox to locate the
+// compiled example reliably regardless of build directory layout.
+//
+// For bin targets, uses CARGO_BIN_EXE_<name> (Cargo >=1.94) with a fallback
+// to locating the binary relative to the test executable.
 pub fn find_exec(name: &str) -> PathBuf {
+    if let Some(example_name) = name.strip_prefix("examples/") {
+        return snapbox::cmd::compile_example(example_name, []).expect("failed to compile example");
+    }
+
     let env_var = format!("CARGO_BIN_EXE_{name}");
     if let Some(p) = std::env::var_os(&env_var) {
         return p.into();
