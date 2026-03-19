@@ -16,26 +16,41 @@
 
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Child;
 use std::process::Command;
 use std::process::Output;
 use std::process::Stdio;
+use std::sync::LazyLock;
 use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+/// All example targets, compiled once and cached for the lifetime of the test
+/// process.  Using a single `cargo build` invocation avoids lock contention
+/// when tests run in parallel.
+static EXAMPLES: LazyLock<HashMap<String, PathBuf>> = LazyLock::new(|| {
+    snapbox::cmd::compile_examples(["-q"])
+        .expect("failed to compile examples")
+        .map(|(name, path)| (name, path.expect("failed to compile example")))
+        .collect()
+});
+
 // Find an executable produced by the Cargo build.
 //
-// For example targets (prefixed with "examples/"), uses snapbox to locate the
-// compiled example reliably regardless of build directory layout.
+// For example targets (prefixed with "examples/"), looks up the pre-compiled
+// example from the EXAMPLES cache.
 //
 // For bin targets, uses CARGO_BIN_EXE_<name> (Cargo >=1.94) with a fallback
 // to locating the binary relative to the test executable.
 pub fn find_exec(name: &str) -> PathBuf {
     if let Some(example_name) = name.strip_prefix("examples/") {
-        return snapbox::cmd::compile_example(example_name, []).expect("failed to compile example");
+        return EXAMPLES
+            .get(example_name)
+            .unwrap_or_else(|| panic!("example {example_name:?} not found in compiled examples"))
+            .clone();
     }
 
     let env_var = format!("CARGO_BIN_EXE_{name}");
