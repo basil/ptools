@@ -28,7 +28,7 @@ jobs:
       contents: read
     steps:
       - name: Check out
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libdw-dev libsystemd-dev
@@ -91,7 +91,7 @@ jobs:
       CARGO_BUILD_TARGET: i686-unknown-linux-gnu
     steps:
       - name: Check out
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
 
       - name: Install i686 cross-compilation dependencies
         run: |
