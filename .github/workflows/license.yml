@@ -19,7 +19,7 @@ jobs:
       contents: read
     steps:
       - name: Check out
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
 
       - name: Check License Header
         uses: apache/skywalking-eyes/header@v0.8.0
