@@ -95,7 +95,7 @@ jobs:
         run: cargo publish --locked
 
       - name: Create GitHub Release and upload assets
-        uses: softprops/action-gh-release@v3.0.0
+        uses: softprops/action-gh-release@v3.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
