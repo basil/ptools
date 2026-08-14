@@ -21,9 +21,9 @@
 //!
 //! ```text
 //!   [string data: argv strings, environ strings, AT_EXECFN string]
-//!   AT_RANDOM (16 random bytes)
 //!   AT_PLATFORM string (NUL-terminated)
 //!   AT_BASE_PLATFORM string (NUL-terminated, if present)
+//!   AT_RANDOM (16 random bytes)
 //!   [alignment padding]
 //!   auxv[N]  = { AT_NULL, 0 }
 //!   auxv[N-1]
@@ -40,9 +40,10 @@
 //!   argc
 //! ```
 //!
-//! This module scans downward from `AT_RANDOM` (which sits just above
-//! the auxv) to locate the auxv array's `AT_NULL` terminator, then
-//! walks backward to recover `argc`, `argv[]`, and `environ[]`.
+//! This module scans downward from `AT_RANDOM` (which sits above the
+//! alignment padding and auxv) to locate the auxv array's `AT_NULL`
+//! terminator, then walks backward to recover `argc`, `argv[]`, and
+//! `environ[]`.
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
