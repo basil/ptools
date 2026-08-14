@@ -36,6 +36,7 @@ const FIELD_MAP: &[(&str, &str)] = &[
     ("ProcCwd", "COREDUMP_CWD"),
     ("ProcEnviron", "COREDUMP_ENVIRON"),
     ("ExecutablePath", "COREDUMP_EXE"),
+    ("OpenFds", "COREDUMP_OPEN_FDS"),
     ("ProcMaps", "COREDUMP_PROC_MAPS"),
     ("ProcStatus", "COREDUMP_PROC_STATUS"),
     ("ProcAttrCurrent", "COREDUMP_PROC_ATTR_CURRENT"),
