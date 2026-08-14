@@ -29,6 +29,7 @@ use libc::c_void;
 use libc::pid_t;
 use libc::ptrace;
 use libc::waitpid;
+use libc::__WALL;
 use libc::ESRCH;
 use libc::PTRACE_ATTACH;
 use libc::PTRACE_CONT;
@@ -38,7 +39,6 @@ use libc::PTRACE_SEIZE;
 use libc::SIGSTOP;
 use libc::WIFSTOPPED;
 use libc::WSTOPSIG;
-use libc::__WALL;
 
 /// Information about a remote process.
 #[derive(Debug, Clone)]
