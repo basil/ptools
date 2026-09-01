@@ -36,7 +36,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Check Markdown
-        uses: DavidAnson/markdownlint-cli2-action@v23.2.0
+        uses: DavidAnson/markdownlint-cli2-action@v24.2.0
 
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features
