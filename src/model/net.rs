@@ -387,7 +387,7 @@ fn parse_ipv6_sock_addr(s: &str, is_little_endian: bool) -> io::Result<SocketAdd
     let port = u16::from_str_radix(fields[1], 16).map_err(|_| mk_err())?;
 
     let mut octets = [0u8; 16];
-    for (i, chunk) in fields[0].as_bytes().chunks_exact(8).enumerate() {
+    for (i, chunk) in fields[0].as_bytes().as_chunks::<8>().0.iter().enumerate() {
         let chunk = std::str::from_utf8(chunk).map_err(|_| mk_err())?;
         let raw = u32::from_str_radix(chunk, 16).map_err(|_| mk_err())?;
         let canonical = if is_little_endian {
